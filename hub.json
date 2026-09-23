@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
   "repository": "https://github.com/codexX64/synapse",
@@ -24,7 +24,30 @@
       "path": "/healthz",
       "expect": 200,
       "timeout": "5s"
-    }
+    },
+    "arch": [
+      "amd64",
+      "arm64"
+    ],
+    "resources": {
+      "ramMb": 512,
+      "cpu": 1.0,
+      "diskMb": 2048
+    },
+    "ports": [
+      {
+        "name": "http",
+        "container": 8140,
+        "protocol": "http",
+        "expose": "proxy"
+      }
+    ],
+    "volumes": [
+      {
+        "name": "data",
+        "path": "/data"
+      }
+    ]
   },
   "config": [
     {
