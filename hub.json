@@ -45,16 +45,40 @@
     {
       "key": "EMBED_MODEL",
       "label": "Modèle de vectorisation",
-      "type": "string",
+      "type": "select",
       "default": "nomic-embed-text",
-      "help": "Sert au niveau 2 de la cascade. S'il est absent, les niveaux 0 et 1 fonctionnent quand même."
+      "help": "Liste lue chez le service d'embeddings déjà installé. Sert au niveau 2 de la cascade ; s'il est absent, les niveaux 0 et 1 fonctionnent quand même.",
+      "optionsFrom": {
+        "from": {
+          "capability": "llm.embed"
+        },
+        "method": "GET",
+        "path": "/api/tags",
+        "select": "$.models",
+        "map": {
+          "value": "$.name",
+          "label": "$.name"
+        }
+      }
     },
     {
       "key": "ANSWER_MODEL",
       "label": "Modèle de synthèse",
-      "type": "string",
+      "type": "select",
       "default": "qwen3:8b",
-      "help": "Rédige les réponses du niveau 3 et distille les profils. Un modèle qui suit les consignes JSON donne de meilleurs traits."
+      "help": "Liste lue chez le service de génération déjà installé. Rédige les réponses du niveau 3 et distille les profils : un modèle qui suit les consignes JSON donne de meilleurs traits.",
+      "optionsFrom": {
+        "from": {
+          "capability": "llm.chat"
+        },
+        "method": "GET",
+        "path": "/api/tags",
+        "select": "$.models",
+        "map": {
+          "value": "$.name",
+          "label": "$.name"
+        }
+      }
     },
     {
       "key": "OLLAMA_URL",
