@@ -25,6 +25,7 @@ const inc = require('./incidents.js');
 const neu = require('./neurons.js');
 const APP = require('./apprentissage.js');
 const A = require('./auth.js');
+const C = require('./comptes.js');
 const { blobToVec } = require('./db.js');
 const fsp = require('node:fs');
 const pathm = require('node:path');
@@ -168,6 +169,7 @@ inc.migrate(db);
 neu.migrate(db);
 APP.migrate(db);
 A.migrate(db);
+C.migrate(db);
 amorcerSourceHub(db);
 if (A.assureInitial(db))
   console.log('[synapse] aucun compte : admin / Temp1234 cree, a remplacer a la premiere connexion');
@@ -217,6 +219,8 @@ function auth(req) {
   if (!row || !row.enabled) return null;
   return row;
 }
+const adminDistant = src => !!(src && !src.humain && src.scope === 'admin');
+
 function can(src, what) {
   if (!src) return false;
   if (src.scope === 'admin') return true;
@@ -546,6 +550,7 @@ const routes = {
     send(res, 200, {
       installe: A.installe(db),
       user: ctx.src && ctx.src.humain ? ctx.src.name : null,
+      attente: ctx.src && ctx.src.humain ? C.enAttente(db, ctx.src.name) : null,
       stepup: ctx.src && ctx.src.sid ? A.aStepUp(db, ctx.src.sid) : false
     });
   },
@@ -573,6 +578,17 @@ const routes = {
       A.oublie(db, 'u:' + nom); A.oublie(db, 'ip:' + ip);
       const sid = A.ouvre(db, nom, ip, req.headers['user-agent']);
       poseCookie(res, sid, 15 * 60 * 1000);       /* 15 min pour finir */
+      return send(res, 200, { init: true, redirect: '/setup' });
+    }
+    /* Compte créé par un administrateur : le second facteur reste à
+       poser. Le mot de passe ouvre /setup, et seulement /setup, le temps
+       de le faire — dans la limite de l'invitation. */
+    if (u.mfa_a_poser) {
+      if (C.invitationExpiree(u))
+        return send(res, 403, { error: 'invitation expirée : demande un nouveau mot de passe à l’administrateur' });
+      A.oublie(db, 'u:' + nom); A.oublie(db, 'ip:' + ip);
+      const sid = A.ouvre(db, nom, ip, req.headers['user-agent']);
+      poseCookie(res, sid, 15 * 60 * 1000);
       return send(res, 200, { init: true, redirect: '/setup' });
     }
     /* Le mot de passe seul n'ouvre rien : il donne droit à présenter
@@ -631,30 +647,59 @@ const routes = {
   },
 
   'GET /v1/auth/setup/totp': async (req, res, ctx) => {
-    if (!ctx.src || !ctx.src.humain || !A.estInit(db, ctx.src.name))
-      return send(res, 403, { error: 'reserve au compte temporaire' });
+    const attente = ctx.src && ctx.src.humain ? C.enAttente(db, ctx.src.name) : null;
+    if (!attente) return send(res, 403, { error: 'rien à initialiser pour ce compte' });
     /* Le secret est genere ici et renvoye au navigateur pour le QR ;
        il ne sera enregistre qu'une fois un code valide presente. */
     const secret = A.secretTotp();
-    send(res, 200, { secret, otpauth: A.urlOtpauth(String(req.headers['x-nouveau-nom'] || 'moi').slice(0, 32), secret) });
+    const nom = attente === 'mfa' ? ctx.src.name : String(req.headers['x-nouveau-nom'] || 'moi').slice(0, 32);
+    send(res, 200, { secret, otpauth: A.urlOtpauth(nom, secret) });
   },
 
   'POST /v1/auth/setup': async (req, res, ctx) => {
-    if (!ctx.src || !ctx.src.humain || !A.estInit(db, ctx.src.name))
-      return send(res, 403, { error: 'reserve au compte temporaire' });
+    const attente = ctx.src && ctx.src.humain ? C.enAttente(db, ctx.src.name) : null;
+    if (!attente) return send(res, 403, { error: 'rien à initialiser pour ce compte' });
     const b = await readBody(req);
-    const r = A.finaliseInitial(db, {
-      nouveauNom: String(b.user || '').trim(),
-      nouveauPass: String(b.pass || ''),
-      totpSecret: String(b.totp_secret || ''),
-      totpCode: String(b.totp_code || '')
-    });
+    const r = attente === 'mfa'
+      ? C.poseMfa(db, ctx.src.name, String(b.totp_secret || ''), String(b.totp_code || ''))
+      : A.finaliseInitial(db, {
+          nouveauNom: String(b.user || '').trim(),
+          nouveauPass: String(b.pass || ''),
+          totpSecret: String(b.totp_secret || ''),
+          totpCode: String(b.totp_code || '')
+        });
     if (!r.ok) return send(res, 400, { error: r.error });
     /* La session temporaire meurt avec le compte : on en ouvre une vraie. */
     A.ferme(db, ctx.src.sid);
     const sid = A.ouvre(db, r.name, req.socket.remoteAddress, req.headers['user-agent']);
     poseCookie(res, sid, A.SESSION_MS);
     send(res, 200, { ok: true, user: r.name, codes: r.codes });
+  },
+
+  /* ---------- comptes, administrés à distance ----------
+     Réservé à un jeton de portée admin — celui que le Hub reçoit à
+     l'installation. Une session humaine n'y a pas accès : elle est en
+     lecture, et gérer les comptes depuis la page qu'on protège ferait
+     d'une session volée un compte de plus. */
+  'GET /v1/admin/users': async (req, res, ctx) => {
+    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
+    send(res, 200, { comptes: C.liste(db) });
+  },
+  'POST /v1/admin/users': async (req, res, ctx) => {
+    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
+    const r = C.cree(db, await readBody(req));
+    send(res, r.ok ? 201 : 400, r.ok ? r : { error: r.error });
+  },
+  'POST /v1/admin/users/:nom/password': async (req, res, ctx) => {
+    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
+    const b = await readBody(req);
+    const r = C.motDePasse(db, ctx.params.nom, b.password);
+    send(res, r.ok ? 200 : r.status || 400, r.ok ? r : { error: r.error });
+  },
+  'DELETE /v1/admin/users/:nom': async (req, res, ctx) => {
+    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
+    const r = C.supprime(db, ctx.params.nom);
+    send(res, r.ok ? 200 : r.status || 400, r.ok ? r : { error: r.error });
   },
 
   'POST /v1/auth/logout': async (req, res, ctx) => {
@@ -1052,10 +1097,10 @@ const server = http.createServer(async (req, res) => {
     const sess = A.session(db, litCookie(req, COOKIE));
     if (!ouvert && (p === '/' || p === '/cascade' || p === '/parametres' || /^\/e\/\d+$/.test(p))) {
       if (!sess) { res.writeHead(302, { Location: '/login' }); return res.end(); }
-      /* Le compte temporaire ne voit rien tant qu'il n'est pas remplace. */
-      if (A.estInit(db, sess.user)) { res.writeHead(302, { Location: '/setup' }); return res.end(); }
+      /* Compte temporaire ou second facteur à poser : rien d'autre que /setup. */
+      if (C.enAttente(db, sess.user)) { res.writeHead(302, { Location: '/setup' }); return res.end(); }
     }
-    if (p === '/setup' && !(sess && A.estInit(db, sess.user))) {
+    if (p === '/setup' && !(sess && C.enAttente(db, sess.user))) {
       res.writeHead(302, { Location: sess ? '/' : '/login' }); return res.end();
     }
     const file = p === '/login' ? 'login.html'
@@ -1093,7 +1138,12 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  const key = req.method + ' ' + url.pathname;
+  /* Les routes à paramètre : /v1/admin/users/<nom>[/password]. Le nom
+     suit la même règle qu'à la création, rien d'autre ne passe. */
+  let key = req.method + ' ' + url.pathname;
+  const params = {};
+  const mu = /^\/v1\/admin\/users\/([a-z0-9._-]{3,32})(\/password)?$/i.exec(url.pathname);
+  if (mu) { params.nom = mu[1]; key = req.method + ' /v1/admin/users/:nom' + (mu[2] || ''); }
   const fn = routes[key];
   if (!fn) return send(res, 404, { error: 'route inconnue' });
 
@@ -1124,11 +1174,11 @@ const server = http.createServer(async (req, res) => {
   if (!src && url.pathname === '/v1/auth/session')
     return send(res, 200, { installe: A.installe(db), user: null, stepup: false });
   if (!src) return send(res, 401, { error: 'authentification requise' });
-  if (src.humain && A.estInit(db, src.name) && !/^\/v1\/auth\/(setup|logout|session)/.test(url.pathname))
+  if (src.humain && C.enAttente(db, src.name) && !/^\/v1\/auth\/(setup|logout|session)/.test(url.pathname))
     return send(res, 403, { error: 'termine d abord l initialisation sur /setup' });
 
   try {
-    await fn(req, res, { url, src });
+    await fn(req, res, { url, src, params });
   } catch (e) {
     const m = String(e && e.message || e);
     /* Une entrée malformée est une faute du client, pas du serveur :

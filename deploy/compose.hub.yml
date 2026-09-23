@@ -18,6 +18,10 @@ services:
       # aucune commande à taper dans le conteneur après l'installation.
       HUB_TOKEN_SEED: {{config.HUB_TOKEN}}
 
+      # Jeton distinct, de portée admin : il ne sert qu'à gérer les comptes
+      # humains depuis la page Utilisateurs du Hub.
+      HUB_ADMIN_TOKEN_SEED: {{config.ADMIN_TOKEN}}
+
       # Rien à saisir : le Hub sait quel service fournit llm.embed, où il
       # est et comment il est réglé. Une adresse recopiée à la main finit
       # toujours par diverger du service réel.

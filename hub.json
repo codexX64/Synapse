@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
   "repository": "https://github.com/codexX64/synapse",
@@ -64,6 +64,13 @@
       "type": "secret",
       "generate": "random:32",
       "help": "Créé par le Hub à l'installation. SYNAPSE le reconnaît au démarrage : aucune commande à taper."
+    },
+    {
+      "key": "ADMIN_TOKEN",
+      "label": "Jeton d'administration des comptes",
+      "type": "secret",
+      "generate": "random:32",
+      "help": "Créé par le Hub. Lui seul gère les comptes de SYNAPSE (page Utilisateurs), séparément du jeton de service."
     },
     {
       "key": "CONSOLIDATION_INTERVAL",
@@ -746,5 +753,42 @@
         }
       ]
     }
-  ]
+  ],
+  "accounts": {
+    "tokenKey": "ADMIN_TOKEN",
+    "adminRole": "admin",
+    "fields": {
+      "id": "$.id",
+      "name": "$.username",
+      "role": "$.role",
+      "mfa": "$.totpEnabled",
+      "created": "$.createdAt",
+      "lastSeen": "$.lastLogin",
+      "protected": "$.fondateur"
+    },
+    "list": {
+      "method": "GET",
+      "path": "/v1/admin/users",
+      "select": "$.comptes"
+    },
+    "create": {
+      "method": "POST",
+      "path": "/v1/admin/users",
+      "body": {
+        "username": "{{params.username}}",
+        "password": "{{params.password}}"
+      }
+    },
+    "password": {
+      "method": "POST",
+      "path": "/v1/admin/users/{{params.id}}/password",
+      "body": {
+        "password": "{{params.password}}"
+      }
+    },
+    "remove": {
+      "method": "DELETE",
+      "path": "/v1/admin/users/{{params.id}}"
+    }
+  }
 }

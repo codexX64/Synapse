@@ -55,7 +55,7 @@ button.ghost{background:none;border-color:var(--line);color:var(--mut);margin-to
 <body>
 <div class="box">
   <h1>SYNAPSE</h1>
-  <div class="sub">PREMIER DÉMARRAGE</div>
+  <div class="sub" id="sousTitre">PREMIER DÉMARRAGE</div>
   <div class="etapes"><i id="e1" class="on"></i><i id="e2"></i><i id="e3"></i><i id="e4"></i></div>
 
   <!-- 1 · identite -->
@@ -139,16 +139,18 @@ $('#pass').addEventListener('input', e => {
 
 /* ── 1 ─────────────────────────────────────────────────────────────── */
 let TOTP = null;
-$('#b1').onclick = async () => {
-  const user = $('#user').value.trim(), pass = $('#pass').value, pass2 = $('#pass2').value;
-  if (!/^[a-z0-9._-]{3,32}$/i.test(user)) return msg('Identifiant : 3 à 32 caractères simples.');
-  if (pass.length < 12) return msg('Mot de passe : 12 caractères minimum.');
-  if (pass !== pass2) return msg('Les deux mots de passe diffèrent.');
-  if (user === 'admin' && pass === 'Temp1234') return msg('Choisis autre chose que le compte temporaire.');
-  msg('');
-  const r = await fetch('/v1/auth/setup/totp', { credentials: 'same-origin', headers: { 'x-nouveau-nom': user } });
+/* Deux cas mènent ici. Le compte temporaire du premier démarrage choisit
+   son identifiant et son mot de passe, puis son second facteur. Un compte
+   créé par un administrateur a déjà les deux premiers : il ne pose que
+   le second facteur, que l'administrateur n'a pas le droit de connaître. */
+let MODE = 'init';
+async function secretTotp(user) {
+  const r = await fetch('/v1/auth/setup/totp', { credentials: 'same-origin', headers: user ? { 'x-nouveau-nom': user } : {} });
   const j = await r.json().catch(() => ({}));
   if (r.status !== 200) return msg(j.error || 'Impossible de préparer le second facteur.');
+  montreSecret(j);
+}
+function montreSecret(j) {
   TOTP = j.secret;
   $('#secret').textContent = j.secret.replace(/(.{4})/g, '$1 ').trim();
   /* Le QR code n'est PAS genere par un service distant.
@@ -159,21 +161,30 @@ $('#b1').onclick = async () => {
   $('#secret').textContent = (j.otpauth.match(/secret=([A-Z2-7]+)/) || [])[1] || '';
   $('#lien').href = j.otpauth;
   etape(2); $('#code').focus();
+}
+$('#b1').onclick = async () => {
+  const user = $('#user').value.trim(), pass = $('#pass').value, pass2 = $('#pass2').value;
+  if (!/^[a-z0-9._-]{3,32}$/i.test(user)) return msg('Identifiant : 3 à 32 caractères simples.');
+  if (pass.length < 12) return msg('Mot de passe : 12 caractères minimum.');
+  if (pass !== pass2) return msg('Les deux mots de passe diffèrent.');
+  if (user === 'admin' && pass === 'Temp1234') return msg('Choisis autre chose que le compte temporaire.');
+  msg('');
+  await secretTotp(user);
 };
-$('#bBack').onclick = () => { TOTP = null; etape(1); };
+$('#bBack').onclick = () => { if (MODE === 'mfa') return; TOTP = null; etape(1); };
 
 /* ── 2 ─────────────────────────────────────────────────────────────── */
 $('#b2').onclick = async () => {
   const code = $('#code').value.trim();
   if (!/^\d{6}$/.test(code)) return msg('Six chiffres.');
   $('#b2').disabled = true; msg('');
-  const r = await collecteur('/v1/auth/setup', {
-    user: $('#user').value.trim(), pass: $('#pass').value, totp_secret: TOTP, totp_code: code
-  });
+  const r = await collecteur('/v1/auth/setup', MODE === 'mfa'
+    ? { totp_secret: TOTP, totp_code: code }
+    : { user: $('#user').value.trim(), pass: $('#pass').value, totp_secret: TOTP, totp_code: code });
   $('#b2').disabled = false;
   if (r.code !== 200) { $('#code').value = ''; return msg(r.json.error || 'Refusé.'); }
   $('#codes').innerHTML = (r.json.codes || []).map(c => '<span>' + c + '</span>').join('');
-  msg('Compte créé. Le compte temporaire est supprimé.', true);
+  msg(MODE === 'mfa' ? 'Second facteur activé.' : 'Compte créé. Le compte temporaire est supprimé.', true);
   etape(3);
 };
 
@@ -210,7 +221,15 @@ $('#bSkip').onclick = () => location.href = '/';
 
 for (const [c, b] of [['#user','#b1'],['#pass','#b1'],['#pass2','#b1'],['#code','#b2']])
   $(c).addEventListener('keydown', e => { if (e.key === 'Enter') $(b).click(); });
-$('#user').focus();
+(async () => {
+  const s = await collecteur('/v1/auth/session', null, 'GET');
+  if (s.json.attente !== 'mfa') return $('#user').focus();
+  MODE = 'mfa';
+  $('#sousTitre').textContent = 'PREMIÈRE CONNEXION';
+  $('#b2').textContent = 'VÉRIFIER ET ACTIVER';
+  $('#bBack').style.display = 'none';
+  await secretTotp(null);
+})();
 </script>
 </body>
 </html>
