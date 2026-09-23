@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
   "repository": "https://github.com/codexX64/synapse",
@@ -267,7 +267,7 @@
           "label": "Modèle qui va répondre",
           "type": "expression",
           "required": true,
-          "help": "Le profil commun est partagé ; les leçons sont propres à chaque modèle."
+          "help": "Rempli par le Hub avec le nom de la connexion IA. Les faits sont communs, les leçons restent propres à chaque modèle."
         },
         {
           "key": "query",
@@ -407,9 +407,10 @@
       "params": [
         {
           "key": "agent",
-          "label": "Modèle",
+          "label": "Modèle qui a répondu",
           "type": "expression",
-          "required": true
+          "required": true,
+          "help": "Rempli par le Hub avec le nom de la connexion IA. Les faits sont communs, les leçons restent propres à chaque modèle."
         },
         {
           "key": "question",
@@ -470,9 +471,10 @@
       "params": [
         {
           "key": "agent",
-          "label": "Modèle",
+          "label": "Modèle qui s'est trompé",
           "type": "expression",
-          "required": true
+          "required": true,
+          "help": "Rempli par le Hub avec le nom de la connexion IA. Les faits sont communs, les leçons restent propres à chaque modèle."
         },
         {
           "key": "question",
@@ -606,9 +608,10 @@
       "params": [
         {
           "key": "agent",
-          "label": "Modèle",
+          "label": "Modèle (vide = tous)",
           "type": "expression",
-          "required": true
+          "required": false,
+          "help": "Laisse vide pour distiller les échanges de tous les modèles. Le Hub remplit ce champ tout seul quand c'est lui qui appelle."
         }
       ],
       "request": {
@@ -621,9 +624,6 @@
       "output": {
         "type": "object",
         "properties": {
-          "agent": {
-            "type": "string"
-          },
           "lus": {
             "type": "number"
           },
@@ -643,11 +643,19 @@
                 }
               }
             }
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
       "sample": {
-        "agent": "qwen3-14b",
+        "agents": [
+          "qwen3-14b"
+        ],
         "lus": 12,
         "traits": [
           {

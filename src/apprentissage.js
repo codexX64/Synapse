@@ -390,10 +390,13 @@ async function consolider(db, { agent, demander, ns = null, lot = LOT_CONSOLIDAT
   const etat = db.prepare(`SELECT * FROM consolidation WHERE agent=?`).get(a)
     || { agent: a, dernier_id: 0, passes: 0 };
 
+  /* Les échanges de CET agent, et d'aucun autre. Sans ce filtre, distiller
+     le profil de Kimi lui faisait relire les conversations de Qwen — la
+     contamination même que la séparation par agent existe pour empêcher. */
   const rows = db.prepare(
     `SELECT id,title,body,occurred_at FROM entries
-     WHERE id > ? AND kind = 'echange' ${ns ? 'AND ns = ?' : ''}
-     ORDER BY id ASC LIMIT ?`).all(...(ns ? [etat.dernier_id, ns, lot] : [etat.dernier_id, lot]));
+     WHERE id > ? AND kind = 'echange' AND json_extract(meta,'$.agent') = ? ${ns ? 'AND ns = ?' : ''}
+     ORDER BY id ASC LIMIT ?`).all(...(ns ? [etat.dernier_id, a, ns, lot] : [etat.dernier_id, a, lot]));
 
   if (!rows.length) return { agent: a, lus: 0, traits: [], raison: 'rien de nouveau' };
   if (typeof demander !== 'function') return { agent: a, lus: 0, traits: [], raison: 'aucun modèle de synthèse' };
@@ -468,6 +471,39 @@ function evenementEchange({ agent, question, reponse, ns = 'shared' }) {
   };
 }
 
+/**
+ * Les agents qui ont des échanges pas encore digérés.
+ *
+ * Sans cette liste, consolider obligeait à nommer un agent — donc à
+ * connaître par cœur le nom de la connexion IA. Le travail est le même
+ * pour tous : autant les trouver.
+ */
+function agentsEnAttente(db, { limite = 8 } = {}) {
+  return db.prepare(
+    `SELECT DISTINCT json_extract(e.meta,'$.agent') a FROM entries e
+     WHERE e.kind = 'echange'
+       AND e.id > COALESCE((SELECT c.dernier_id FROM consolidation c
+                            WHERE c.agent = json_extract(e.meta,'$.agent')), 0)
+     LIMIT ?`).all(limite).map(r => r.a).filter(Boolean);
+}
+
+/**
+ * Consolide tout le monde. C'est ce que fait la passe de fond, et c'est ce
+ * que doit faire le bouton : rien à saisir.
+ */
+async function consoliderTous(db, { demander, ns = null } = {}) {
+  const agents = agentsEnAttente(db);
+  if (!agents.length) return { agents: [], lus: 0, traits: [], raison: 'rien de nouveau' };
+  const out = [];
+  for (const a of agents) out.push(await consolider(db, { agent: a, demander, ns }));
+  return {
+    agents: out.map(r => r.agent),
+    lus: out.reduce((n, r) => n + r.lus, 0),
+    traits: out.flatMap(r => r.traits),
+    raison: out.find(r => r.raison)?.raison,
+  };
+}
+
 function stats(db, agent) {
   const a = agentId(agent);
   return {
@@ -481,6 +517,6 @@ function stats(db, agent) {
 
 module.exports = {
   migrate, profil, poser, oublier, corriger, correctionsPour,
-  brief, briefTexte, consolider, extraireTraits, evenementEchange, stats,
+  brief, briefTexte, consolider, consoliderTous, agentsEnAttente, extraireTraits, evenementEchange, stats,
   agentId, confianceVive, COMMUN, MAX_TRAITS, DEMI_VIE_JOURS,
 };

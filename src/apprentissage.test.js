@@ -205,10 +205,10 @@ test('consolidation : un modèle en panne ne fait pas sauter la fournée', async
 });
 
 test('échange : l’événement respecte le contrat d’ingestion', () => {
-  const e = APP.evenementEchange({ agent: 'Qwen 3 — poste B', question: 'comment relancer le hub', reponse: 'docker compose up -d' });
+  const e = APP.evenementEchange({ agent: 'Qwen 3 — cortex', question: 'comment relancer le hub', reponse: 'docker compose up -d' });
   assert.equal(e.kind, 'echange');
   assert.ok(Array.isArray(e.tags), 'les étiquettes sont un tableau, pas une chaîne');
-  assert.ok(e.tags.includes('agent:qwen-3-poste-b'));
+  assert.ok(e.tags.includes('agent:qwen-3-cortex'));
   assert.ok(e.title.length && e.title.length <= 160);
   assert.match(e.body, /Question :/);
   assert.match(e.body, /Réponse :/);
@@ -218,4 +218,49 @@ test('nom d’agent : deux écritures du même modèle donnent le même espace',
   assert.equal(APP.agentId('Qwen3 : 14b'), APP.agentId('qwen3-14b'));
   assert.equal(APP.agentId(''), 'inconnu');
   assert.equal(APP.agentId(null), 'inconnu');
+});
+
+test('consolidation : sans agent nommé, tout le monde est traité', async () => {
+  const db = base();
+  const ins = db.prepare(`INSERT INTO entries(ns,source,kind,level,title,body,tags,meta,occurred_at,created_at,hash)
+                          VALUES ('shared','hub','echange','L0',?,?,'echange',?,?,?,?)`);
+  ins.run('q1', 'b1', '{"agent":"kimi"}', jours(2), jours(2), 'h1');
+  ins.run('q2', 'b2', '{"agent":"qwen"}', jours(1), jours(1), 'h2');
+  ins.run('q3', 'b3', '{"agent":"kimi"}', jours(0), jours(0), 'h3');
+
+  assert.deepEqual(APP.agentsEnAttente(db).sort(), ['kimi', 'qwen']);
+
+  const vus = [];
+  const demander = async (consigne, corpus) => {
+    vus.push(corpus.length);
+    return JSON.stringify({ traits: [{ portee: 'commun', cle: 'x', valeur: 'Un trait.', confiance: 0.6 }] });
+  };
+  const r = await APP.consoliderTous(db, { demander });
+  assert.deepEqual(r.agents.sort(), ['kimi', 'qwen']);
+  assert.equal(r.lus, 3);
+  assert.equal(vus.length, 2, 'un appel par modèle : leurs leçons ne se mélangent pas');
+
+  // Tout est digéré : plus personne en attente, et le modèle n'est pas rappelé.
+  assert.deepEqual(APP.agentsEnAttente(db), []);
+  const r2 = await APP.consoliderTous(db, { demander });
+  assert.equal(r2.lus, 0);
+  assert.equal(vus.length, 2);
+});
+
+test('consolidation : un modèle ne relit jamais les échanges d’un autre', async () => {
+  const db = base();
+  const ins = db.prepare(`INSERT INTO entries(ns,source,kind,level,title,body,tags,meta,occurred_at,created_at,hash)
+                          VALUES ('shared','hub','echange','L0',?,?,'echange',?,?,?,?)`);
+  ins.run('kimi 1', 'corps kimi un', '{"agent":"kimi"}', jours(3), jours(3), 'k1');
+  ins.run('qwen 1', 'corps qwen un', '{"agent":"qwen"}', jours(2), jours(2), 'q1');
+  ins.run('kimi 2', 'corps kimi deux', '{"agent":"kimi"}', jours(1), jours(1), 'k2');
+
+  let corpusVu = '';
+  const demander = async (consigne, corpus) => { corpusVu = corpus; return '{"traits":[]}'; };
+  const r = await APP.consolider(db, { agent: 'kimi', demander });
+
+  assert.equal(r.lus, 2, 'les deux échanges de kimi, pas les trois');
+  assert.match(corpusVu, /corps kimi un/);
+  assert.match(corpusVu, /corps kimi deux/);
+  assert.ok(!/qwen/.test(corpusVu), 'aucune trace de l’autre modèle dans le corpus');
 });

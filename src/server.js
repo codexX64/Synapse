@@ -186,14 +186,8 @@ const CONSOLIDATION_MS = Number(process.env.CONSOLIDATION_INTERVAL || 1800000);
 if (CONSOLIDATION_MS > 0) {
   setInterval(async () => {
     try {
-      const agents = db.prepare(
-        `SELECT DISTINCT json_extract(meta,'$.agent') a FROM entries
-         WHERE kind='echange' AND id > COALESCE((SELECT MAX(dernier_id) FROM consolidation),0)
-         LIMIT 8`).all().map(r => r.a).filter(Boolean);
-      for (const a of agents) {
-        const r = await APP.consolider(db, { agent: a, demander: demanderAuModele });
-        if (r.traits?.length) console.log(`[synapse] profil ${a} : ${r.traits.length} trait(s) sur ${r.lus} échange(s)`);
-      }
+      const r = await APP.consoliderTous(db, { demander: demanderAuModele });
+      if (r.traits?.length) console.log(`[synapse] profils ${r.agents.join(', ')} : ${r.traits.length} trait(s) sur ${r.lus} échange(s)`);
     } catch (e) { console.warn('[synapse] consolidation', e.message); }
   }, CONSOLIDATION_MS).unref?.();
 }
@@ -737,7 +731,11 @@ const routes = {
   'POST /v1/consolider': async (req, res, ctx) => {
     if (!can(ctx.src, 'write')) return send(res, 403, { error: 'portée write requise' });
     const b = await readBody(req);
-    send(res, 200, await APP.consolider(db, { agent: b.agent, ns: b.ns || null, demander: demanderAuModele }));
+    // Sans agent nommé : tout le monde. Obliger à nommer une connexion IA
+    // qu'on ne connaît pas par cœur était une friction gratuite.
+    send(res, 200, b.agent
+      ? await APP.consolider(db, { agent: b.agent, ns: b.ns || null, demander: demanderAuModele })
+      : await APP.consoliderTous(db, { ns: b.ns || null, demander: demanderAuModele }));
   },
 
   'POST /v1/recall': async (req, res, ctx) => {
