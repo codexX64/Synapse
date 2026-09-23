@@ -463,36 +463,16 @@ nodes.forEach(n=>NEIGH[n.id]=new Set());
 E.forEach(([a,b])=>{NEIGH[a].add(b);NEIGH[b].add(a);});
 
 /* ============================== ARBRE DES THÈMES ============================== */
-let TREE={name:'noyau',children:[
-  {name:'homelab',children:[
-    {name:'machines',leaves:['m.srv2','m.srv1','m.gpu','m.nas','m.edge','m.sw']},
-    {name:'services',children:[
-      {name:'supervision',leaves:['s.mon','s.mon','s.log','s.api']},
-      {name:'cœur ia',leaves:['s.syn','s.api','s.gpu','s.api']},
-      {name:'edge & web',leaves:['s.web','s.web','s.web']}]},
-    {name:'réseau',children:[
-      {name:'adressage',leaves:['r.cv','r.s1','r.s2','r.s20','r.cip']},
-      {name:'tunnels & dns',leaves:['r.cf','r.wg','r.dns']},
-      {name:'vlans prévus',leaves:['v.10','v.20','v.30','v.40']}]}]},
-  {name:'projets',children:[
-    {name:'3d & outils',leaves:['p.rf','p.rk','p.vv','p.av']},
-    {name:'plateformes',leaves:['p.nx','p.sy','p.pg','p.vt']},
-    {name:'web & identité',leaves:['p.fp','p.op']}]},
-  {name:'savoir',children:[
-    {name:'skills',children:[
-      {name:'auto-évolutifs',leaves:['k.ip','k.dg','k.in']},
-      {name:'assignés',leaves:['k.dp','k.st','k.rf']}]},
-    {name:'procédures',leaves:['q.dns','q.rdp','q.bkp']},
-    {name:'notes',leaves:['n.zsh','n.glb']}]},
-  {name:'vécu',children:[
-    {name:'incidents',leaves:['i.dcp','i.dns','i.msk','i.mml','i.nm']},
-    {name:'stock',leaves:['t.d4','t.d5','t.nv']}]},
-  {name:'cap',children:[
-    {name:'ambitions',leaves:['a.ciso','a.auto']},
-    {name:'roadmap',leaves:['v.20','rm.uf','rm.mu']}]}]};
-
-/* l'arbre suit les donnees reelles quand elles existent */
-if (window.SYNAPSE_LIVE && window.TREE) TREE = window.TREE;
+/* L'arbre se déduit des données affichées, en direct comme en démo :
+   une branche par type, une feuille par entrée. Un arbre écrit à la
+   main référençait des entrées qui n'existaient plus dans le corpus de
+   démonstration, et la scène plantait sur la première feuille absente. */
+function arbreParType(liste){
+  const parType={};
+  liste.forEach(n=>{(parType[n.type]=parType[n.type]||[]).push(n.id);});
+  return {name:'noyau',children:Object.keys(parType).sort().map(t=>({name:t,leaves:parType[t]}))};
+}
+let TREE=(window.SYNAPSE_LIVE && window.TREE) ? window.TREE : arbreParType(nodes);
 
 /* ============================== MOTEUR DE RECHERCHE LIBRE ============================== */
 const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 .:\/+-]/g,' ');
@@ -740,7 +720,8 @@ function build(node,dir,pos,depth,pathPts,pathTags){
       build(child,cd,cpos,depth+1,[...pathPts,...seg.slice(1)],[...pathTags,tag]);
     });
   }else{
-    const arr=node.leaves.map(id=>byId[id]);
+    /* une feuille sans entrée correspondante est ignorée, pas fatale */
+    const arr=node.leaves.map(id=>byId[id]).filter(Boolean);
     /* ---- Placement des feuilles : une part de sphere par groupe ----
        L'ancien cone plafonnait a 0.35 rad, soit 21 cartes sans
        chevauchement, quel que soit le groupe. 228 procedures s'y
