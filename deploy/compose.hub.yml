@@ -18,9 +18,12 @@ services:
       # aucune commande à taper dans le conteneur après l'installation.
       HUB_TOKEN_SEED: {{config.HUB_TOKEN}}
 
-      OLLAMA_URL: {{config.OLLAMA_URL}}
-      EMBED_MODEL: {{config.EMBED_MODEL}}
-      ANSWER_MODEL: {{config.ANSWER_MODEL}}
+      # Rien à saisir : le Hub sait quel service fournit llm.embed, où il
+      # est et comment il est réglé. Une adresse recopiée à la main finit
+      # toujours par diverger du service réel.
+      OLLAMA_URL: {{provider.llm.embed.url}}
+      EMBED_MODEL: {{provider.llm.embed.config.EMBED_MODEL}}
+      ANSWER_MODEL: {{provider.llm.embed.config.DEFAULT_MODEL}}
       CONSOLIDATION_INTERVAL: {{config.CONSOLIDATION_INTERVAL}}
       AUTH_ORIGIN: {{config.AUTH_ORIGIN}}
 
