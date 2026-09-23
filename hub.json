@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
   "repository": "https://github.com/codexX64/synapse",
