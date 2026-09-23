@@ -205,10 +205,10 @@ test('consolidation : un modèle en panne ne fait pas sauter la fournée', async
 });
 
 test('échange : l’événement respecte le contrat d’ingestion', () => {
-  const e = APP.evenementEchange({ agent: 'Qwen 3 — cortex', question: 'comment relancer le hub', reponse: 'docker compose up -d' });
+  const e = APP.evenementEchange({ agent: 'Qwen 3 — poste B', question: 'comment relancer le hub', reponse: 'docker compose up -d' });
   assert.equal(e.kind, 'echange');
   assert.ok(Array.isArray(e.tags), 'les étiquettes sont un tableau, pas une chaîne');
-  assert.ok(e.tags.includes('agent:qwen-3-cortex'));
+  assert.ok(e.tags.includes('agent:qwen-3-poste-b'));
   assert.ok(e.title.length && e.title.length <= 160);
   assert.match(e.body, /Question :/);
   assert.match(e.body, /Réponse :/);
