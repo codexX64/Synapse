@@ -36,7 +36,9 @@ button.ghost{background:none;border-color:var(--line);color:var(--mut);margin-to
 #msg{margin-top:14px;font-size:11px;min-height:17px;text-align:center;color:var(--coral)}
 #msg.ok{color:var(--mint)}
 .step{display:none}.step.on{display:block}
-#qr{display:block;margin:12px auto;background:#fff;padding:10px;border-radius:8px;width:196px;height:196px}
+#qr{margin:0 auto 14px;width:188px;line-height:0;border-radius:8px;overflow:hidden}
+#qr:empty{display:none}
+#qr svg{display:block;width:188px;height:188px}
 .secret{font-size:11px;word-break:break-all;text-align:center;color:var(--mut);margin-top:6px}
 .codes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0;font-size:13px;letter-spacing:.08em}
 .codes span{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:5px;padding:8px;text-align:center}
@@ -77,11 +79,11 @@ button.ghost{background:none;border-color:var(--line);color:var(--mut);margin-to
     <h2>Second facteur</h2>
     <div class="expl">Scanne ce code dans ton application d'authentification, puis saisis le code affiché pour prouver que ça marche.</div>
     <div class="secret-bloc">
-      <div class="secret-libelle">CLÉ À SAISIR DANS TON APPLICATION</div>
+      <div id="qr" class="qr"></div>
+      <div class="secret-libelle">OU SAISIS CETTE CLÉ À LA MAIN</div>
       <code id="secret" class="secret"></code>
       <a id="lien" class="lien-otp">Ouvrir directement dans l'application</a>
     </div>
-    <div class="secret" id="secret"></div>
     <label for="code">CODE AFFICHÉ PAR L'APPLICATION</label>
     <input id="code" inputmode="numeric" maxlength="6" placeholder="······">
     <button id="b2">VÉRIFIER ET CRÉER LE COMPTE</button>
@@ -108,6 +110,7 @@ button.ghost{background:none;border-color:var(--line);color:var(--mut);margin-to
   <div id="msg"></div>
 </div>
 
+<script src="/qr.js"></script>
 <script>
 'use strict';
 const $ = s => document.querySelector(s);
@@ -152,13 +155,12 @@ async function secretTotp(user) {
 }
 function montreSecret(j) {
   TOTP = j.secret;
-  $('#secret').textContent = j.secret.replace(/(.{4})/g, '$1 ').trim();
-  /* Le QR code n'est PAS genere par un service distant.
-     L'URL otpauth:// contient le secret TOTP en clair : l'envoyer a un
-     generateur d'images tiers revient a lui confier le second facteur
-     de chaque compte cree. On affiche le secret et un lien direct, que
-     toute application d'authentification sait lire. */
-  $('#secret').textContent = (j.otpauth.match(/secret=([A-Z2-7]+)/) || [])[1] || '';
+  /* Le QR code est dessiné ici, par /qr.js, sans aucun appel réseau :
+     l'URL otpauth:// contient le secret TOTP en clair, et l'envoyer à un
+     générateur d'images tiers reviendrait à lui confier le second
+     facteur de chaque compte créé. */
+  try { $('#qr').innerHTML = window.QR ? window.QR.svg(j.otpauth, { taille: 188 }) : ''; } catch { $('#qr').innerHTML = ''; }
+  $('#secret').textContent = ((j.otpauth.match(/secret=([A-Z2-7]+)/) || [])[1] || j.secret).replace(/(.{4})/g, '$1 ').trim();
   $('#lien').href = j.otpauth;
   etape(2); $('#code').focus();
 }
@@ -189,12 +191,16 @@ $('#b2').onclick = async () => {
 };
 
 /* ── 3 ─────────────────────────────────────────────────────────────── */
-$('#b3').onclick = () => { msg(''); etape(4); };
+/* Les clés d'accès (WebAuthn) n'existent que sur une page chiffrée :
+   en adresse:port, le navigateur ne les propose pas. On ne montre pas
+   une étape qui ne peut qu'échouer. */
+$('#b3').onclick = () => { msg(''); if (!window.isSecureContext) { location.href = '/'; return; } etape(4); };
 
 /* ── 4 · passkey ───────────────────────────────────────────────────── */
 const deB64 = s => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 const enB64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 $('#b4').onclick = async () => {
+  if (!window.isSecureContext) return msg('Les clés d\u2019accès exigent HTTPS. En adresse:port, garde le code de ton application.');
   if (!window.PublicKeyCredential) return msg('Ce navigateur ne gère pas les clés d\u2019accès.');
   try {
     const { json: o } = await collecteur('/v1/auth/passkey/enroll/options', {});

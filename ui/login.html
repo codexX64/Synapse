@@ -123,6 +123,7 @@ const enB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)))
   .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 async function passkey(user) {
+  if (!window.isSecureContext) return msg('Les clés d\u2019accès exigent HTTPS. Utilise le code de ton application.');
   if (!window.PublicKeyCredential) return msg('Ce navigateur ne gère pas les clés d\u2019accès.');
   msg('');
   try {
