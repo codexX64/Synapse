@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
   "repository": "https://github.com/codexX64/synapse",
@@ -69,7 +69,6 @@
       "key": "EMBED_MODEL",
       "label": "Modèle de vectorisation",
       "type": "select",
-      "default": "nomic-embed-text",
       "help": "Liste lue chez le service d'embeddings déjà installé. Sert au niveau 2 de la cascade ; s'il est absent, les niveaux 0 et 1 fonctionnent quand même.",
       "optionsFrom": {
         "from": {
@@ -93,7 +92,6 @@
       "key": "ANSWER_MODEL",
       "label": "Modèle de synthèse",
       "type": "select",
-      "default": "qwen3:8b",
       "help": "Liste lue chez le service de génération déjà installé. Rédige les réponses du niveau 3 et distille les profils : un modèle qui suit les consignes JSON donne de meilleurs traits.",
       "optionsFrom": {
         "from": {
@@ -117,8 +115,7 @@
       "key": "OLLAMA_URL",
       "label": "Adresse d'Ollama",
       "type": "string",
-      "default": "http://ollama:11434",
-      "help": "Repris du service d'embeddings installé. À renseigner seulement si SYNAPSE doit parler à un autre Ollama que celui du Hub.",
+      "help": "Repris du service qui fournit les embeddings : nom de conteneur s'il est installé ici, adresse s'il tourne ailleurs. À ne remplir que pour viser un autre Ollama que celui du Hub.",
       "resolve": {
         "capability": "llm.embed",
         "value": "{{provider.url}}"
