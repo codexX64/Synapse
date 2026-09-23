@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
   "repository": "https://github.com/codexX64/synapse",
@@ -59,7 +59,12 @@
           "value": "$.name",
           "label": "$.name"
         }
-      }
+      },
+      "resolve": {
+        "capability": "llm.embed",
+        "value": "{{provider.config.EMBED_MODEL}}"
+      },
+      "advanced": true
     },
     {
       "key": "ANSWER_MODEL",
@@ -78,14 +83,24 @@
           "value": "$.name",
           "label": "$.name"
         }
-      }
+      },
+      "resolve": {
+        "capability": "llm.chat",
+        "value": "{{provider.config.DEFAULT_MODEL}}"
+      },
+      "advanced": true
     },
     {
       "key": "OLLAMA_URL",
       "label": "Adresse d'Ollama",
       "type": "string",
       "default": "http://ollama:11434",
-      "help": "Le Hub la remplit tout seul si une instance Ollama est déjà installée."
+      "help": "Repris du service d'embeddings installé. À renseigner seulement si SYNAPSE doit parler à un autre Ollama que celui du Hub.",
+      "resolve": {
+        "capability": "llm.embed",
+        "value": "{{provider.url}}"
+      },
+      "advanced": true
     },
     {
       "key": "CONSOLIDATION_INTERVAL",
