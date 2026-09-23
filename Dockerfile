@@ -6,7 +6,6 @@ RUN addgroup -g 10001 synapse && adduser -D -u 10001 -G synapse synapse
 WORKDIR /app
 COPY src ./src
 COPY ui ./ui
-COPY eval.json ./eval.json
 
 RUN mkdir -p /data && chown -R synapse:synapse /data /app
 USER synapse
