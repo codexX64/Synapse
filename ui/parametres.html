@@ -72,6 +72,10 @@ button.s{padding:7px 12px;font-size:9.5px}
 .vide{color:var(--dim);font-size:11.5px;padding:10px 0}
 .pastille{font-size:9px;letter-spacing:.12em;padding:3px 8px;border-radius:4px;
   border:1px solid var(--line);color:var(--mut)}
+.bilan{margin-top:12px;font-size:11px;line-height:1.7;color:var(--mut,#9c9c9c)}
+.bilan:empty{display:none}
+.bilan-t{color:#fff;margin-bottom:4px}
+.bilan-err{color:#ff5c7a}
 </style>
 </head>
 <body>
@@ -95,6 +99,7 @@ button.s{padding:7px 12px;font-size:9.5px}
       <button id="bReprendre" disabled>REPRENDRE</button>
       <button class="w" id="bArreter" disabled>ARRÊTER</button>
     </div>
+    <div id="bilan" class="bilan"></div>
     <div class="aide">L'analyse lit la mémoire et interroge le modèle local pour les titres :
       compte quelques minutes sur plusieurs centaines d'entrées. La pause s'applique entre deux
       étapes, jamais au milieu d'un appel.</div>
@@ -249,8 +254,9 @@ async function rafraichit() {
   $('#etatT').textContent = libelle;
   $('#etatS').textContent = s.erreur ? s.erreur
     : s.progression && s.progression.etape ? s.progression.etape
-    : s.derniere ? `dernière : ${s.derniere.actions} actions en ${s.derniere.duree} s (${s.derniere.source})`
+    : s.derniere ? `dernière analyse ${quand(s.derniere.fin)} · ${s.derniere.duree} s · ${s.derniere.source}`
     : 'aucune analyse depuis le démarrage';
+  $('#bilan').innerHTML = s.etat === 'fini' && s.derniere ? bilan(s.derniere) : '';
 
   const p = s.progression || {};
   const barre = $('#barre');
@@ -270,6 +276,27 @@ async function rafraichit() {
   else if (!s.plan) $('#secPlan').style.display = 'none';
 
   if (dernierEtat !== s.etat) { dernierEtat = s.etat; }
+}
+
+/* Ce que l'analyse a regardé, et ce qu'elle a trouvé — y compris rien. */
+function quand(iso) {
+  const sec = (Date.now() - Date.parse(iso)) / 1000;
+  return !isFinite(sec) ? '' : sec < 60 ? 'à l’instant' : sec < 3600 ? `il y a ${Math.round(sec / 60)} min` : `il y a ${Math.round(sec / 3600)} h`;
+}
+function bilan(d) {
+  if (d.interrompue) return '<div class="aide">Analyse interrompue avant la fin : aucun plan.</div>';
+  const l = [];
+  l.push(d.vectorisees
+    ? `${d.vectorisees} entrée${d.vectorisees > 1 ? 's' : ''} comparée${d.vectorisees > 1 ? 's' : ''} deux à deux · ${d.supprimer} doublon${d.supprimer > 1 ? 's' : ''}`
+    : 'Doublons non cherchés : aucune entrée n’est encore vectorisée (serveur de vecteurs injoignable, ou file en cours).');
+  l.push(d.titres_examines
+    ? `${d.titres_examines} titre${d.titres_examines > 1 ? 's' : ''} vague${d.titres_examines > 1 ? 's' : ''} examiné${d.titres_examines > 1 ? 's' : ''} · ${d.renommer} à réécrire`
+    : 'Aucun titre vague.');
+  if (d.orphelins) l.push(`${d.orphelins} entrée${d.orphelins > 1 ? 's' : ''} sans lien (signalée${d.orphelins > 1 ? 's' : ''}, jamais touchée${d.orphelins > 1 ? 's' : ''}).`);
+  const tete = d.actions
+    ? `<b>${d.actions} action${d.actions > 1 ? 's' : ''} proposée${d.actions > 1 ? 's' : ''}</b> — le plan est plus bas, rien n’est appliqué sans ta validation.`
+    : '<b>Rien à ranger.</b> La mémoire est propre.';
+  return `<div class="bilan-t">${tete}</div>` + l.map(x => `<div>${esc(x)}</div>`).join('');
 }
 
 /* ---- plan ---- */
@@ -295,8 +322,10 @@ $('#bRien').onclick = () => document.querySelectorAll('#planL input').forEach(i 
 
 /* ---- actions ---- */
 $('#bLancer').onclick = async () => {
-  msg(''); try { await api('/v1/rangement/lancer', {}); await rafraichit(); }
-  catch (e) { msg(e.message); }
+  msg(''); $('#bilan').innerHTML = '<div class="aide">Analyse lancée…</div>';
+  try { await api('/v1/rangement/lancer', {}); await rafraichit(); }
+  /* L'erreur s'affiche sous le bouton : en bas de page, personne ne la voyait. */
+  catch (e) { $('#bilan').innerHTML = `<div class="bilan-err">${esc(e.message)}</div>`; }
 };
 $('#bPause').onclick = async () => { await api('/v1/rangement/pause', {}); rafraichit(); };
 $('#bReprendre').onclick = async () => { await api('/v1/rangement/reprendre', {}); rafraichit(); };

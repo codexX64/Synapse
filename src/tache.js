@@ -61,8 +61,10 @@ async function lance(db, cfg, { reecrit, source = 'manuel' } = {}) {
       }
 
       /* --- titres : un appel au modele par entree, d'ou la pause --- */
+      let examines = 0;
       if (cfg.reecrire_titres && reecrit) {
         const faibles = RG.titresFaibles(db, { ns: cfg.espace || null, max: 40 });
+        examines = faibles.length;
         progression = { etape: 'reecriture des titres', fait: 0, total: faibles.length };
         for (const e of faibles) {
           if (!await pointDArret()) return fin(t0, source, actions, resume);
@@ -79,7 +81,7 @@ async function lance(db, cfg, { reecrit, source = 'manuel' } = {}) {
       const orph = RG.orphelins(db);
 
       plan = { actions, resume, orphelins: orph.length, ts: Date.now(), source,
-               candidats: d.candidats, vectorisees: d.total };
+               candidats: d.candidats, vectorisees: d.total, titres_examines: examines };
       fin(t0, source, actions, resume);
     } catch (e) {
       erreur = String(e.message).slice(0, 200);
@@ -93,13 +95,24 @@ async function lance(db, cfg, { reecrit, source = 'manuel' } = {}) {
 function fin(t0, source, actions = [], resume = []) {
   if (!plan && actions.length) plan = { actions, resume, ts: Date.now(), source };
   etat = arret ? 'repos' : 'fini';
+  /* Le bilan est gardé même quand il n'y a rien à faire : une analyse
+     qui finit en une seconde sans rien dire ressemblait à un bouton
+     qui ne marche pas. */
   derniere = {
     fin: new Date().toISOString(),
     actions: actions.length,
+    supprimer: actions.filter(a => a.type === 'supprimer').length,
+    renommer: actions.filter(a => a.type === 'renommer').length,
+    vectorisees: plan ? plan.vectorisees || 0 : 0,
+    candidats: plan ? plan.candidats || 0 : 0,
+    titres_examines: plan ? plan.titres_examines || 0 : 0,
+    orphelins: plan ? plan.orphelins || 0 : 0,
     duree: Math.round((Date.now() - t0) / 1000),
     source, interrompue: arret
   };
-  progression = { etape: arret ? 'interrompue' : 'terminee', fait: 0, total: 0 };
+  /* Un plan sans action n'est pas un plan : rien à valider. */
+  if (plan && !plan.actions.length) plan = null;
+  progression = { etape: '', fait: 0, total: 0 };
 }
 
 /* ---------- pilotage ---------- */

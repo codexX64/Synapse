@@ -164,6 +164,7 @@ body.cherche #console{z-index:50}
   font-size:11px;line-height:1.7;overflow-x:auto;color:var(--teal);margin:8px 0;white-space:pre}
 .ans p{font-size:12px;line-height:1.65;color:var(--txt);margin:7px 0}
 .ans .mu{color:var(--mut);font-size:11px}
+.curseur{display:inline-block;margin-left:2px;color:var(--amber);animation:bl 1s steps(2) infinite}
 .xpTr{height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;margin-top:4px}
 .xpFl{height:100%;background:linear-gradient(90deg,var(--amber),var(--gold))}
 .aBtn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.3);color:#fff;
@@ -1228,43 +1229,82 @@ async function think(q){
   coreFlash=performance.now();
 
   const voile=$('#cherche');voile.classList.add('on');document.body.classList.add('cherche');
-  let k=0; const anim=setInterval(()=>{
+  let k=0; let anim=setInterval(()=>{
     ['L0','L1','L2','L3'].forEach((l,i)=>{const c=$('#ch'+l);if(c)c.classList.toggle('run',i===k%4);});
     if(nodes.length)spawnSignal(nodes[Math.floor(Math.random()*nodes.length)].id,false);
     k++;
   },140);
-  let rep=null,erreur=null;
-  try{
-    const r=await fetch('/v1/answer?q='+encodeURIComponent(q)+'&ns='+encodeURIComponent(NS),{credentials:'same-origin',signal:AbortSignal.timeout(30000)});
-    if(r.status===401){location.href='/login';return;}
-    rep=r.ok?await r.json():null;
-    if(!r.ok)erreur='HTTP '+r.status;
-  }catch(e){erreur=/timeout|abort/i.test(String(e))?'délai dépassé':'SYNAPSE injoignable';}
-  clearInterval(anim);voile.classList.remove('on');document.body.classList.remove('cherche');
-  ['L0','L1','L2','L3'].forEach(l=>{const c=$('#ch'+l);if(c)c.classList.remove('run');});
+  const stopAnim=()=>{if(!anim)return;clearInterval(anim);anim=null;voile.classList.remove('on');document.body.classList.remove('cherche');
+    ['L0','L1','L2','L3'].forEach(l=>{const c=$('#ch'+l);if(c)c.classList.remove('run');});};
 
-  let answerHtml, domain, conf=0, arret=null;
-  const hits=rep?rep.hits||[]:[];
-  const ids=hits.map(h=>'e'+h.id).filter(id=>byId[id]);
-  if(rep){
-    state.filtre=ids.length?new Set(ids):null;
-    ids.forEach(id=>activeLabels.add(id));
-    arret=rep.arret||'VIDE';
-    domain=String(rep.decision||'').toLowerCase();
-    conf=Math.min(.99,(hits[0]?.score||0)*12);
+  /* La réponse arrive en flux : les sources dès que la recherche est
+     finie (quelques millisecondes), puis le texte mot à mot. */
+  let src=null,fin=null,texte='',erreur=null;
+  const qh=esc(q);
+  const rendre=()=>{
+    const hits=src?src.hits||[]:[];
+    const arret=fin?fin.arret:null;
+    const domain=src?String(src.decision||'').toLowerCase():'hors ligne';
     const liste=hits.slice(0,6).map((h,i)=>'<div class="cx" data-go="e'+esc(h.id)+'"><i style="background:'+typeDe((byId['e'+h.id]||{}).type||'note').c+'"></i>['+(i+1)+'] '+esc(h.title)+'<em>'+esc(h.level)+' · '+esc(String(h.occurred_at||'').slice(0,10))+'</em></div>').join('');
-    answerHtml=(rep.answer?'<p>'+esc(rep.answer).replace(/\[(\d+)\]/g,'<b>[$1]</b>')+'</p>':
-      rep.ia_erreur?'<p class="mu" style="color:var(--coral)">IA locale indisponible : '+esc(rep.ia_erreur)+'</p>':
-      hits.length?'<p class="mu">'+esc(rep.reason||'')+'</p>':'<p class="mu">Rien en mémoire pour cette question. '+esc(rep.reason||'')+'</p>')+
-      (hits.length?'<h3>SOURCES · '+hits.length+'</h3>'+liste:'');
-  }else{
-    domain='hors ligne';
-    answerHtml='<p class="mu" style="color:var(--coral)">'+esc(erreur||'SYNAPSE ne répond pas.')+'</p>';
-  }
+    let corps;
+    if(!src) corps='<p class="mu" style="color:var(--coral)">'+esc(erreur||'SYNAPSE ne répond pas.')+'</p>';
+    else if(texte) corps='<p>'+esc(texte).replace(/\[(\d+)\]/g,'<b>[$1]</b>')+(fin?'':'<span class="curseur">▍</span>')+'</p>';
+    else if(!fin&&src.ia) corps='<p class="mu">'+esc(src.model||'IA locale')+' rédige…</p>';
+    else if(fin&&fin.ia_erreur) corps='<p class="mu" style="color:var(--coral)">IA locale indisponible : '+esc(fin.ia_erreur)+'</p>';
+    else corps='<p class="mu">'+(hits.length?'':'Rien en mémoire pour cette question. ')+esc(src.reason||'')+'</p>';
+    const temps=fin?fmtMs(fin.took_ms):src?'recherche '+fmtMs(src.recherche_ms):'—';
+    const e=src&&src.engines||{};
+    const moteurs=src?[e.early?'correspondance franche':'',e.vector?'vecteur':'plein texte',src.ia?'synthèse '+(src.model||'IA locale'):'',src.verifie?'état vérifié en direct':''].filter(Boolean):[];
+    inspBody.innerHTML=badge(esc(domain.toUpperCase()),'#b18cff')+(arret?badge('ARRÊT '+(arret==='VIDE'?'∅':arret),BAR_C[arret]||'#9c9c9c'):'')+badge(esc(temps),'#9c9c9c')+(src&&src.verifie?badge('VÉRIFIÉ EN DIRECT','#3fe8a8'):'')+
+      '<h2 style="font-size:14px">« '+qh+' »</h2><div class="ans">'+corps+(hits.length?'<h3>SOURCES · '+hits.length+'</h3>'+liste:'')+'</div>'+
+      (moteurs.length?'<h3>TRACE</h3><div class="tl">'+moteurs.map(esc).join(' → ')+'</div>':'');
+    insp.classList.add('on');bindInsp();
+  };
+  const surSources=()=>{
+    const ids=(src.hits||[]).map(h=>'e'+h.id).filter(id=>byId[id]);
+    state.filtre=ids.length?new Set(ids):null;
+    ids.forEach(id=>{activeLabels.add(id);pulse(id,.85,2400);spawnSignal(id,true);});
+    if(ids.length===1&&byId[ids[0]]) focusCard(byId[ids[0]]);
+    else if(ids.length){
+      _v2.set(0,0,0);ids.forEach(id=>_v2.add(worldOf(id)));_v2.divideScalar(ids.length);
+      if(_v2.lengthSq()>1){
+        _v1.copy(_v2).normalize();
+        const thT=Math.atan2(_v1.z,_v1.x);
+        const phT=Math.min(Math.PI-.15,Math.max(.15,Math.acos(Math.max(-1,Math.min(1,_v1.y)))));
+        tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+24},700,easeIOC);
+      }
+    }
+    $('#chipsRow').firstChild.textContent='SYNAPSE · '+String(src.decision||'').toUpperCase()+' '+Math.min(.99,((src.hits||[])[0]?.score||0)*12).toFixed(2);
+    if(src.ia){const c=$('#chL3');if(c){stopAnim();c.classList.add('run');}}
+    else stopAnim();
+    rendre();
+  };
+  let dernierRendu=0;
+  try{
+    const r=await fetch('/v1/answer?stream=1&q='+encodeURIComponent(q)+'&ns='+encodeURIComponent(NS),{credentials:'same-origin',signal:AbortSignal.timeout(75000)});
+    if(r.status===401){location.href='/login';return;}
+    if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
+    const lect=r.body.getReader(),dec=new TextDecoder();let buf='';
+    for(;;){
+      const {value,done}=await lect.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let i;
+      while((i=buf.indexOf('\n\n'))>=0){
+        const bloc=buf.slice(0,i);buf=buf.slice(i+2);
+        const type=(bloc.match(/^event: (.+)$/m)||[])[1];
+        const data=(bloc.match(/^data: (.*)$/m)||[])[1];
+        if(!type||data==null)continue;
+        const d=JSON.parse(data);
+        if(type==='sources'){src=d;surSources();}
+        else if(type==='jeton'){texte+=d.t;const now=performance.now();if(now-dernierRendu>60){dernierRendu=now;rendre();}}
+        else if(type==='fin'){fin=d;if(d.answer)texte=d.answer;}
+      }
+    }
+  }catch(e){erreur=/timeout|abort/i.test(String(e))?'délai dépassé':'SYNAPSE injoignable';}
+  stopAnim();
+  const c3=$('#chL3');if(c3)c3.classList.remove('run');
 
-  $('#chipsRow').firstChild.textContent='SYNAPSE · '+domain.toUpperCase()+(rep?' '+(+conf).toFixed(2):'');
-  /* L'étage atteint s'allume ; ceux d'avant sont passés, ceux d'après
-     n'ont pas servi. */
+  const arret=fin?fin.arret:null;
   const rang={L0:0,L1:1,L2:2,L3:3}[arret];
   ['L0','L1','L2','L3'].forEach((l,i)=>{
     const ch=$('#ch'+l);if(!ch)return;
@@ -1275,25 +1315,11 @@ async function think(q){
       else{ch.classList.add('hit');ch.style.color=BAR_C[l];ch.style.borderColor=BAR_C[l];}
     }
   });
-  ids.forEach(id=>{pulse(id,.85,2400);spawnSignal(id,true);});
-  if(ids.length===1&&byId[ids[0]]) focusCard(byId[ids[0]]);
-  else if(ids.length){
-    _v2.set(0,0,0);let n=0;ids.forEach(id=>{_v2.add(worldOf(id));n++;});
-    _v2.divideScalar(n);
-    if(_v2.lengthSq()>1){
-      _v1.copy(_v2).normalize();
-      const thT=Math.atan2(_v1.z,_v1.x);
-      const phT=Math.min(Math.PI-.15,Math.max(.15,Math.acos(Math.max(-1,Math.min(1,_v1.y)))));
-      tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+24},700,easeIOC);
-    }
-  }
-  const tot=rep?fmtMs(rep.took_ms):'—';
-  const moteurs=rep&&rep.engines?[rep.engines.early?'correspondance franche':'',rep.engines.vector?'vecteur':'plein texte',rep.answer?'synthèse '+(rep.model||'IA locale'):'',rep.verifie?'état vérifié en direct':''].filter(Boolean):[];
-  inspBody.innerHTML=badge(esc(domain.toUpperCase()),'#b18cff')+(arret?badge('ARRÊT '+(arret==='VIDE'?'∅':arret),BAR_C[arret]||'#9c9c9c'):'')+badge(esc(tot),'#9c9c9c')+(rep&&rep.verifie?badge('VÉRIFIÉ EN DIRECT','#3fe8a8'):'')+
-    '<h2 style="font-size:14px">« '+esc(q)+' »</h2><div class="ans">'+answerHtml+'</div>'+
-    (moteurs.length?'<h3>TRACE</h3><div class="tl">'+moteurs.map(esc).join(' → ')+'</div>':'');
-  insp.classList.add('on');bindInsp();
-  if(hits.length===1&&byId['e'+hits[0].id]) selectNode('e'+hits[0].id);
+  rendre();
+  const hits=src?src.hits||[]:[];
+  if(hits.length===1&&byId['e'+hits[0].id]&&!texte) selectNode('e'+hits[0].id);
+  const domain=src?String(src.decision||'').toLowerCase():'hors ligne';
+  const tot=fin?fmtMs(fin.took_ms):'—';
   const log=$('#traceLog'),d=document.createElement('div');d.className='tl';
   log.querySelectorAll('.attente').forEach(x=>x.remove());
   d.innerHTML='<b>'+esc(domain)+'</b> → '+(arret?'arrêt '+(arret==='VIDE'?'∅':arret)+' · ':'')+esc(tot)+'<br>'+esc(q.length>34?q.slice(0,34)+'…':q);

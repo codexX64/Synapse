@@ -959,7 +959,11 @@ const routes = {
 
     const r = await search(db, { q, ns, limit: 8, embed: t => embedder.query(t) });
     const question = r.intent === 'QUESTION' || r.decision === 'SYNTHESE';
-    let answer = null, model = null, erreurIA, etat = null, verifie = false;
+    let answer = null, model = null, erreurIA, etat = null, verifie = false, prompt = null;
+    /* ?stream=1 : les sources partent dès la recherche finie, puis la
+       réponse mot à mot. Sans cela, on regardait un écran figé pendant
+       toute la génération — dix secondes pour une phrase. */
+    const veutFlux = u.searchParams.get('stream') === '1';
 
     /* La mémoire est-elle suffisante ? Score bas, ou question qui parle
        de l'état présent (« est-ce que X tourne », « combien », « en ce
@@ -1027,26 +1031,13 @@ const routes = {
           + `\nROUTES PUBLIÉES : ${rt.length}${rtHs ? ' · hors ligne : ' + rtHs : ' · toutes en ligne'}`
           + (m ? `\n${m}` : '');
       }
-      const prompt = `Tu es la mémoire du homelab Codex64. Réponds en français, en 2 à 4 phrases.
-Tu disposes de deux choses : la MÉMOIRE (extraits datés, peuvent être périmés) et, s'il est fourni, l'ÉTAT ACTUEL (vérifié à l'instant). Pour tout ce qui concerne le présent, l'état actuel fait foi. Pour l'historique et les décisions, la mémoire fait foi.
-Règles : n'utilise QUE ces deux sources. Cite les numéros [n] de la mémoire que tu utilises, et dis « vérifié à l'instant » quand tu t'appuies sur l'état actuel.
-LIRE LE CORPS, PAS LE TITRE. Un titre résume, il n'affirme rien. Le corps du document fait foi : si le corps contredit ce que le titre laisse croire, c'est le corps qui a raison.
-UNE FLÈCHE N'EST PAS UNE DÉPENDANCE. « A → B » dans un titre décrit un FLUX DE DONNÉES : A envoie quelque chose à B. Cela ne veut pas dire que A a besoin de B pour fonctionner. Un document intitulé « X → SYNAPSE » qui dit dans son corps « aucune dépendance ajoutée » signifie exactement le contraire d'une dépendance.
-UNE RELATION DOIT ÊTRE ÉCRITE. « dépend de », « héberge », « a besoin de » ne s'infèrent jamais : il faut qu'un extrait l'énonce en toutes lettres. À défaut, réponds « la mémoire ne décrit pas les dépendances de X » — c'est une réponse juste, pas un échec.
-LES TICKETS. Deux blocs peuvent apparaître dans l'état actuel : les plus récents, et surtout « TICKETS QUI CORRESPONDENT A LA QUESTION », qui vient d'une recherche dans TOUS les tickets ouverts. Si ce second bloc existe, il fait foi : cite les références trouvées. S'il dit qu'aucun ne correspond, tu peux l'affirmer. S'il est absent ou indisponible, tu ne disposes que des récents et tu ne peux pas conclure à l'absence.
-RÉPONDS À LA QUESTION POSÉE. Si tu ne la comprends pas, dis-le et demande une reformulation — ne réponds pas à une question voisine que tu aurais comprise.
-Si ni la mémoire ni l'état ne permettent de répondre, dis-le en une phrase, sans inventer.
-
-MÉMOIRE :
-${extraits || '(rien de pertinent)'}${bloc}
-
-QUESTION : ${q}`;
+      prompt = construirePrompt({ q, extraits, bloc, avecEtat: !!etat, present: parleDuPresent });
       model = process.env.ANSWER_MODEL || 'qwen3:8b';
-      try {
+      if (!veutFlux) try {
         const o = await fetch(embedder.url + '/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, prompt, stream: false, think: false,
-            options: { temperature: 0.2, num_predict: 220 } }),
+          body: JSON.stringify({ model, prompt, stream: false, think: false, keep_alive: GARDE_MODELE,
+            options: { temperature: 0.2, num_predict: MAX_JETONS } }),
           signal: AbortSignal.timeout(20000)
         });
         const j = await o.json();
@@ -1062,6 +1053,7 @@ QUESTION : ${q}`;
         console.error('[answer] IA indisponible :', erreurIA);
       }
     }
+    if (veutFlux) return repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie, etat });
     const tookAnswer = +(performance.now() - t0).toFixed(1);
     ACT.noter(db, { route: 'answer', source: ctx.src.name, q, ms: tookAnswer, decision: r.decision,
       arret: ACT.etageDe(r, { synthese: !!answer }), hits: r.hits.length });
@@ -1072,8 +1064,7 @@ QUESTION : ${q}`;
       answer, model: answer ? model : null,
       ia_erreur: erreurIA || undefined,
       verifie, etat_muet: etat && etat.muettes && etat.muettes.length ? etat.muettes.map(x => x.source + ' (' + x.service + ')') : undefined,
-      hits: r.hits.map(h => ({ id: h.id, title: h.title, snippet: h.snippet, source: h.source,
-        level: h.level, kind: h.kind, occurred_at: h.occurred_at, score: h.score, why: h.why }))
+      hits: vueHits(r)
     });
   },
 
@@ -1094,6 +1085,102 @@ QUESTION : ${q}`;
     send(res, 200, out);
   }
 };
+
+/* ---------- réponse en langage naturel ---------- */
+
+/* Le modèle reste chargé une demi-heure : sans cela, Ollama le décharge
+   après cinq minutes et la question suivante paie le rechargement. */
+const GARDE_MODELE = process.env.ANSWER_KEEP_ALIVE || '30m';
+const MAX_JETONS = 180;
+
+/* La consigne ne parle d'état en direct que s'il y en a un. Elle disait
+   toujours « dis vérifié à l'instant » : sans agrégateur, le modèle
+   l'écrivait quand même, et affirmait en direct ce qu'il tirait d'un
+   vieux souvenir. */
+function construirePrompt({ q, extraits, bloc, avecEtat, present }) {
+  const regles = [
+    'Tu es la mémoire du homelab. Réponds en français, en 2 ou 3 phrases, sans préambule.',
+    avecEtat
+      ? 'Tu disposes de deux sources : la MÉMOIRE (extraits datés, peuvent être périmés) et l\'ÉTAT ACTUEL (vérifié à l\'instant). Pour le présent, l\'état actuel fait foi ; pour l\'historique et les décisions, la mémoire. Dis « vérifié à l\'instant » quand tu t\'appuies sur l\'état actuel.'
+      : 'Tu ne disposes QUE de la MÉMOIRE : des extraits datés, qui peuvent être périmés. Tu n\'as AUCUN accès à l\'état en direct : n\'écris jamais « vérifié », « à l\'instant », « actuellement » ni « en ce moment ».',
+    !avecEtat && present
+      ? 'La question porte sur l\'état présent : commence par dire que la mémoire ne permet pas de le vérifier en direct, puis donne ce qu\'elle en sait, avec la date de l\'extrait.'
+      : '',
+    'Cite les numéros [n] des extraits que tu utilises. N\'utilise que ces sources.',
+    'LIRE LE CORPS, PAS LE TITRE. Un titre résume, il n\'affirme rien : si le corps contredit le titre, le corps a raison.',
+    'UNE FLÈCHE N\'EST PAS UNE DÉPENDANCE. « A → B » décrit un flux de données, pas un besoin de fonctionner.',
+    'UNE RELATION DOIT ÊTRE ÉCRITE. « dépend de », « héberge », « a besoin de » ne s\'infèrent jamais : à défaut d\'un extrait qui l\'énonce, dis que la mémoire ne le décrit pas.',
+    avecEtat
+      ? 'LES TICKETS. Le bloc « TICKETS QUI CORRESPONDENT A LA QUESTION » vient d\'une recherche dans tous les tickets ouverts et fait foi. Sans lui, tu ne connais que les récents et tu ne peux pas conclure à l\'absence.'
+      : '',
+    'RÉPONDS À LA QUESTION POSÉE. Si tu ne la comprends pas, demande une reformulation.',
+    'Si les sources ne permettent pas de répondre, dis-le en une phrase, sans inventer.',
+  ].filter(Boolean).join('\n');
+  return `${regles}\n\nMÉMOIRE :\n${extraits || '(rien de pertinent)'}${bloc}\n\nQUESTION : ${q}`;
+}
+
+const vueHits = r => r.hits.map(h => ({ id: h.id, title: h.title, snippet: h.snippet, source: h.source,
+  level: h.level, kind: h.kind, occurred_at: h.occurred_at, score: h.score, why: h.why }));
+
+async function repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie, etat }) {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'X-Accel-Buffering': 'no',
+    'X-Content-Type-Options': 'nosniff',
+  });
+  const ev = (type, data) => { if (!res.writableEnded) res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`); };
+  ev('sources', {
+    q, intent: r.intent, decision: r.decision, reason: r.reason, engines: r.engines,
+    recherche_ms: +(performance.now() - t0).toFixed(1), verifie, ia: !!prompt, model: prompt ? model : null,
+    etat_muet: etat && etat.muettes && etat.muettes.length ? etat.muettes.map(x => x.source + ' (' + x.service + ')') : undefined,
+    hits: vueHits(r),
+  });
+
+  let texte = '', erreurIA, coupe = false;
+  if (prompt) {
+    /* Le client qui ferme l'onglet arrête la génération : inutile de
+       faire tourner le GPU pour personne. */
+    const ac = new AbortController();
+    res.on('close', () => { if (!res.writableFinished) { coupe = true; ac.abort(); } });
+    try {
+      const o = await fetch(embedder.url + '/api/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt, stream: true, think: false, keep_alive: GARDE_MODELE,
+          options: { temperature: 0.2, num_predict: MAX_JETONS } }),
+        signal: AbortSignal.any([ac.signal, AbortSignal.timeout(60000)]),
+      });
+      if (!o.ok) { const j = await o.json().catch(() => ({})); throw new Error(j.error || 'HTTP ' + o.status); }
+      const dec = new TextDecoder();
+      let buf = '', dansPensee = false;
+      for await (const morceau of o.body) {
+        buf += dec.decode(morceau, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const ligne = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!ligne) continue;
+          const j = JSON.parse(ligne);
+          if (j.error) throw new Error(j.error);
+          let t = j.response || '';
+          /* Un modèle qui pense malgré think:false : on ne diffuse pas sa pensée. */
+          if (t.includes('<think>')) { dansPensee = true; t = t.split('<think>')[0]; }
+          if (dansPensee) { if (t.includes('</think>')) { dansPensee = false; t = t.split('</think>').pop(); } else t = ''; }
+          if (t) { texte += t; ev('jeton', { t }); }
+        }
+      }
+    } catch (e) {
+      if (coupe) return;
+      erreurIA = String(e && e.message || e).slice(0, 120);
+      console.error('[answer] IA indisponible :', erreurIA);
+    }
+  }
+  const answer = texte.trim() || null;
+  const took = +(performance.now() - t0).toFixed(1);
+  const arret = ACT.etageDe(r, { synthese: !!answer });
+  ACT.noter(db, { route: 'answer', source: ctx.src.name, q, ms: took, decision: r.decision, arret, hits: r.hits.length });
+  ev('fin', { took_ms: took, arret, answer, model: answer ? model : null, ia_erreur: erreurIA });
+  res.end();
+}
 
 /* Un agent ne lit jamais la mémoire privée d'un autre. */
 /* Deux espaces publics, deux natures :
