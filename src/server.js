@@ -107,15 +107,29 @@ function litCookie(req, nom) {
   return null;
 }
 
+/* Secure seulement quand la connexion est chiffrée. Un navigateur jette
+   un cookie Secure reçu en HTTP clair : avec lui, la connexion en
+   adresse:port — ce que le Hub publie par défaut — ne pouvait pas
+   aboutir, on revenait sur /login à chaque essai. Le drapeau n'ajoute
+   rien sur une connexion déjà en clair ; derrière un proxy HTTPS, il est
+   posé. Un X-Forwarded-Proto forgé ne peut que l'ajouter, jamais l'ôter. */
+function chiffre(req) {
+  if (!req) return true;
+  if (req.socket && req.socket.encrypted) return true;
+  return String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
+}
+function attributsCookie(req) {
+  return 'Path=/; HttpOnly; SameSite=Lax' + (chiffre(req) ? '; Secure' : '');
+}
 function poseCookie(res, sid, maxAgeMs) {
   /* HttpOnly : illisible en JavaScript, donc pas exfiltrable par une
       injection. SameSite=Lax : pas envoye depuis un autre site. */
   res.setHeader('Set-Cookie',
-    `${COOKIE}=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Secure`
+    `${COOKIE}=${encodeURIComponent(sid)}; ${attributsCookie(res.req)}`
     + `; Max-Age=${Math.floor(maxAgeMs / 1000)}`);
 }
 function videCookie(res) {
-  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`);
+  res.setHeader('Set-Cookie', `${COOKIE}=; ${attributsCookie(res.req)}; Max-Age=0`);
 }
 
 /* ---------- amorçage des jetons de service ----------
