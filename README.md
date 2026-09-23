@@ -70,10 +70,9 @@ remplacer immédiatement par le tien, avec un second facteur.
 
 | Chemin | Ce qu'on y fait |
 |---|---|
-| `/` | vue 3D de la mémoire, recherche, exploration |
-| `/cascade` | voir la cascade décider en direct |
+| `/` | vue 3D de la mémoire, questions, activité mesurée et apprentissage |
 | `/parametres` | rangement, plages horaires, notifications |
-| `/setup` | premier démarrage |
+| `/setup` | premier démarrage, ou second facteur d'un compte créé depuis le Hub |
 
 ## API
 

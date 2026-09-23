@@ -18,6 +18,9 @@
 /* Correspondance kind → type d'affichage.
    L'ordre compte : la première règle qui matche gagne. */
 const TYPE_RULES = [
+  /* Un échange avec un assistant n'est ni un service ni une note : sans
+     sa propre règle, il retombait sur le repli par niveau (L0 → service). */
+  [/^echange$/,                                'echange'],
   /* Le SUFFIXE d'abord : `container.oom` est un incident, pas un service.
      Classer sur le seul préfixe rangeait toutes les pannes de conteneur
      avec les déploiements réussis. */

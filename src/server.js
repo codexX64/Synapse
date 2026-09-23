@@ -26,6 +26,7 @@ const neu = require('./neurons.js');
 const APP = require('./apprentissage.js');
 const A = require('./auth.js');
 const C = require('./comptes.js');
+const ACT = require('./activite.js');
 const { blobToVec } = require('./db.js');
 const fsp = require('node:fs');
 const pathm = require('node:path');
@@ -184,10 +185,11 @@ neu.migrate(db);
 APP.migrate(db);
 A.migrate(db);
 C.migrate(db);
+ACT.migrate(db);
 amorcerSourceHub(db);
 if (A.assureInitial(db))
   console.log('[synapse] aucun compte : admin / Temp1234 cree, a remplacer a la premiere connexion');
-setInterval(() => A.purge(db), 600000).unref?.();
+setInterval(() => { A.purge(db); ACT.purge(db); }, 600000).unref?.();
 PLANIF.demarre(db, reecritTitre);
 const embedder = new Embedder();
 startWorker(db, embedder);
@@ -322,6 +324,19 @@ const routes = {
       return send(res, 403, { error: 'portée read requise' });
     if (ctx.url.searchParams.get('scope') === 'neurons')
       return send(res, 200, neu.stats(db, Number(ctx.url.searchParams.get('days') || 30)));
+    /* Ce que l'interface affiche dans son panneau d'instrumentation :
+       activité mesurée et apprentissage, rien d'écrit à l'avance. */
+    if (ctx.url.searchParams.get('scope') === 'activite')
+      return send(res, 200, {
+        activite: ACT.resume(db, { jours: Math.min(30, Number(ctx.url.searchParams.get('days') || 7)) }),
+        apprentissage: APP.resumeGlobal(db, { limite: 6 }),
+        embedder: { model: embedder.model, ok: embedder.ok },
+        chunks: {
+          embedded: db.prepare(`SELECT count(*) n FROM chunks WHERE embedded=1`).get().n,
+          pending: db.prepare(`SELECT count(*) n FROM chunks WHERE embedded=0`).get().n,
+        },
+        links: db.prepare(`SELECT count(*) n FROM links`).get().n,
+      });
     const lv = db.prepare(
       `SELECT level, count(*) n FROM entries WHERE archived=0 GROUP BY level`).all();
     const byNs = db.prepare(
@@ -391,6 +406,8 @@ const routes = {
       embed: t => embedder.query(t),
       forVector: u.searchParams.get('vector') !== '0'
     });
+    ACT.noter(db, { route: 'search', source: ctx.src.name, q: u.searchParams.get('q') || '',
+      ms: r.took_ms, decision: r.decision, arret: ACT.etageDe(r), hits: r.hits.length });
     send(res, 200, r);
   },
 
@@ -732,6 +749,7 @@ const routes = {
   'POST /v1/brief': async (req, res, ctx) => {
     if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
     const b = await readBody(req);
+    const tBrief = performance.now();
     const out = await APP.brief(db, {
       agent: b.agent, q: b.q || b.query || '', ns: b.ns || 'shared',
       limite: Math.min(20, Number(b.limit) || 6),
@@ -739,6 +757,10 @@ const routes = {
       signature: b.signature,
       search, embed: t => embedder.embed(t),
     });
+    ACT.noter(db, { route: 'brief', source: ctx.src.name, q: b.q || b.query || '',
+      ms: out.ms != null ? out.ms : performance.now() - tBrief, decision: null,
+      arret: (out.memoire || []).length ? 'L1' : 'VIDE',
+      hits: (out.memoire || []).length });
     send(res, 200, { ...out, texte: APP.briefTexte(out) });
   },
 
@@ -1040,9 +1062,13 @@ QUESTION : ${q}`;
         console.error('[answer] IA indisponible :', erreurIA);
       }
     }
+    const tookAnswer = +(performance.now() - t0).toFixed(1);
+    ACT.noter(db, { route: 'answer', source: ctx.src.name, q, ms: tookAnswer, decision: r.decision,
+      arret: ACT.etageDe(r, { synthese: !!answer }), hits: r.hits.length });
     send(res, 200, {
       q, intent: r.intent, decision: r.decision, reason: r.reason,
-      engines: r.engines, took_ms: +(performance.now() - t0).toFixed(1),
+      engines: r.engines, took_ms: tookAnswer,
+      arret: ACT.etageDe(r, { synthese: !!answer }),
       answer, model: answer ? model : null,
       ia_erreur: erreurIA || undefined,
       verifie, etat_muet: etat && etat.muettes && etat.muettes.length ? etat.muettes.map(x => x.source + ' (' + x.service + ')') : undefined,
@@ -1107,9 +1133,9 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname;
     /* login.html reste ouvert : sans lui, impossible de se connecter.
        Tout le reste de l'interface exige une session. */
-    const ouvert = p === '/login' || p === '/login.html' || p === '/bridge.js';
+    const ouvert = p === '/login' || p === '/login.html';
     const sess = A.session(db, litCookie(req, COOKIE));
-    if (!ouvert && (p === '/' || p === '/cascade' || p === '/parametres' || /^\/e\/\d+$/.test(p))) {
+    if (!ouvert && (p === '/' || p === '/parametres' || /^\/e\/\d+$/.test(p))) {
       if (!sess) { res.writeHead(302, { Location: '/login' }); return res.end(); }
       /* Compte temporaire ou second facteur à poser : rien d'autre que /setup. */
       if (C.enAttente(db, sess.user)) { res.writeHead(302, { Location: '/setup' }); return res.end(); }
@@ -1121,7 +1147,6 @@ const server = http.createServer(async (req, res) => {
                : p === '/setup' ? 'setup.html'
                : p === '/parametres' ? 'parametres.html'
                : p === '/' ? 'index.html'
-               : p === '/cascade' ? 'cascade.html'
                : /^\/[a-z0-9._-]+\.(html|css|js|svg|png|webp|ico)$/i.test(p) ? p.slice(1)
                : null;
     if (file) {

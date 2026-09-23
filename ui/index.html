@@ -35,6 +35,16 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;height:52px;display:flex;a
 #wordmark{font-family:var(--disp);font-weight:600;font-size:19px;letter-spacing:.26em;color:#fff}
 #demoTag{font-size:9px;letter-spacing:.18em;color:var(--mut);border:1px solid var(--panel-line);padding:3px 7px;border-radius:4px}
 #demoTag b{color:#fff;font-weight:500}
+#demoTag.live{color:var(--mint);border-color:rgba(63,232,168,.35)}
+#demoTag.vide{color:var(--amber);border-color:rgba(255,180,94,.35)}
+#demoTag.hs{color:var(--coral);border-color:rgba(255,92,122,.35)}
+#nsSel{background:rgba(255,255,255,.04);border:1px solid var(--panel-line);color:var(--mut);font:inherit;font-size:9px;letter-spacing:.16em;padding:3px 6px;border-radius:4px;margin-left:8px}
+#status.hs i{background:var(--coral);box-shadow:0 0 8px var(--coral);animation:none}
+#vide{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-top:58vh;pointer-events:none;z-index:5}
+#vide.on{display:flex}
+#vide div{max-width:440px;text-align:center;font-size:11px;line-height:1.7;color:var(--mut);letter-spacing:.04em}
+#vide b{display:block;font-family:var(--disp,inherit);font-size:13px;letter-spacing:.22em;color:#fff;margin-bottom:10px}
+.vide-hud{font-size:10px;color:var(--dim);line-height:1.6}
 nav{display:flex;gap:2px;margin-left:auto}
 nav button{background:none;border:1px solid transparent;color:var(--mut);padding:7px 13px;font-size:10.5px;
   letter-spacing:.16em;cursor:pointer;border-radius:5px;transition:.2s}
@@ -204,19 +214,21 @@ body.cherche #console{z-index:50}
 <canvas id="stage"></canvas>
 <div id="vignette"></div>
 <div id="labels"></div>
+<div id="vide"><div><b id="videT">MÉMOIRE VIDE</b><span id="videP">Rien n'est encore enregistré dans cet espace. SYNAPSE se remplit au fil des échanges avec l'assistant du Hub et de ce que les services lui envoient.</span></div></div>
 
 <header>
   <div id="wordmark">SYNAPSE</div>
-  <div id="demoTag">PRÉVISUEL · <b>DONNÉES SIMULÉES</b></div>
+  <div id="demoTag">CHARGEMENT…</div>
+  <select id="nsSel" title="Espace de mémoire affiché">
+    <option value="shared">HOMELAB</option>
+    <option value="savoir">SAVOIR</option>
+  </select>
   <div class="vsw">
     <button class="act" id="vSphere" title="Sphère 3D">◉</button>
     <button id="vGalaxy" title="Galaxie 3D">✷</button>
     <button id="vCard" title="Carte 2D">▤</button>
   </div>
-  <nav>
-    <button id="tabG" class="locked" title="Phase 5">GESTION</button>
-  </nav>
-  <div id="status"><i></i><span>SERVEUR DE VECTEURS 192.0.2.1 · SIMULÉ</span></div>
+  <div id="status"><i></i><span>VECTEURS · …</span></div>
   <a href="/parametres" id="paramBtn" title="Paramètres et rangement">⚙</a>
   <button id="hudBtn">STATS</button>
 </header>
@@ -227,14 +239,14 @@ body.cherche #console{z-index:50}
     <div id="statGrid">
       <div class="stat"><b id="stN">—</b><span>NEURONES</span></div>
       <div class="stat"><b id="stE">—</b><span>SYNAPSES</span></div>
-      <div class="stat"><b>1 347</b><span>EMBEDDINGS</span></div>
-      <div class="stat"><b>6<em style="font-style:normal;font-size:10px;color:var(--amber)"> · nv4</em></b><span>SKILLS</span></div>
-      <div class="stat"><b id="stQ">47</b><span>REQUÊTES / JOUR</span></div>
-      <div class="stat"><b id="stT">0.62s</b><span>TEMPS MOYEN</span></div>
+      <div class="stat"><b id="stV">—</b><span>EMBEDDINGS</span></div>
+      <div class="stat"><b id="stA">—</b><span>TRAITS APPRIS</span></div>
+      <div class="stat"><b id="stQ">—</b><span>REQUÊTES · 24 H</span></div>
+      <div class="stat"><b id="stT">—</b><span>TEMPS MOYEN</span></div>
     </div>
   </div>
   <div>
-    <div class="hudTitle">CASCADE — TAUX D'ARRÊT</div>
+    <div class="hudTitle">CASCADE — ÉTAGE D'ARRÊT · 7 JOURS</div>
     <div id="bars"></div>
   </div>
   <div>
@@ -243,7 +255,7 @@ body.cherche #console{z-index:50}
   </div>
   <div>
     <div class="hudTitle">DERNIÈRES PENSÉES</div>
-    <div id="traceLog"><div class="tl" style="color:var(--dim)">En attente de requête…</div></div>
+    <div id="traceLog"><div class="tl attente" style="color:var(--dim)">En attente de requête…</div></div>
   </div>
   <div>
     <div class="hudTitle">TYPES</div>
@@ -287,7 +299,7 @@ if(typeof THREE==='undefined'){
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s);
 
-/* ============================== DONNÉES SIMULÉES ============================== */
+/* ============================== TYPES D'ENTRÉES ============================== */
 const TYPES = {
   machine:  {c:'#5aa7ff', l:'Machine'},
   service:  {c:'#46e3ff', l:'Service'},
@@ -300,227 +312,90 @@ const TYPES = {
   stock:    {c:'#93a4bd', l:'Stock'},
   ambition: {c:'#ffd75e', l:'Ambition'},
   roadmap:  {c:'#f08fff', l:'Roadmap'},
-  note:     {c:'#8fa0b8', l:'Note'}
+  note:     {c:'#8fa0b8', l:'Note'},
+  echange:  {c:'#c8b6ff', l:'Échange'}
 };
-const N0 = [
-  ['m.srv1','machine','srv-app-01',{sub:'hôte applicatif',ip:'192.0.2.11',os:'Debian 12'}],
-  ['m.srv2','machine','srv-data-01',{sub:'hôte base de données',ip:'192.0.2.12',os:'Debian 12'}],
-  ['m.gpu','machine','srv-gpu-01',{sub:'inférence locale',ip:'192.0.2.13',note:'modèles ouverts'}],
-  ['m.edge','machine','routeur',{sub:'passerelle · pare-feu',ip:'192.0.2.1'}],
-  ['m.sw','machine','commutateur',{sub:'24 ports · VLAN'}],
-  ['m.nas','machine','stockage',{sub:'sauvegardes',ip:'192.0.2.14'}],
-  ['s.web','service','serveur-web',{host:'srv-app-01',note:'reverse proxy · TLS'}],
-  ['s.db','service','postgres',{host:'srv-data-01',note:'base relationnelle'}],
-  ['s.cache','service','redis',{host:'srv-app-01',note:'cache · files'}],
-  ['s.api','service','api-interne',{host:'srv-app-01',note:'REST · authentification'}],
-  ['s.mon','service','supervision',{host:'srv-app-01',note:'métriques · alertes'}],
-  ['s.log','service','journalisation',{host:'srv-data-01',note:'collecte centralisée'}],
-  ['s.syn','service','synapse',{host:'srv-gpu-01',note:'mémoire · recherche en cascade'}],
-  ['v.10','reseau','VLAN 10 — administration',{sub:'accès aux équipements'}],
-  ['v.20','reseau','VLAN 20 — serveurs',{sub:'charge applicative'}],
-  ['v.30','reseau','VLAN 30 — collecteurs',{sub:'clients'}],
-  ['v.40','reseau','VLAN 40 — invités',{sub:'isolé du reste'}],
-  ['p.deploy','procedure','Déployer une mise à jour',{sub:'construire · migrer · basculer'}],
-  ['p.backup','procedure','Restaurer une sauvegarde',{sub:'vérifier avant de remplacer'}],
-  ['p.cert','procedure','Renouveler un certificat',{sub:'ACME · rechargement à chaud'}],
-  ['p.audit','procedure','Revue de sécurité trimestrielle',{sub:'accès · secrets · dépendances'}],
-  ['i.oom','incident','Conteneur tué par manque de mémoire',{sub:'limite trop basse'}],
-  ['i.disk','incident','Disque saturé par les journaux',{sub:'rotation absente'}],
-  ['i.tls','incident','Certificat expiré en production',{sub:'renouvellement non planifié'}],
-  ['i.dns','incident','Résolution interne défaillante',{sub:'cache obsolète'}],
-  ['n.arch','note','Pourquoi un reverse proxy unique',{sub:'un seul point de TLS à tenir'}],
-  ['n.secret','note','Où vivent les secrets',{sub:'jamais dans le dépôt'}],
-  ['n.backup','note','Une sauvegarde non testée n\'existe pas',{sub:'restaurer pour le prouver'}]
-];
-const E0 = [
-  ['s.web','m.srv1','hébergé sur'],
-  ['s.db','m.srv2','hébergé sur'],
-  ['s.cache','m.srv1','hébergé sur'],
-  ['s.api','m.srv1','hébergé sur'],
-  ['s.syn','m.gpu','hébergé sur'],
-  ['s.api','s.db','dépend de'],
-  ['s.api','s.cache','dépend de'],
-  ['s.web','s.api','achemine vers'],
-  ['s.mon','s.log','écrit dans'],
-  ['m.srv1','v.20','rattaché à'],
-  ['m.srv2','v.20','rattaché à'],
-  ['m.gpu','v.20','rattaché à'],
-  ['m.edge','v.10','rattaché à'],
-  ['i.oom','s.cache','concerne'],
-  ['i.disk','m.srv1','concerne'],
-  ['i.tls','s.web','concerne'],
-  ['p.deploy','s.api','s\'applique à'],
-  ['p.backup','m.nas','s\'applique à'],
-  ['p.cert','s.web','s\'applique à'],
-  ['n.arch','s.web','explique'],
-  ['n.backup','p.backup','explique']
-];
+/* Un type que l'interface ne connaît pas encore reste affichable. */
+const typeDe = t => TYPES[t] || {c:'#8fa0b8', l:String(t||'autre')};
+/* Tout ce qui vient de la mémoire est du TEXTE : une question posée à
+   l'assistant peut contenir n'importe quoi, y compris du HTML. */
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 /* ============================================================
-   Pont entre le prévisuel 3D et le vrai SYNAPSE.
+   Les données : le vrai SYNAPSE, et rien d'autre.
 
-   Chargement SYNCHRONE, volontairement.
+   Chargement SYNCHRONE, volontairement : la scène se construit à la
+   ligne qui suit, sur ce qui a été lu. Un fetch asynchrone rendrait la
+   main trop tard et il faudrait reconstruire toute la géométrie.
+   XMLHttpRequest synchrone reste légitime ici : tout début de
+   chargement d'une page dédiée.
 
-   La scène se construit à la ligne qui suit (`const nodes = N.map…`).
-   Un fetch asynchrone rendrait la main trop tard : la scène serait
-   déjà bâtie sur le corpus de repli, et les vraies données
-   arriveraient dans le vide. Il faudrait alors reconstruire toute
-   la géométrie après coup — bien plus lourd que ces trente lignes.
-
-   XMLHttpRequest synchrone est déconseillé en général, parce qu'il
-   fige l'interface. Ici c'est au tout début du chargement d'une page
-   dédiée, avec un délai plafonné : c'est précisément le cas où il
-   reste légitime.
-
-   Le corpus intégré n'est pas supprimé, il devient un REPLI :
-     · le fichier reste ouvrable seul, sans backend ;
-     · une base vide donnerait une scène vide, qui ressemble à une
-       panne alors que tout fonctionne ;
-     · si l'API ne répond pas, mieux vaut une scène de démonstration
-       qu'un écran noir.
-
-   Le bandeau dit toujours quelle source est affichée.
+   Il n'y a plus de corpus de démonstration. Une base vide affiche une
+   scène vide et le dit ; un SYNAPSE injoignable le dit aussi. Montrer
+   des données inventées à la place faisait croire que tout marchait.
    ============================================================ */
+const NS = (() => {
+  const v = new URLSearchParams(location.search).get('ns');
+  return v === 'savoir' ? 'savoir' : 'shared';
+})();
+const ETAT = { live: false, total: 0, tronque: false, erreur: null };
+let N = [], E = [];
 (function () {
-  'use strict';
-
-  var API   = window.SYNAPSE_API   || '';
-  var TOKEN = window.SYNAPSE_TOKEN || '';
-  var NS    = window.SYNAPSE_NS    || 'shared';
-  var MIN   = 8;   /* en dessous, la scène 3D n'a pas de forme lisible */
-
-  function badge(texte, couleur) {
-    function poser() {
-      var el = document.createElement('div');
-      el.textContent = texte;
-      el.style.cssText =
-        'padding:4px 10px;font:600 10px/1.4 ui-monospace,monospace;letter-spacing:.12em;' +
-        'border:1px solid ' + couleur + '55;border-radius:5px;white-space:nowrap;' +
-        'color:' + couleur + ';background:#0a0a0acc';
-      /* Le badge se posait en position fixe par-dessus l'en-tete, ou il
-         recouvrait le statut « SERVEUR DE VECTEURS ». Il prend maintenant sa place :
-         ce statut datait du previsuel et n'apprenait plus rien. */
-      var st = document.getElementById('status');
-      if (st) { st.replaceWith(el); }
-      else { el.style.cssText += ';position:fixed;top:8px;right:10px;z-index:9999'; document.body.appendChild(el); }
-    }
-    if (document.body) poser();
-    else document.addEventListener('DOMContentLoaded', poser);
-  }
-
-  window.SYNAPSE_LIVE = false;
-
   try {
-    var x = new XMLHttpRequest();
-    x.open('GET', API + '/v1/graph?ns=' + encodeURIComponent(NS) + '&limit=1400', false);
-    if (TOKEN) x.setRequestHeader('Authorization', 'Bearer ' + TOKEN);
+    const x = new XMLHttpRequest();
+    x.open('GET', '/v1/graph?ns=' + encodeURIComponent(NS) + '&limit=1400', false);
     x.withCredentials = true;
     x.send(null);
-
+    if (x.status === 401) { location.href = '/login'; return; }
     if (x.status !== 200) throw new Error('HTTP ' + x.status);
-    var g = JSON.parse(x.responseText);
-
-    if (!g.nodes || g.nodes.length < MIN) {
-      badge('DÉMO · base presque vide (' + (g.total || 0) + ')', '#ffb45e');
-    } else {
-      /* format attendu par la scène : ['id','type','nom',{détails}] */
-      window.N = g.nodes.map(function (n) { return [n.id, n.type, n.name, n.d || {}]; });
-      window.E = g.edges.map(function (e) { return [e[0], e[1], e[2]]; });
-
-      /* L'arbre groupe par type : le reconstruire à l'identique, sinon
-         la disposition perd ses branches. */
-      var parType = {};
-      window.N.forEach(function (n) {
-        (parType[n[1]] = parType[n[1]] || []).push(n[0]);
-      });
-      window.TREE = {
-        name: 'noyau',
-        children: Object.keys(parType).sort().map(function (t) {
-          return { name: t, leaves: parType[t] };
-        })
-      };
-
-      window.SYNAPSE_LIVE = true;
-      badge('EN DIRECT · ' + g.nodes.length + ' entrées' +
-            (g.truncated ? ' / ' + g.total : ''), '#3fe8a8');
-    }
+    const g = JSON.parse(x.responseText);
+    N = (g.nodes || []).map(n => [n.id, n.type, n.name, Object.assign({ level: n.level }, n.d || {})]);
+    E = (g.edges || []).map(e => [e[0], e[1], e[2]]);
+    ETAT.live = true; ETAT.total = g.total || N.length; ETAT.tronque = !!g.truncated;
   } catch (e) {
-    var why = /timeout|abort/i.test(String(e)) ? 'délai dépassé'
-            : /401|403/.test(String(e))        ? 'jeton refusé'
-            : 'hors ligne';
-    badge('DÉMO · SYNAPSE ' + why, '#8a93c0');
+    ETAT.erreur = String(e && e.message || e);
   }
 })();
 
-/* le pont a peut-etre rempli window.N / window.E ; sinon, repli */
-var N = window.SYNAPSE_LIVE ? window.N : N0;
-var E = window.SYNAPSE_LIVE ? window.E : E0;
-
-const nodes = N.map(([id,type,name,d])=>({id,type,name,d,deg:0}));
+const nodes = N.map(([id,type,name,d])=>({id,type,name:String(name||''),d:d||{},deg:0}));
 const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+/* une arête dont un bout manque est ignorée : le serveur les filtre
+   déjà, mais une scène ne doit jamais tomber pour une arête */
+E = E.filter(([a,b])=>byId[a]&&byId[b]);
 E.forEach(([a,b])=>{byId[a].deg++;byId[b].deg++;});
 const NEIGH = {};
 nodes.forEach(n=>NEIGH[n.id]=new Set());
 E.forEach(([a,b])=>{NEIGH[a].add(b);NEIGH[b].add(a);});
 
+/* ---- bandeau d'état : ce qui est affiché, et d'où ça vient ---- */
+(function () {
+  const tag = document.getElementById('demoTag');
+  const sel = document.getElementById('nsSel');
+  sel.value = NS;
+  sel.onchange = () => { location.search = sel.value === 'shared' ? '' : '?ns=' + sel.value; };
+  const vide = document.getElementById('vide');
+  if (!ETAT.live) {
+    tag.className = 'hs'; tag.textContent = 'SYNAPSE INJOIGNABLE';
+    document.getElementById('videT').textContent = 'SYNAPSE NE RÉPOND PAS';
+    document.getElementById('videP').textContent = 'La mémoire n’a pas pu être lue (' + ETAT.erreur + '). Recharge la page ; si ça persiste, regarde l’état du service dans le Hub.';
+    vide.classList.add('on');
+  } else if (!nodes.length) {
+    tag.className = 'vide'; tag.textContent = 'MÉMOIRE VIDE';
+    vide.classList.add('on');
+  } else {
+    tag.className = 'live';
+    tag.textContent = 'EN DIRECT · ' + nodes.length + (ETAT.tronque ? ' / ' + ETAT.total : '') + ' ENTRÉE' + (nodes.length > 1 ? 'S' : '');
+  }
+})();
+
 /* ============================== ARBRE DES THÈMES ============================== */
-/* L'arbre se déduit des données affichées, en direct comme en démo :
-   une branche par type, une feuille par entrée. Un arbre écrit à la
-   main référençait des entrées qui n'existaient plus dans le corpus de
-   démonstration, et la scène plantait sur la première feuille absente. */
+/* L'arbre se déduit des données affichées : une branche par type, une
+   feuille par entrée. */
 function arbreParType(liste){
   const parType={};
   liste.forEach(n=>{(parType[n.type]=parType[n.type]||[]).push(n.id);});
   return {name:'noyau',children:Object.keys(parType).sort().map(t=>({name:t,leaves:parType[t]}))};
 }
-let TREE=(window.SYNAPSE_LIVE && window.TREE) ? window.TREE : arbreParType(nodes);
-
-/* ============================== MOTEUR DE RECHERCHE LIBRE ============================== */
-const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 .:\/+-]/g,' ');
-const STOP = new Set('le la les de du des d un une sur quoi est ce cette que qui quel quelle quels mon ma mes en a au aux et ou pour avec dans comment combien y il elle je tu on sa ca ça plus fait faire liste montre moi va vers si son ses tout tous par donne affiche cherche trouve dis c l qu se ne pas'.split(' '));
-const tok = s => norm(s).split(/\s+/).filter(t=>t&&!STOP.has(t));
-const ALIAS = {'app':'m.srv1','srv1':'m.srv1','applicatif':'m.srv1',
-  'data':'m.srv2','srv2':'m.srv2','donnees':'m.srv2',
-  'gpu':'m.gpu','inference':'m.gpu','ia':'m.gpu',
-  'routeur':'m.edge','passerelle':'m.edge','firewall':'m.edge',
-  'switch':'m.sw','commutateur':'m.sw','nas':'m.nas','stockage':'m.nas',
-  'web':'s.web','proxy':'s.web','nginx':'s.web','caddy':'s.web',
-  'db':'s.db','postgres':'s.db','base':'s.db',
-  'redis':'s.cache','cache':'s.cache','api':'s.api',
-  'supervision':'s.mon','metriques':'s.mon','logs':'s.log','journaux':'s.log',
-  'synapse':'s.syn','memoire':'s.syn'};
-const TYPEKW={skill:'skill',skills:'skill',projet:'projet',projets:'projet',service:'service',services:'service',
-  machine:'machine',machines:'machine',incident:'incident',incidents:'incident',pannes:'incident',
-  stock:'stock',procedure:'procedure',procedures:'procedure',runbook:'procedure',runbooks:'procedure',
-  note:'note',notes:'note',ambition:'ambition',ambitions:'ambition',roadmap:'roadmap'};
-nodes.forEach(n=>{
-  n.nn = norm(n.name);
-  n.tok = tok(n.name+' '+(n.d.sub||'')+' '+(n.d.note||''));
-  n.blob = norm(n.name+' '+(n.d.sub||'')+' '+(n.d.note||'')+' '+TYPES[n.type].l);
-});
-function lev(a,b){
-  if(Math.abs(a.length-b.length)>2)return 9;
-  const m=[...Array(a.length+1)].map((_,i)=>[i,...Array(b.length)]);
-  for(let j=0;j<=b.length;j++)m[0][j]=j;
-  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)
-    m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
-  return m[a.length][b.length];
-}
-function search(q){
-  const nq=norm(q), toks=tok(q);
-  const sc=new Map(); const add=(id,v)=>sc.set(id,(sc.get(id)||0)+v);
-  nodes.forEach(n=>{ if(n.nn.length>3&&nq.includes(n.nn)) add(n.id,90); });
-  toks.forEach(t=>{
-    if(ALIAS[t]) add(ALIAS[t],95);
-    nodes.forEach(n=>{
-      if(n.tok.includes(t)) add(n.id,26);
-      else if(n.tok.some(k=>k.startsWith(t)&&t.length>=3)) add(n.id,20);
-      else if(t.length>=4&&n.blob.includes(t)) add(n.id,10);
-      else if(t.length>=5&&n.tok.some(k=>k.length>=5&&lev(k,t)<=1)) add(n.id,16);
-    });
-  });
-  return [...sc.entries()].map(([id,s])=>({n:byId[id],s:s+byId[id].deg*.4}))
-    .sort((a,b)=>b.s-a.s);
-}
+let TREE=arbreParType(nodes);
 
 /* ============================== SCÈNE 3D — ARBRE RÉCURSIF ============================== */
 const canvas = $('#stage');
@@ -572,7 +447,7 @@ function cardTex(n){
   g.fillStyle='rgba(0,0,0,.5)';rrect(g,10,12,W-16,H-18,8);g.fill();
   g.fillStyle=n.type==='vlan'?'#b9b9b9':'#ededed';rrect(g,6,6,W-16,H-18,8);g.fill();
   g.strokeStyle='rgba(0,0,0,.28)';g.lineWidth=2;rrect(g,6,6,W-16,H-18,8);g.stroke();
-  g.fillStyle=TYPES[n.type].c;g.fillRect(7,7,W-18,9);
+  g.fillStyle=typeDe(n.type).c;g.fillRect(7,7,W-18,9);
   /* Mise en page du titre.
      L ancienne version ne coupait que sur les espaces : « tickets.example.com »
      n en contient aucun, donc il debordait de la carte sans jamais etre coupe.
@@ -618,7 +493,7 @@ function cardTex(n){
   let yy=30+taille;
   lignes.forEach(l=>{ g.fillText(l,XT,yy); yy+=taille*1.2; });
   g.fillStyle='#6a6a6a';g.font='600 11px monospace';
-  g.fillText(TYPES[n.type].l.toUpperCase().slice(0,20),15,H-18);
+  g.fillText(typeDe(n.type).l.toUpperCase().slice(0,20),15,H-18);
   const tx=new THREE.CanvasTexture(c);
   tx.anisotropy=8;
   tx.minFilter=THREE.LinearMipmapLinearFilter;   /* net de loin comme de pres */
@@ -810,7 +685,7 @@ nodes.forEach(n=>{
   n.cw=(2.5+Math.min(n.deg*.12,1.4))*(n.type==='machine'?1.2:1);
   n.cwBase=n.cw;
   n.ch=n.cw*(120/168);
-  n.tint=new THREE.Color(TYPES[n.type].c);
+  n.tint=new THREE.Color(typeDe(n.type).c);
   n.ph=Math.random()*Math.PI*2;
   n.op=n.baseOp; n.sK=1; n.hOp=0; n.tinted=0;
   n.spr=new THREE.Sprite(n.cardMat);
@@ -947,7 +822,7 @@ const cardLineGeo=new THREE.BufferGeometry();
          exact de la carte. */
       for (const n of r.feuilles){
         if(!n.pCard)continue;
-        const t=TYPES[n.type]?new THREE.Color(TYPES[n.type].c):c;
+        const t=new THREE.Color(typeDe(n.type).c);
         pos.push(r.p.x,r.p.y,0, n.pCard.x,n.pCard.y,0);
         col.push(c.r,c.g,c.b, t.r,t.g,t.b);
       }
@@ -1132,13 +1007,29 @@ function clearFiltre(){
   qIn.value='';
   insp.classList.remove('on');
 }
+/* L'inspecteur lit l'entrée complète : le graphe ne transporte que le
+   titre et quelques repères, le corps et les liens viennent de /v1/entry. */
 function renderInspector(n){
-  const T=TYPES[n.type];
-  const xp=n.type==='skill'?'<h3>EXPÉRIENCE</h3><div class="row"><span>Niveau '+n.d.lv+' · '+n.d.kind+'</span><b>'+n.d.xp+' / 100 XP</b></div><div class="xpTr"><div class="xpFl" style="width:'+n.d.xp+'%"></div></div>':'';
-  inspBody.innerHTML=badge(T.l.toUpperCase(),T.c)+(n.type==='vlan'?badge('PRÉVU','#f08fff'):'')+
-    '<h2>'+n.name+'</h2><h3>DONNÉES</h3>'+(rowsOf(n)||'<p class="mu" style="font-size:10px">—</p>')+xp+
+  const T=typeDe(n.type);
+  const d=n.d||{};
+  const rows=[['Source',d.sub],['Niveau',d.level],['Date',d.at?String(d.at).slice(0,16).replace('T',' '):''],
+    ['Référence',d.ref],['Répétitions',d.dup]].filter(([,v])=>v!=null&&v!=='')
+    .map(([k,v])=>'<div class="row"><span>'+k+'</span><b>'+esc(v)+'</b></div>').join('');
+  inspBody.innerHTML=badge(esc(T.l.toUpperCase()),T.c)+(d.level?badge(esc(d.level),'#9c9c9c'):'')+
+    '<h2>'+esc(n.name)+'</h2><h3>DONNÉES</h3>'+(rows||'<p class="mu" style="font-size:10px">—</p>')+
+    '<div id="inspCorps"><p class="mu" style="font-size:10px">Lecture de l’entrée…</p></div>'+
     '<h3>SYNAPSES · '+E.filter(([a,b])=>a===n.id||b===n.id).length+'</h3>'+cxOf(n.id);
   insp.classList.add('on');bindInsp();
+  const id=Number(String(n.id).replace(/^e/,''));
+  if(!id)return;
+  fetch('/v1/entry?id='+id,{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(e=>{
+    const box=document.getElementById('inspCorps');
+    if(!box||state.selected!==n.id)return;
+    if(!e){box.innerHTML='<p class="mu" style="font-size:10px">Entrée illisible.</p>';return;}
+    const tags=(e.tags||[]).filter(Boolean);
+    box.innerHTML=(e.body?'<h3>CONTENU</h3><div class="ans"><p style="white-space:pre-wrap">'+esc(String(e.body).slice(0,2400))+(String(e.body).length>2400?'…':'')+'</p></div>':'')+
+      (tags.length?'<h3>ÉTIQUETTES</h3><p class="mu" style="font-size:10px">'+tags.map(esc).join(' · ')+'</p>':'');
+  }).catch(()=>{});
 }
 function openNode(id){selectNode(id);}   /* compat moteur/inspecteur */
 
@@ -1208,40 +1099,92 @@ function pulse(id,k,ms){
 }
 function flashType(t){nodes.filter(n=>n.type===t).forEach(n=>pulse(n.id,.3,900));}
 
-/* ============================== HUD / INSPECTEUR ============================== */
-const stats={q:47,stops:{L0:18,L1:13,L2:10,L3:6},avg:.62};
-$('#stN').textContent=nodes.length;$('#stE').textContent=E.length;
-const BAR_C={L0:'#46e3ff',L1:'#3fe8a8',L2:'#b18cff',L3:'#ffb45e'};
-function drawBars(){
-  const tot=Object.values(stats.stops).reduce((a,b)=>a+b,0);
-  $('#bars').innerHTML=Object.entries(stats.stops).map(([l,v])=>{
-    const p=Math.round(v/tot*100);
-    return '<div class="bar"><label>'+l+'</label><div class="tr"><div class="fl" style="width:'+p+'%;background:'+BAR_C[l]+'"></div></div><em>'+p+'%</em></div>';
+/* ============================== HUD / INSPECTEUR ==============================
+   Chaque chiffre vient de SYNAPSE : /v1/graph pour la scène, et
+   /v1/stats?scope=activite pour l'activité et l'apprentissage. Rien
+   n'est écrit à l'avance ; ce qui n'est pas encore mesuré affiche « — ». */
+const BAR_C={L0:'#46e3ff',L1:'#3fe8a8',L2:'#b18cff',L3:'#ffb45e',VIDE:'#575757'};
+const fmtN=v=>v==null?'—':Number(v).toLocaleString('fr-FR');
+const fmtMs=ms=>ms==null?'—':ms<1000?Math.round(ms)+' ms':(ms/1000).toFixed(2)+' s';
+$('#stN').textContent=fmtN(ETAT.live?ETAT.total:null);
+$('#stE').textContent=fmtN(ETAT.live?E.length:null);
+function drawBars(etages){
+  const cles=['L0','L1','L2','L3','VIDE'];
+  const tot=etages?cles.reduce((a,k)=>a+(etages[k]||0),0):0;
+  if(!tot){$('#bars').innerHTML='<div class="vide-hud">Aucune requête ces 7 derniers jours. Pose une question ci-dessous : chaque recherche est mesurée ici.</div>';return;}
+  $('#bars').innerHTML=cles.filter(k=>k!=='VIDE'||etages.VIDE).map(l=>{
+    const v=etages[l]||0,p=Math.round(v/tot*100);
+    return '<div class="bar"><label>'+(l==='VIDE'?'∅':l)+'</label><div class="tr"><div class="fl" style="width:'+p+'%;background:'+BAR_C[l]+'"></div></div><em>'+p+'%</em></div>';
   }).join('');
 }
-drawBars();
-const TICKS=[
-  'skill « diagnostic-réseau » +10 XP<br>— résolution DNS srv-app-01 confirmée',
-  '2 entrées en file de revue<br>— auto-apprentissage en attente',
-  'skill « conventions-ip » → niveau 4<br>— 82 activations réussies'
-];
-let ti=0;const tick=()=>{$('#ticker').innerHTML=TICKS[ti++%TICKS.length];};tick();
-if(!reduced)setInterval(tick,5200);
+const quand=iso=>{
+  const s=(Date.now()-Date.parse(iso))/1000;
+  if(!isFinite(s))return '';
+  return s<90?'à l’instant':s<3600?'il y a '+Math.round(s/60)+' min':s<86400?'il y a '+Math.round(s/3600)+' h':'il y a '+Math.round(s/86400)+' j';
+};
+function drawTicker(app){
+  const ev=(app&&app.evenements)||[];
+  if(!ev.length){
+    $('#ticker').innerHTML='<span class="vide-hud" style="color:var(--dim)">'+
+      (app&&app.echanges?esc(app.echanges)+' échange'+(app.echanges>1?'s':'')+' en attente de consolidation. Les traits apparaîtront ici.':'Rien d’appris pour l’instant. Les échanges avec l’assistant du Hub alimentent ce panneau.')+'</span>';
+    return;
+  }
+  $('#ticker').innerHTML=ev.slice(0,3).map(e=>{
+    const qui=esc(e.agent==='commun'?'tous les modèles':e.agent);
+    if(e.type==='trait')return '<div>trait « '+esc(e.cle)+' » · '+qui+'<br><span style="color:var(--mut)">'+esc(String(e.valeur).slice(0,90))+'</span> <em style="color:var(--dim)">'+quand(e.le)+'</em></div>';
+    if(e.type==='correction')return '<div>correction · '+qui+'<br><span style="color:var(--mut)">'+esc(String(e.correction).slice(0,90))+'</span> <em style="color:var(--dim)">'+quand(e.le)+'</em></div>';
+    return '<div>consolidation · '+qui+' · passe '+esc(e.passes)+' <em style="color:var(--dim)">'+quand(e.le)+'</em></div>';
+  }).join('<div style="height:6px"></div>');
+}
+let PRESETS_REELS=[];
+function drawPresets(recentes){
+  /* Les raccourcis sont tes propres questions récentes. Sans historique,
+     trois questions génériques qui ont un sens sur n'importe quelle mémoire. */
+  const l=(recentes&&recentes.length?recentes:['Qu’est-ce qui a changé récemment ?','Quels incidents sont connus ?','Qu’a appris l’assistant ?']).slice(0,6);
+  if(JSON.stringify(l)===JSON.stringify(PRESETS_REELS))return;
+  PRESETS_REELS=l;
+  $('#presets').innerHTML=l.map(p=>'<button class="pr">'+esc(p)+'</button>').join('');
+  document.querySelectorAll('.pr').forEach(b=>b.onclick=()=>{qIn.value=b.textContent;think(b.textContent);});
+}
+async function majInstrumentation(){
+  if(!ETAT.live){drawBars(null);drawTicker(null);return;}
+  try{
+    const r=await fetch('/v1/stats?scope=activite',{credentials:'same-origin'});
+    if(r.status===401){location.href='/login';return;}
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const s=await r.json();
+    const a=s.activite||{};
+    $('#stV').textContent=fmtN(s.chunks&&s.chunks.embedded)+(s.chunks&&s.chunks.pending?' +'+fmtN(s.chunks.pending):'');
+    $('#stA').textContent=fmtN(s.apprentissage&&s.apprentissage.traits);
+    $('#stQ').textContent=fmtN(a.requetes_24h);
+    $('#stT').textContent=fmtMs(a.ms_moyen_24h);
+    drawBars(a.etages);drawTicker(s.apprentissage);drawPresets(a.recentes);
+    const st=$('#status');
+    if(st){
+      const em=s.embedder||{};
+      st.classList.toggle('hs',!em.ok);
+      st.querySelector('span').textContent='VECTEURS · '+(em.model||'?').toUpperCase()+(em.ok?'':' · INJOIGNABLE');
+    }
+  }catch(e){
+    const st=$('#status');if(st){st.classList.add('hs');st.querySelector('span').textContent='STATISTIQUES INDISPONIBLES';}
+  }
+}
 /* La legende pilote le filtre : un clic masque un type, un clic sur
    « homelab » ne garde que ce qui decrit l'infrastructure. */
 const TYPES_HOMELAB=new Set(['machine','service','reseau','vlan','incident']);
 function majLegende(){
   const compte={};nodes.forEach(n=>{compte[n.type]=(compte[n.type]||0)+1;});
   const vus=nodes.filter(visible).length;
+  if(!nodes.length){$('#legend').innerHTML='<div class="vide-hud">Aucune entrée.</div>';return;}
   $('#legend').innerHTML=
     '<div class="lgAct"><button id="lgHome">HOMELAB</button><button id="lgTout">TOUT</button></div>'+
-    Object.entries(TYPES).filter(([t])=>compte[t])
-      .map(([t,v])=>'<div class="lg'+(TYPES_CACHES.has(t)?' off':'')+'" data-t="'+t+'">'+
-        '<i style="background:'+v.c+'"></i>'+v.l.toUpperCase()+'<b>'+compte[t]+'</b></div>').join('')+
-    '<div class="lgTot">'+vus+' sur '+nodes.length+' affichees</div>';
+    Object.keys(compte).sort().map(t=>{const v=typeDe(t);return '<div class="lg'+(TYPES_CACHES.has(t)?' off':'')+'" data-t="'+esc(t)+'">'+
+        '<i style="background:'+v.c+'"></i>'+esc(v.l.toUpperCase())+'<b>'+compte[t]+'</b></div>';}).join('')+
+    '<div class="lgTot">'+vus+' sur '+nodes.length+' affichées</div>';
   $('#lgHome').onclick=()=>{
     TYPES_CACHES.clear();
-    Object.keys(TYPES).forEach(t=>{if(!TYPES_HOMELAB.has(t))TYPES_CACHES.add(t);});
+    Object.keys(compte).forEach(t=>{if(!TYPES_HOMELAB.has(t))TYPES_CACHES.add(t);});
+    if(nodes.every(n=>!visible(n)))TYPES_CACHES.clear();
     reconstruit();
   };
   $('#lgTout').onclick=()=>{TYPES_CACHES.clear();reconstruit();};
@@ -1258,316 +1201,111 @@ majLegende();
 const insp=$('#insp'),inspBody=$('#inspBody');
 $('#inspClose').onclick=()=>{clearSelection();clearFiltre();};
 const badge=(txt,c)=>'<span class="badge" style="color:'+c+';border-color:'+c+'66">'+txt+'</span>';
-const DOMOF={machine:'matériel',service:'services',projet:'projets',reseau:'réseau',vlan:'réseau',skill:'skills',
-  incident:'problème',procedure:'procédures',stock:'stock',ambition:'ambitions',roadmap:'roadmap',note:'mémoire'};
-function rowsOf(n){
-  const r=[];const d=n.d;
-  if(d.sub)r.push(['Rôle',d.sub]);if(d.ip)r.push(['IP',d.ip]);if(d.port)r.push(['Port',d.port]);
-  if(d.url)r.push(['URL',d.url]);if(d.os)r.push(['OS',d.os]);if(d.host)r.push(['Hôte',d.host]);
-  if(d.st)r.push(['Statut',d.st]);if(d.qt)r.push(['Quantité',d.qt]);if(d.kind)r.push(['Nature',d.kind]);
-  if(d.note)r.push(['Note',d.note]);
-  return r.map(([k,v])=>'<div class="row"><span>'+k+'</span><b>'+v+'</b></div>').join('');
-}
 function cxOf(id,max){
   return E.filter(([a,b])=>a===id||b===id).slice(0,max||99).map(([a,b,t])=>{
-    const o=byId[a===id?b:a];
-    return '<div class="cx" data-go="'+o.id+'"><i style="background:'+TYPES[o.type].c+'"></i>'+o.name+'<em>'+t.toUpperCase()+'</em></div>';
+    const o=byId[a===id?b:a];if(!o)return '';
+    return '<div class="cx" data-go="'+esc(o.id)+'"><i style="background:'+typeDe(o.type).c+'"></i>'+esc(o.name)+'<em>'+esc(String(t||'').toUpperCase())+'</em></div>';
   }).join('');
 }
 function bindInsp(){
-  inspBody.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>toast('Démo — action simulée'));
   inspBody.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>selectNode(el.dataset.go));
 }
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2200);}
 
-/* ============================== SCÉNARIOS SCRIPTÉS ============================== */
-const S = {
-  ipfree:{domain:'réseau',conf:.94,stages:[
-      {l:'L0',ms:8,hit:true,label:'lookup IPAM 192.0.2.0/24',nodes:['r.s20','r.cv','k.ip']}],
-    skills:['conventions-ip'],
-    answer:'<p><b style="color:var(--mint);font-size:15px">192.0.2.7</b> — première IP libre du bloc conteneurs.</p>'+
-      '<div class="row"><span>192.0.2.1</span><b>gateway</b></div><div class="row"><span>192.0.2.2</span><b>supervision</b></div>'+
-      '<div class="row"><span>192.0.2.3</span><b>api-interne</b></div><div class="row"><span>192.0.2.5</span><b>la supervision</b></div>'+
-      '<div class="row"><span>Libres</span><b style="color:var(--mint)">249 / 254</b></div>'+
-      '<p class="mu">Bloc repris par VLAN 20 · SERVERS (prévu sept. 2026).</p><button class="aBtn" data-act>Réserver 192.0.2.7</button>'},
-  pb:{domain:'problème',conf:.96,mode:'problème',stages:[
-      {l:'L0',ms:7,hit:false,label:'cible : service supervision',nodes:['s.mon']},
-      {l:'L1',ms:118,hit:false,label:'incidents similaires · 2 trouvés',nodes:['i.mml','i.dcp','k.in']},
-      {l:'L2',ms:64,hit:false,label:'runbook « redeploy conteneur » chargé',nodes:['q.rdp']},
-      {l:'L3',ms:4200,hit:true,label:'diagnostic qwen3:8b · contexte croisé',nodes:['s.mon','m.srv1','s.web','q.rdp']}],
-    skills:['incident-playbook','diagnostic-réseau'],
-    answer:'<p><b>Diagnostic — supervision down</b></p>'+
-      '<div class="cause"><b>Probable · 72%</b> — conteneur arrêté après OOM ou crash du frontend (précédent connu : build 0 B).</div>'+
-      '<div class="cause"><b>Possible · 21%</b> — route Conduit cassée : le conteneur tourne mais 502 en amont.</div>'+
-      '<div class="cause ok"><b>Écarté</b> — réseau srv-app-01 sain : SYNAPSE et Conduit répondent sur le même hôte.</div>'+
-      '<p class="mu">Vérification, dans l\'ordre :</p>'+
-      '<pre class="cmd">docker ps -a --filter name=supervision\ndocker logs --tail 100 supervision\ndocker compose -f /opt/supervision/docker-compose.yml up -d --force-recreate</pre>'+
-      '<p class="mu">Brouillon <b>INC-2026-018</b> créé. Confirmer la résolution → skill « incident-playbook » +5 XP.</p>'+
-      '<button class="aBtn" data-act>Confirmer la résolution</button><button class="aBtn warn" data-act>Fausse alerte</button>'},
-  vlan:{domain:'réseau',conf:.9,stages:[
-      {l:'L0',ms:9,hit:true,label:'lookup VLANs · 0 actif · 4 prévus',nodes:['v.10','v.20','v.30','v.40','v.20','m.edge']}],
-    skills:['conventions-ip'],
-    answer:'<p><b>Aucun VLAN actif.</b> LAN plat en convention 3e octet. 4 VLANs planifiés — <b style="color:var(--pink)">le mois dernier</b> (le routeur) :</p>'+
-      '<div class="row"><span>VLAN 10</span><b>MGMT</b></div><div class="row"><span>VLAN 20</span><b>SERVERS · reprendra 192.0.2.0/24</b></div>'+
-      '<div class="row"><span>VLAN 30</span><b>CLIENTS</b></div><div class="row"><span>VLAN 40</span><b>IOT</b></div>'+
-      '<p class="mu">Modèle intention/réalité : SYNAPSE sait ce qui existe <b>et</b> ce qui n\'existe pas encore.</p>'}
-};
-function route(q){
-  const s=norm(q);
-  if(/vlan/.test(s))return S.vlan;
-  if(/(ip.*libre|libre.*ip|prochaine ip|next.*ip)/.test(s))return S.ipfree;
-  if(/(probleme|down|panne|erreur|plante|marche pas|\bhs\b|crash)/.test(s))return S.pb;
-  return smart(q);
-}
-
-/* ============================== CERVEAU DYNAMIQUE ============================== */
-let _pulsed=[];const pulseSet=id=>_pulsed.push(id);
-function neighborsOf(id){return E.filter(([a,b])=>a===id||b===id).map(([a,b,t])=>({o:byId[a===id?b:a],t,out:a===id}));}
-function skillsNear(ids){
-  const set=new Set();
-  ids.forEach(id=>E.forEach(([a,b])=>{
-    if(byId[a].type==='skill'&&b===id)set.add(byId[a].name);
-    if(byId[b].type==='skill'&&a===id)set.add(byId[b].name);
-  }));
-  return [...set];
-}
-function mkStages(n,exact){
-  const nb=neighborsOf(n.id);
-  const nodesL1=[n.id,...nb.slice(0,9).map(x=>x.o.id)];
-  if(exact)return [{l:'L0',ms:4+Math.floor(Math.random()*6),hit:true,label:'alias exact « '+n.name+' »',nodes:nodesL1}];
-  return [
-    {l:'L0',ms:3,hit:false,label:'aucun alias exact',nodes:[]},
-    {l:'L1',ms:18+Math.floor(Math.random()*24),hit:true,label:'graphe · '+nb.length+' synapses · 1 saut',nodes:nodesL1}
-  ];
-}
-function answerFor(n){
-  const nb=neighborsOf(n.id);
-  let extra='';
-  if(n.type==='machine'){
-    const hosted=nb.filter(x=>x.t==='héberge'&&x.out).map(x=>x.o);
-    if(hosted.length)extra='<h3>HÉBERGE · '+hosted.length+'</h3>'+hosted.map(o=>'<div class="cx" data-go="'+o.id+'"><i style="background:'+TYPES[o.type].c+'"></i>'+o.name+'<em>'+(o.d.port?':'+o.d.port:'')+'</em></div>').join('');
-  }
-  if(n.type==='service'){
-    const deps=nb.filter(x=>x.t==='dépend de'&&x.out).map(x=>x.o);
-    if(deps.length)extra='<h3>DÉPEND DE</h3>'+deps.map(o=>'<div class="cx" data-go="'+o.id+'"><i style="background:'+TYPES[o.type].c+'"></i>'+o.name+'</div>').join('');
-  }
-  if(n.type==='incident'){
-    const rb=nb.find(x=>x.t==='résout');
-    if(rb)extra='<h3>RÉSOLU PAR</h3><div class="cx" data-go="'+rb.o.id+'"><i style="background:'+TYPES[rb.o.type].c+'"></i>'+rb.o.name+'</div>';
-  }
-  if(n.type==='skill')extra='<h3>EXPÉRIENCE</h3><div class="row"><span>Niveau '+n.d.lv+' · '+n.d.kind+'</span><b>'+n.d.xp+' / 100 XP</b></div><div class="xpTr"><div class="xpFl" style="width:'+n.d.xp+'%"></div></div><p class="mu">Corpus injecté dans le contexte de l\'IA appelante (démo).</p>';
-  return '<p><b>'+n.name+'</b>'+(n.d.sub?' — '+n.d.sub:'')+(n.d.note?'. '+n.d.note+'.':'')+'</p>'+rowsOf(n)+extra+
-    '<h3>SYNAPSES · '+nb.length+'</h3>'+cxOf(n.id,7);
-}
-function smart(q){
-  const nq=norm(q),toks=tok(q);
-  if(/(combien|nombre)/.test(nq)){
-    const cnt=(t)=>nodes.filter(n=>n.type===t).length;
-    const M=[[/service/,'service','services'],[/projet/,'projet','projets'],[/machine/,'machine','machines'],
-      [/skill/,'skill','skills'],[/incident|panne/,'incident','incidents'],[/neurone/,null,'neurones'],[/synapse|relation/,'E','synapses']];
-    const rows=[];let found=false;
-    M.forEach(([re,t,lab])=>{if(re.test(nq)){found=true;
-      const v=t==='E'?E.length:(t?cnt(t):nodes.length);
-      rows.push('<div class="row"><span>'+lab+'</span><b>'+v+'</b></div>');
-      if(t&&t!=='E')nodes.filter(n=>n.type===t).forEach(n=>pulseSet(n.id));
-    }});
-    if(!found)rows.push('<div class="row"><span>neurones</span><b>'+nodes.length+'</b></div>',
-      '<div class="row"><span>synapses</span><b>'+E.length+'</b></div>',
-      '<div class="row"><span>skills</span><b>'+cnt('skill')+'</b></div>',
-      '<div class="row"><span>incidents résolus</span><b>'+cnt('incident')+'</b></div>');
-    return {domain:'mémoire',conf:.9,stages:[{l:'L0',ms:6,hit:true,label:'comptage index',nodes:[..._pulsed.splice(0)]}],
-      skills:[],answer:'<p><b>Comptage mémoire :</b></p>'+rows.join('')};
-  }
-  const res=search(q);
-  const top=res[0];
-  const exact=top&&top.s>=90;
-  const tk=toks.map(t=>TYPEKW[t]).find(Boolean);
-  if(tk&&(!top||top.s<55)){
-    const list=nodes.filter(n=>n.type===tk);
-    list.forEach(n=>pulseSet(n.id));
-    return {domain:DOMOF[tk]||tk,conf:.92,stages:[
-      {l:'L0',ms:5,hit:true,label:'index type « '+tk+' » · '+list.length+' neurones',nodes:[..._pulsed.splice(0)]}],
-      skills:[],
-      answer:'<p><b>'+list.length+'</b> neurones de type <b>'+TYPES[tk].l.toLowerCase()+'</b> en mémoire :</p>'+
-        list.map(n=>'<div class="cx" data-go="'+n.id+'"><i style="background:'+TYPES[n.type].c+'"></i>'+n.name+
-        '<em>'+String(n.type==='skill'?'NV'+n.d.lv:(n.d.st||n.d.qt||'')).toUpperCase()+'</em></div>').join('')+
-        '<p class="mu">Clique un neurone pour l\'ouvrir.</p>'};
-  }
-  if(top&&top.s>=55){
-    const n=top.n;
-    if(/(depend|dependance)/.test(nq)){
-      const deps=neighborsOf(n.id).filter(x=>x.t==='dépend de'&&x.out);
-      if(deps.length){
-        const st=mkStages(n,exact);st[st.length-1].label='traversée dépend_de · '+deps.length+' dépendances';
-        return {domain:DOMOF[n.type],conf:Math.min(.97,top.s/100),stages:st,skills:skillsNear([n.id]),
-          answer:'<p><b>'+n.name+'</b> dépend de :</p>'+deps.map(x=>'<div class="cx" data-go="'+x.o.id+'"><i style="background:'+TYPES[x.o.type].c+'"></i>'+x.o.name+'</div>').join('')+
-          '<p class="mu">Si une dépendance tombe, SYNAPSE remonte le chemin critique.</p>'};
-      }
-    }
-    if(/(quoi sur|tourne|heberge|liste)/.test(nq)&&n.type==='machine'){
-      const hosted=neighborsOf(n.id).filter(x=>x.t==='héberge'&&x.out);
-      const st=mkStages(n,exact);st[st.length-1].label='traversée héberge · '+hosted.length+' services';
-      return {domain:'services',conf:Math.min(.97,top.s/100),stages:st,skills:skillsNear([n.id]),
-        answer:'<p><b>'+n.name+'</b>'+(n.d.ip?' ('+n.d.ip+')':'')+' héberge <b>'+hosted.length+' services</b> :</p>'+
-        hosted.map(x=>'<div class="cx" data-go="'+x.o.id+'"><i style="background:'+TYPES[x.o.type].c+'"></i>'+x.o.name+'<em>'+(x.o.d.port?':'+x.o.d.port:'')+'</em></div>').join('')};
-    }
-    return {domain:DOMOF[n.type],conf:Math.min(.97,top.s/100),stages:mkStages(n,exact),
-      skills:skillsNear([n.id]),answer:answerFor(n)};
-  }
-  const cands=res.filter(r=>r.s>=16).slice(0,4);
-  if(cands.length===1&&cands[0].s>=20){
-    const n=cands[0].n,nb=neighborsOf(n.id).slice(0,6);
-    return {domain:DOMOF[n.type],conf:.72,stages:[
-      {l:'L0',ms:3,hit:false,label:'aucun alias exact',nodes:[]},
-      {l:'L1',ms:17,hit:false,label:'voisinage insuffisant',nodes:[]},
-      {l:'L2',ms:205,hit:true,label:'correspondance approchée « '+n.name+' »',
-       nodes:[n.id,...nb.map(x=>x.o.id)]}],
-      skills:skillsNear([n.id]),answer:answerFor(n)};
-  }
-  if(cands.length){
-    return {domain:'mémoire',conf:.6,stages:[
-      {l:'L0',ms:3,hit:false,label:'aucun alias exact',nodes:[]},
-      {l:'L1',ms:21,hit:false,label:'voisinage insuffisant',nodes:[]},
-      {l:'L2',ms:190+Math.floor(Math.random()*90),hit:true,label:'KNN simulé · '+cands.length+' candidats',nodes:cands.map(c=>c.n.id)}],
-      skills:[],
-      answer:'<p>Pas de réponse exacte — voici ce qui s\'en rapproche sémantiquement :</p>'+
-        cands.map(c=>'<div class="cx" data-go="'+c.n.id+'"><i style="background:'+TYPES[c.n.type].c+'"></i>'+c.n.name+'<em class="pct">'+Math.min(94,Math.round(40+c.s))+'%</em></div>').join('')+
-        '<p class="mu">Clique pour ouvrir, ou reformule.</p>'};
-  }
-  return {domain:'inconnu',conf:.31,stages:[
-    {l:'L0',ms:3,hit:false,label:'aucun alias',nodes:[]},
-    {l:'L1',ms:19,hit:false,label:'graphe · rien au-dessus du seuil',nodes:[]},
-    {l:'L2',ms:212,hit:false,label:'similarité max 0.31 < seuil 0.75',nodes:[]},
-    {l:'L3',ms:2400,hit:true,route:true,label:'routage IA locale — non branchée',nodes:['m.gpu','s.gpu']}],
-    skills:[],
-    answer:'<p><b>Question libre non résolue en mémoire.</b> La cascade est descendue jusqu\'au bout sans dépasser le seuil de confiance.</p>'+
-      '<p class="mu">En production, SYNAPSE routerait maintenant vers ton IA locale :</p>'+
-      '<pre class="cmd">POST http://192.0.2.1:11434/api/chat\nmodel: qwen3:8b\ncontexte: 12 neurones + 2 skills injectés</pre>'+
-      '<p class="mu">IA locale non connectée dans le prévisuel — <b style="color:var(--amber)">Phase 3</b>. Le chemin que tu viens de voir est exactement celui que prendra la vraie requête.</p>'+
-      '<button class="aBtn" data-act>Brancher le serveur de vecteurs — Phase 3</button>'};
-}
-
-/* ============================== MOTEUR DE PENSÉE ============================== */
+/* ============================== MOTEUR DE PENSÉE ==============================
+   La barre interroge SYNAPSE (/v1/answer). Un mot : la cascade rend les
+   entrées. Une question : les meilleurs extraits partent à l'IA locale,
+   qui répond uniquement d'après eux. Les puces L0…L3 montrent l'étage
+   où SYNAPSE s'est réellement arrêté ; le temps affiché est le temps
+   mesuré par le serveur, pas une animation. */
 const chipsRow=$('#chipsRow'),goBtn=$('#go'),qIn=$('#q');
 let busy=false,coreFlash=0;
 const wait=ms=>new Promise(r=>setTimeout(r,reduced?Math.min(ms,60):ms));
-const DOM_CLUSTER={'réseau':'reseau','services':'service','projets':'projet','matériel':'machine','problème':'incident','stock':'stock','skills':'skill','ambitions':'ambition','roadmap':'roadmap','procédures':'procedure'};
 async function think(q){
   if(busy)return;busy=true;goBtn.disabled=true;clearSelection();state.filtre=null;
-  /* ---- La barre interroge le VRAI SYNAPSE, plus le moteur simule.
-     Un mot -> la cascade rend les cartes. Une question -> les meilleurs
-     extraits partent a l IA locale qui repond uniquement d apres eux.
-     Les puces L0..L3 refletent ce que le backend a reellement fait. ---- */
-  const enDirect = window.SYNAPSE_LIVE;
-  const sc = enDirect ? null : route(q);      /* repli demo hors ligne */
-
-  chipsRow.innerHTML='<span class="sc router">'+(enDirect?'SYNAPSE · RECHERCHE':'ROUTEUR · DÉMO')+'</span>'+
+  chipsRow.innerHTML='<span class="sc router">SYNAPSE · RECHERCHE</span>'+
     ['L0','L1','L2','L3'].map(l=>'<span class="sc" id="ch'+l+'">'+l+'</span>').join('');
   coreFlash=performance.now();
 
-  let rep=null;
-  if(enDirect){
-    /* animation pendant l attente : les puces s allument en cascade,
-       et les cartes scintillent au hasard — le cerveau « cherche » */
-    const voile=$('#cherche');voile.classList.add('on');document.body.classList.add('cherche');
-    let k=0; const anim=setInterval(()=>{
-      ['L0','L1','L2','L3'].forEach((l,i)=>{const c=$('#ch'+l);if(!c)return;c.classList.toggle('run',i===k%4);});
-      spawnSignal(nodes[Math.floor(Math.random()*nodes.length)].id,false);
-      k++;
-    },140);
-    try{
-      const r=await fetch('/v1/answer?q='+encodeURIComponent(q)+'&ns=shared',{credentials:'same-origin',signal:AbortSignal.timeout(25000)});
-      rep=r.ok?await r.json():null;
-    }catch{rep=null;}
-    clearInterval(anim);voile.classList.remove('on');document.body.classList.remove('cherche');
-    ['L0','L1','L2','L3'].forEach(l=>{const c=$('#ch'+l);if(c)c.classList.remove('run');});
-  }
+  const voile=$('#cherche');voile.classList.add('on');document.body.classList.add('cherche');
+  let k=0; const anim=setInterval(()=>{
+    ['L0','L1','L2','L3'].forEach((l,i)=>{const c=$('#ch'+l);if(c)c.classList.toggle('run',i===k%4);});
+    if(nodes.length)spawnSignal(nodes[Math.floor(Math.random()*nodes.length)].id,false);
+    k++;
+  },140);
+  let rep=null,erreur=null;
+  try{
+    const r=await fetch('/v1/answer?q='+encodeURIComponent(q)+'&ns='+encodeURIComponent(NS),{credentials:'same-origin',signal:AbortSignal.timeout(30000)});
+    if(r.status===401){location.href='/login';return;}
+    rep=r.ok?await r.json():null;
+    if(!r.ok)erreur='HTTP '+r.status;
+  }catch(e){erreur=/timeout|abort/i.test(String(e))?'délai dépassé':'SYNAPSE injoignable';}
+  clearInterval(anim);voile.classList.remove('on');document.body.classList.remove('cherche');
+  ['L0','L1','L2','L3'].forEach(l=>{const c=$('#ch'+l);if(c)c.classList.remove('run');});
 
-  /* ---- traduction de la reponse backend en etapes visuelles ---- */
-  let stages, answerHtml, domain, conf, stop='L1', routed=false;
+  let answerHtml, domain, conf=0, arret=null;
+  const hits=rep?rep.hits||[]:[];
+  const ids=hits.map(h=>'e'+h.id).filter(id=>byId[id]);
   if(rep){
-    const ids=rep.hits.map(h=>'e'+h.id).filter(id=>byId[id]);
     state.filtre=ids.length?new Set(ids):null;
     ids.forEach(id=>activeLabels.add(id));
-    const e=rep.engines||{};
-    stages=[];
-    if(e.early)               stages.push({l:'L0',ms:rep.took_ms,hit:true, label:'correspondance franche — vecteur inutile',nodes:ids});
-    else{
-      stages.push({l:'L0',ms:2,hit:false,label:'aucune correspondance exacte',nodes:[]});
-      stages.push({l:'L1',ms:Math.round(rep.took_ms*.3),hit:!e.vector&&ids.length>0,label:'plein texte BM25',nodes:e.vector?[]:ids});
-      if(e.vector)            stages.push({l:'L2',ms:Math.round(rep.took_ms*.6),hit:!rep.answer&&ids.length>0,label:'sémantique · le serveur de vecteurs',nodes:ids});
-      if(rep.verifie)         stages.push({l:'L2',ms:Math.round(rep.took_ms*.7),hit:false,label:'état vérifié en direct · agrégateur'+(rep.etat_muet?' · muet : '+rep.etat_muet.join(', '):''),nodes:[]});
-      if(rep.answer)          stages.push({l:'L3',ms:Math.round(rep.took_ms),hit:true,route:true,label:'synthèse '+(rep.model||'ia locale')+(rep.verifie?' · mémoire + état actuel':''),nodes:ids});
-    }
-    if(!ids.length&&!rep.answer) stages.push({l:'L3',ms:rep.took_ms,hit:false,label:'rien au-dessus du seuil',nodes:[]});
-    domain=rep.decision.toLowerCase(); conf=Math.min(.99,(rep.hits[0]?.score||0)*12);
-    const liste=rep.hits.slice(0,6).map((h,i)=>'<div class="cx" data-go="e'+h.id+'"><i style="background:'+(TYPES[(byId['e'+h.id]||{}).type]||TYPES.note).c+'"></i>['+(i+1)+'] '+h.title+'<em>'+h.level+' · '+h.occurred_at.slice(0,10)+'</em></div>').join('');
-    answerHtml=(rep.answer?'<p>'+rep.answer.replace(/</g,'&lt;').replace(/\[(\d+)\]/g,'<b>[$1]</b>')+'</p>':
-      rep.ia_erreur?'<p class="mu" style="color:var(--coral)">IA locale indisponible : '+rep.ia_erreur.replace(/</g,'&lt;')+'</p>':
-      rep.hits.length?'<p class="mu">'+rep.reason+'</p>':'<p class="mu">Rien en mémoire pour cette question. '+rep.reason+'</p>')+
-      (rep.hits.length?'<h3>SOURCES · '+rep.hits.length+'</h3>'+liste:'');
-  }else if(sc){ stages=sc.stages; answerHtml=sc.answer; domain=sc.domain; conf=sc.conf; }
-  else{ stages=[{l:'L0',ms:0,hit:false,label:'SYNAPSE injoignable',nodes:[]}]; answerHtml='<p class="mu">SYNAPSE ne répond pas.</p>'; domain='hors ligne'; conf=0; }
-
-  $('#chipsRow').firstChild.textContent=(enDirect?'SYNAPSE':'ROUTEUR')+' · '+domain.toUpperCase()+' '+(+conf).toFixed(2);
-  await wait(200);
-  let shownMs=0;
-  for(const st of stages){
-    const ch=$('#ch'+st.l);if(!ch)continue;ch.classList.add('run');
-    st.nodes.forEach(id=>{pulse(id,.85,Math.max(1700,st.ms+900));spawnSignal(id,true);});
-    /* Focus sur les cartes trouvees SANS deplacer le pivot. frame()
-       envoyait la cible de rotation au barycentre des resultats : on
-       tournait ensuite autour d un point flottant, plus autour du globe.
-       On oriente la camera vers le barycentre en gardant tgG au centre,
-       exactement comme focusCard() le fait pour une carte seule. */
-    if(st.nodes.length===1&&byId[st.nodes[0]]) focusCard(byId[st.nodes[0]]);
-    else if(st.nodes.length){
-      _v2.set(0,0,0);let k=0;st.nodes.forEach(id=>{if(byId[id]){_v2.add(worldOf(id));k++;}});
-      if(k){
-        _v2.divideScalar(k);
-        if(_v2.lengthSq()>1){
-          _v1.copy(_v2).normalize();
-          const thT=Math.atan2(_v1.z,_v1.x);
-          const phT=Math.min(Math.PI-.15,Math.max(.15,Math.acos(Math.max(-1,Math.min(1,_v1.y)))));
-          tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+24},700,easeIOC);
-        }
-      }
-    }
-    await wait(enDirect?260:(st.ms<300?st.ms+560:Math.min(st.ms*.55,2500)));
-    ch.classList.remove('run');
-    if(st.route){ch.classList.add('route');ch.textContent=st.l+' · IA';routed=true;}
-    else{ch.classList.add(st.hit?'hit':'miss');if(st.hit){ch.style.color=BAR_C[st.l];ch.style.borderColor=BAR_C[st.l];}
-      ch.textContent=st.l+' · '+(st.ms<1000?Math.round(st.ms)+'ms':(st.ms/1000).toFixed(1)+'s');}
-    shownMs+=st.ms;
-    if(st.hit){stop=st.l;if(!st.route)break;}
+    arret=rep.arret||'VIDE';
+    domain=String(rep.decision||'').toLowerCase();
+    conf=Math.min(.99,(hits[0]?.score||0)*12);
+    const liste=hits.slice(0,6).map((h,i)=>'<div class="cx" data-go="e'+esc(h.id)+'"><i style="background:'+typeDe((byId['e'+h.id]||{}).type||'note').c+'"></i>['+(i+1)+'] '+esc(h.title)+'<em>'+esc(h.level)+' · '+esc(String(h.occurred_at||'').slice(0,10))+'</em></div>').join('');
+    answerHtml=(rep.answer?'<p>'+esc(rep.answer).replace(/\[(\d+)\]/g,'<b>[$1]</b>')+'</p>':
+      rep.ia_erreur?'<p class="mu" style="color:var(--coral)">IA locale indisponible : '+esc(rep.ia_erreur)+'</p>':
+      hits.length?'<p class="mu">'+esc(rep.reason||'')+'</p>':'<p class="mu">Rien en mémoire pour cette question. '+esc(rep.reason||'')+'</p>')+
+      (hits.length?'<h3>SOURCES · '+hits.length+'</h3>'+liste:'');
+  }else{
+    domain='hors ligne';
+    answerHtml='<p class="mu" style="color:var(--coral)">'+esc(erreur||'SYNAPSE ne répond pas.')+'</p>';
   }
-  const tot=shownMs<1000?Math.round(shownMs)+'ms':(shownMs/1000).toFixed(1)+'s';
-  inspBody.innerHTML=badge(domain.toUpperCase(),'#b18cff')+badge('ARRÊT '+stop+(routed?' · IA':''),BAR_C[stop])+badge(tot,'#9c9c9c')+(rep&&rep.verifie?badge('VÉRIFIÉ EN DIRECT','#3fe8a8'):'')+
-    '<h2 style="font-size:14px">« '+q.replace(/</g,'&lt;')+' »</h2><div class="ans">'+answerHtml+'</div>'+
-    '<h3>TRACE</h3>'+stages.map(st=>'<div class="tl"><b>'+st.l+(st.route?' ▸':st.hit?' ✓':' ✗')+'</b> — '+st.label+'</div>').join('');
+
+  $('#chipsRow').firstChild.textContent='SYNAPSE · '+domain.toUpperCase()+(rep?' '+(+conf).toFixed(2):'');
+  /* L'étage atteint s'allume ; ceux d'avant sont passés, ceux d'après
+     n'ont pas servi. */
+  const rang={L0:0,L1:1,L2:2,L3:3}[arret];
+  ['L0','L1','L2','L3'].forEach((l,i)=>{
+    const ch=$('#ch'+l);if(!ch)return;
+    if(rang===undefined){ch.classList.add('miss');return;}
+    if(i<rang)ch.classList.add('miss');
+    else if(i===rang){
+      if(l==='L3'){ch.classList.add('route');ch.textContent='L3 · IA';}
+      else{ch.classList.add('hit');ch.style.color=BAR_C[l];ch.style.borderColor=BAR_C[l];}
+    }
+  });
+  ids.forEach(id=>{pulse(id,.85,2400);spawnSignal(id,true);});
+  if(ids.length===1&&byId[ids[0]]) focusCard(byId[ids[0]]);
+  else if(ids.length){
+    _v2.set(0,0,0);let n=0;ids.forEach(id=>{_v2.add(worldOf(id));n++;});
+    _v2.divideScalar(n);
+    if(_v2.lengthSq()>1){
+      _v1.copy(_v2).normalize();
+      const thT=Math.atan2(_v1.z,_v1.x);
+      const phT=Math.min(Math.PI-.15,Math.max(.15,Math.acos(Math.max(-1,Math.min(1,_v1.y)))));
+      tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+24},700,easeIOC);
+    }
+  }
+  const tot=rep?fmtMs(rep.took_ms):'—';
+  const moteurs=rep&&rep.engines?[rep.engines.early?'correspondance franche':'',rep.engines.vector?'vecteur':'plein texte',rep.answer?'synthèse '+(rep.model||'IA locale'):'',rep.verifie?'état vérifié en direct':''].filter(Boolean):[];
+  inspBody.innerHTML=badge(esc(domain.toUpperCase()),'#b18cff')+(arret?badge('ARRÊT '+(arret==='VIDE'?'∅':arret),BAR_C[arret]||'#9c9c9c'):'')+badge(esc(tot),'#9c9c9c')+(rep&&rep.verifie?badge('VÉRIFIÉ EN DIRECT','#3fe8a8'):'')+
+    '<h2 style="font-size:14px">« '+esc(q)+' »</h2><div class="ans">'+answerHtml+'</div>'+
+    (moteurs.length?'<h3>TRACE</h3><div class="tl">'+moteurs.map(esc).join(' → ')+'</div>':'');
   insp.classList.add('on');bindInsp();
-  /* un seul resultat : on l ouvre directement */
-  if(rep&&rep.hits.length===1&&byId['e'+rep.hits[0].id]) selectNode('e'+rep.hits[0].id);
-  stats.q++;stats.stops[stop]=(stats.stops[stop]||0)+1;stats.avg=stats.avg*.85+(shownMs/1000)*.15;
-  $('#stQ').textContent=stats.q;$('#stT').textContent=stats.avg.toFixed(2)+'s';drawBars();
+  if(hits.length===1&&byId['e'+hits[0].id]) selectNode('e'+hits[0].id);
   const log=$('#traceLog'),d=document.createElement('div');d.className='tl';
-  d.innerHTML='<b>'+domain+'</b> → arrêt '+stop+' · '+tot+'<br>'+(q.length>34?q.slice(0,34)+'…':q);
+  log.querySelectorAll('.attente').forEach(x=>x.remove());
+  d.innerHTML='<b>'+esc(domain)+'</b> → '+(arret?'arrêt '+(arret==='VIDE'?'∅':arret)+' · ':'')+esc(tot)+'<br>'+esc(q.length>34?q.slice(0,34)+'…':q);
   log.prepend(d);while(log.children.length>4)log.lastChild.remove();
   busy=false;goBtn.disabled=false;
+  majInstrumentation();
 }
 goBtn.onclick=()=>{const v=qIn.value.trim();if(v)think(v);};
 qIn.addEventListener('keydown',e=>{if(e.key==='Enter'){const v=qIn.value.trim();if(v)think(v);}});
-const PRESETS=['Quelle IP est libre ?','Qu\'y a-t-il sur srv-app-01 ?','De quoi dépend l\'API ?','Qu\'est-ce que le proxy ?','Problème : supervision down','VLANs ?','Combien de services ?','Liste des skills','Quel est le sens de la vie ?'];
-$('#presets').innerHTML=PRESETS.map(p=>'<button class="pr">'+p+'</button>').join('');
-document.querySelectorAll('.pr').forEach(b=>b.onclick=()=>{qIn.value=b.textContent;think(b.textContent);});
-$('#tabG').onclick=()=>toast('GESTION — Phase 5, hors prévisuel');
-document.querySelectorAll('.vsw button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.vsw button').forEach(x=>x.classList.remove('act'));
-  b.classList.add('act');
-  if(b.id==='vSphere')toast('Vue sphère (active)');
-  if(b.id==='vGalaxy')toast('Vue galaxie — dispo dans la version connectée');
-  if(b.id==='vCard')toast('Vue carte 2D — dispo dans la version connectée');
-});
+if(!ETAT.live){qIn.disabled=true;goBtn.disabled=true;qIn.placeholder='SYNAPSE injoignable';}
+majInstrumentation();
+setInterval(()=>{if(!document.hidden)majInstrumentation();},30000);
 $('#hudBtn').onclick=()=>$('#hud').classList.toggle('open');
 
 /* ============================== BOUCLE ============================== */
@@ -1737,7 +1475,7 @@ function loop(){
     placeLabel(elc,_v1.set(0,0,0).applyMatrix4(world.matrixWorld),now);
     for(let i=0;i<INTERNALS.length;i++){
       const it=INTERNALS[i];
-      const el=lbl('in'+i,it.name,it.count+' NEURONE'+(it.count>1?'S':''),it.depth===1?'th1':'th');
+      const el=lbl('in'+i,esc(typeDe(it.name).l),it.count+' NEURONE'+(it.count>1?'S':''),it.depth===1?'th1':'th');
       placeLabel(el,_v1.copy(it.pos).applyMatrix4(world.matrixWorld),now);
     }
   }else{
@@ -1747,7 +1485,7 @@ function loop(){
   }
   activeLabels.forEach(id=>{
     const n=byId[id];if(!n)return;
-    const el=lbl(id,n.name,n.d.sub||TYPES[n.type].l.toUpperCase());
+    const el=lbl(id,esc(n.name),esc(n.d.sub||typeDe(n.type).l.toUpperCase()));
     placeLabel(el,worldOf(id),now,(n.ch||0)*.5*(n.sK||1));
   });
   labelPool.forEach(el=>{
@@ -1759,7 +1497,7 @@ function loop(){
 }
 loop();
 if(!reduced)setInterval(()=>{
-  if(!state.selected)spawnSignal(nodes[Math.floor(Math.random()*nodes.length)].id,false);
+  if(!state.selected&&nodes.length)spawnSignal(nodes[Math.floor(Math.random()*nodes.length)].id,false);
 },1000);
 /* Pas de requête au chargement : la scène se montre, l'utilisateur
    interroge quand il le décide. */

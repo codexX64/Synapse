@@ -515,7 +515,36 @@ function stats(db, agent) {
   };
 }
 
+/**
+ * Ce que SYNAPSE a appris, tous agents confondus : totaux et derniers
+ * événements. C'est ce qu'affiche le panneau « apprentissage » de
+ * l'interface, à la place de messages écrits à l'avance.
+ */
+function resumeGlobal(db, { limite = 6 } = {}) {
+  const now = Date.now();
+  const traits = db.prepare(
+    `SELECT agent,cle,valeur,confiance,n,origine,maj FROM profil ORDER BY maj DESC LIMIT ?`).all(limite)
+    .map(r => ({ type: 'trait', agent: r.agent, cle: r.cle, valeur: r.valeur, origine: r.origine, n: r.n,
+      confiance: Number(confianceVive(r, now).toFixed(2)), le: r.maj }));
+  const corrections = db.prepare(
+    `SELECT agent,question,correction,n,dernier_le FROM corrections ORDER BY dernier_le DESC LIMIT ?`).all(limite)
+    .map(r => ({ type: 'correction', agent: r.agent, question: r.question, correction: r.correction, n: r.n, le: r.dernier_le }));
+  const passes = db.prepare(
+    `SELECT agent,passes,maj FROM consolidation WHERE maj IS NOT NULL ORDER BY maj DESC LIMIT ?`).all(limite)
+    .map(r => ({ type: 'consolidation', agent: r.agent, passes: r.passes, le: r.maj }));
+  const evenements = [...traits, ...corrections, ...passes]
+    .sort((a, b) => String(b.le).localeCompare(String(a.le))).slice(0, limite);
+  return {
+    traits: db.prepare(`SELECT COUNT(*) c FROM profil`).get().c,
+    corrections: db.prepare(`SELECT COUNT(*) c FROM corrections`).get().c,
+    agents: db.prepare(`SELECT COUNT(DISTINCT agent) c FROM profil WHERE agent <> ?`).get(COMMUN).c,
+    echanges: db.prepare(`SELECT COUNT(*) c FROM entries WHERE kind='echange' AND archived=0`).get().c,
+    evenements,
+  };
+}
+
 module.exports = {
+  resumeGlobal,
   migrate, profil, poser, oublier, corriger, correctionsPour,
   brief, briefTexte, consolider, consoliderTous, agentsEnAttente, extraireTraits, evenementEchange, stats,
   agentId, confianceVive, COMMUN, MAX_TRAITS, DEMI_VIE_JOURS,
