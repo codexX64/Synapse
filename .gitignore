@@ -1,0 +1,21 @@
+# Données : jamais dans le dépôt.
+data/
+*.db
+*.db-shm
+*.db-wal
+sauvegardes/
+
+# Secrets.
+.env
+.env.local
+*.key
+*.pem
+
+# Dépendances et artefacts.
+node_modules/
+dist/
+*.log
+
+# Systèmes de fichiers.
+.DS_Store
+Thumbs.db

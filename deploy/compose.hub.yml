@@ -1,0 +1,52 @@
+# SYNAPSE installé par le Hub.
+# Les valeurs entre accolades sont remplacées à l'installation : secrets
+# générés, ports d'hôte, volumes nommés et réseau partagé du Hub.
+services:
+  synapse:
+    image: ghcr.io/codexx64/synapse:{{config.IMAGE_TAG}}
+    container_name: {{service.host}}
+    restart: unless-stopped
+    networks: [hub]
+    ports:
+      - "{{hostport.http}}:8140"
+    environment:
+      PORT: "8140"
+      DB_FILE: /data/synapse.db
+
+      # Le Hub crée ce jeton et le garde dans son coffre. SYNAPSE le
+      # reconnaît au démarrage et s'en sert pour la source « hub » :
+      # aucune commande à taper dans le conteneur après l'installation.
+      HUB_TOKEN_SEED: {{config.HUB_TOKEN}}
+
+      OLLAMA_URL: {{config.OLLAMA_URL}}
+      EMBED_MODEL: {{config.EMBED_MODEL}}
+      ANSWER_MODEL: {{config.ANSWER_MODEL}}
+      CONSOLIDATION_INTERVAL: {{config.CONSOLIDATION_INTERVAL}}
+      AUTH_ORIGIN: {{config.AUTH_ORIGIN}}
+
+      # L'interface est servie par le conteneur ; le Hub l'atteint par le
+      # réseau partagé, et l'humain par le port publié ci-dessus.
+      UI_DIR: /app/ui
+      CORS_ORIGIN: ""
+    volumes:
+      - {{volume.data}}:/data
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8140/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  hub:
+    name: {{hub.network}}
+    external: true
+
+volumes:
+  {{volume.data}}:
+    name: {{volume.data}}

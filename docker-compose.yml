@@ -1,0 +1,46 @@
+services:
+  synapse:
+    build: .
+    container_name: synapse
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 8140
+      DB_FILE: /data/synapse.db
+    volumes:
+      # Volume NOMMÉ, pas un bind mount. Un bind ./data:/data est créé par
+      # Docker en root:root sur l'hôte, et le conteneur — qui tourne sans
+      # privilège — ne peut pas y écrire :
+      #   ERR_SQLITE_ERROR errcode 14 · unable to open database file
+      # Un volume nommé hérite des droits du point de montage dans l'image.
+      - synapse-data:/data
+
+      # Facultatif : une base d'incidents externe, en LECTURE SEULE.
+      # SQLite en readOnly ne prend pas de verrou d'écriture, donc
+      # l'application propriétaire continue d'écrire normalement.
+      # Décommenter et ajuster si tu veux que /v1/answer puisse chercher
+      # dans des tickets existants.
+      # - tickets-data:/tickets:ro
+
+    networks: [ synapse-net ]
+
+    # Le port n'est publié que sur la boucle locale. Pour l'exposer,
+    # passe par un reverse proxy qui porte TLS et l'authentification —
+    # pas en ouvrant ce port.
+    ports:
+      - "127.0.0.1:8140:8140"
+
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  synapse-data:
+    name: synapse-data
+  # tickets-data:
+  #   external: true
+
+networks:
+  synapse-net:
+    name: synapse-net
+    driver: bridge

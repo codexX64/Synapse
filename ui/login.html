@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SYNAPSE — connexion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{ --bg:#050505; --panel:rgba(13,13,14,.9); --line:rgba(255,255,255,.09);
+       --txt:#f1f1f1; --mut:#9c9c9c; --dim:#575757; --mint:#3fe8a8; --coral:#ff5c7a;
+       --mono:'JetBrains Mono',monospace; --disp:'Space Grotesk',sans-serif; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 35%,#0c0c0d 0%,#050505 62%);
+  color:var(--txt);font-family:var(--mono);font-size:13px;padding:20px}
+.box{width:min(380px,100%);background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:30px 26px;backdrop-filter:blur(14px)}
+h1{font-family:var(--disp);font-weight:600;font-size:21px;letter-spacing:.26em;
+  text-align:center;margin-bottom:6px}
+.sub{text-align:center;font-size:9px;letter-spacing:.2em;color:var(--dim);margin-bottom:26px}
+label{display:block;font-size:9px;letter-spacing:.18em;color:var(--dim);margin:14px 0 6px}
+input{width:100%;background:rgba(255,255,255,.045);border:1px solid var(--line);
+  border-radius:6px;color:#fff;padding:11px 13px;font-family:var(--mono);font-size:14px}
+input:focus{outline:1.5px solid rgba(255,255,255,.35);outline-offset:0}
+#code{letter-spacing:.5em;text-align:center;font-size:19px}
+button{width:100%;margin-top:20px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.3);color:#fff;padding:12px;border-radius:6px;
+  font-family:var(--mono);font-size:11px;letter-spacing:.16em;cursor:pointer;transition:.2s}
+button:hover:not(:disabled){background:rgba(255,255,255,.11);box-shadow:0 0 14px rgba(255,255,255,.16)}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:none;border-color:var(--line);color:var(--mut);margin-top:9px}
+#msg{margin-top:16px;font-size:11px;line-height:1.5;min-height:17px;text-align:center;color:var(--coral)}
+#msg.ok{color:var(--mint)}
+.step{display:none}.step.on{display:block}
+.who{text-align:center;font-size:11px;color:var(--mut);margin-bottom:4px}
+.who b{color:#fff;font-weight:500}
+.aide{font-size:10px;color:var(--dim);line-height:1.5;margin-top:14px;text-align:center}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>SYNAPSE</h1>
+  <div class="sub">MÉMOIRE DU HOMELAB</div>
+
+  <!-- 1 · identifiants -->
+  <div class="step on" id="s1">
+    <label for="user">IDENTIFIANT</label>
+    <input id="user" autocomplete="username" autocapitalize="off" spellcheck="false">
+    <label for="pass">MOT DE PASSE</label>
+    <input id="pass" type="password" autocomplete="current-password">
+    <button id="b1">CONTINUER</button>
+    <button class="ghost" id="bPk">CLÉ D'ACCÈS</button>
+  </div>
+
+  <!-- 2 · second facteur -->
+  <div class="step" id="s2">
+    <div class="who">Compte <b id="qui"></b></div>
+    <label for="code">CODE À SIX CHIFFRES</label>
+    <input id="code" inputmode="numeric" autocomplete="one-time-code"
+           maxlength="10" placeholder="······">
+    <button id="b2">SE CONNECTER</button>
+    <button class="ghost" id="bRetour">RETOUR</button>
+    <div class="aide">Un code de secours fonctionne aussi, une seule fois.</div>
+  </div>
+
+  <div id="msg"></div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const msg = (t, ok) => { const m = $('#msg'); m.textContent = t || ''; m.className = ok ? 'ok' : ''; };
+const etape = n => {
+  $('#s1').classList.toggle('on', n === 1);
+  $('#s2').classList.toggle('on', n === 2);
+  setTimeout(() => (n === 1 ? $('#user') : $('#code')).focus(), 40);
+};
+
+async function collecteur(url, corps) {
+  const r = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: JSON.stringify(corps || {})
+  });
+  return { code: r.status, json: await r.json().catch(() => ({})) };
+}
+
+/* ── 1 · identifiants ───────────────────────────────────────────────── */
+$('#b1').onclick = async () => {
+  const user = $('#user').value.trim(), pass = $('#pass').value;
+  if (!user || !pass) return msg('Identifiant et mot de passe requis.');
+  $('#b1').disabled = true; msg('');
+  const { code, json } = await collecteur('/v1/auth/login', { user, pass });
+  $('#b1').disabled = false;
+  if (code !== 200) return msg(json.error || 'Connexion refusée.');
+  /* Compte temporaire : pas de second facteur, direction l'initialisation. */
+  if (json.init) { location.href = json.redirect || '/setup'; return; }
+  $('#qui').textContent = user;
+  /* Le mot de passe ne donne pas l'accès : il ouvre le second facteur. */
+  if (json.methodes && json.methodes.passkey && !json.methodes.totp) return passkey(user);
+  etape(2);
+};
+
+/* ── 2 · TOTP ou code de secours ────────────────────────────────────── */
+$('#b2').onclick = async () => {
+  const code = $('#code').value.trim();
+  if (!code) return msg('Code requis.');
+  $('#b2').disabled = true; msg('');
+  const r = await collecteur('/v1/auth/totp', {
+    user: $('#user').value.trim(), pass: $('#pass').value, code
+  });
+  $('#b2').disabled = false;
+  if (r.code !== 200) { $('#code').value = ''; $('#code').focus(); return msg(r.json.error || 'Code refusé.'); }
+  msg('Connecté.', true);
+  location.href = '/';
+};
+
+$('#bRetour').onclick = () => { $('#code').value = ''; msg(''); etape(1); };
+
+/* ── clé d'accès ────────────────────────────────────────────────────── */
+const deB64 = s => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+const enB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+async function passkey(user) {
+  if (!window.PublicKeyCredential) return msg('Ce navigateur ne gère pas les clés d\u2019accès.');
+  msg('');
+  try {
+    const { json: o } = await collecteur('/v1/auth/passkey/options', { user: user || '' });
+    const cred = await navigator.credentials.get({ publicKey: {
+      challenge: deB64(o.challenge),
+      allowCredentials: (o.allowCredentials || []).map(c => ({ type: 'public-key', id: deB64(c.id) })),
+      userVerification: o.userVerification, timeout: o.timeout
+    }});
+    const r = await collecteur('/v1/auth/passkey/verify', {
+      id: cred.id,
+      clientDataJSON: enB64(cred.response.clientDataJSON),
+      authenticatorData: enB64(cred.response.authenticatorData),
+      signature: enB64(cred.response.signature)
+    });
+    if (r.code !== 200) return msg(r.json.error || 'Clé refusée.');
+    msg('Connecté.', true);
+    location.href = '/';
+  } catch (e) {
+    /* Un abandon volontaire n'est pas une erreur : ne pas l'afficher
+       comme un échec, l'utilisateur sait ce qu'il vient de faire. */
+    if (e && /NotAllowed|AbortError/.test(e.name || '')) return msg('');
+    msg('Clé d\u2019accès indisponible.');
+  }
+}
+$('#bPk').onclick = () => passkey($('#user').value.trim());
+
+/* Entrée valide l'étape courante. */
+for (const [champ, bouton] of [['#user', '#b1'], ['#pass', '#b1'], ['#code', '#b2']]) {
+  $(champ).addEventListener('keydown', e => { if (e.key === 'Enter') $(bouton).click(); });
+}
+
+/* Session déjà ouverte : inutile de redemander. */
+fetch('/v1/auth/session', { credentials: 'same-origin' })
+  .then(r => r.json())
+  .then(j => {
+    if (j.user) location.href = '/';
+    else if (!j.installe) msg('Premier démarrage : identifiant admin, mot de passe Temp1234.');
+  })
+  .catch(() => {});
+
+$('#user').focus();
+</script>
+</body>
+</html>

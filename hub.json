@@ -1,0 +1,740 @@
+{
+  "$schema": "https://raw.githubusercontent.com/CodexX64/hub-registry/main/schema/hub-extension.v1.json",
+  "manifestVersion": 1,
+  "id": "synapse",
+  "name": "SYNAPSE",
+  "version": "1.1.0",
+  "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
+  "icon": "brain",
+  "repository": "https://github.com/codexX64/synapse",
+  "license": "MIT",
+  "minHubVersion": "0.4.0",
+  "install": {
+    "type": "compose",
+    "compose": "deploy/compose.hub.yml",
+    "remote": {
+      "supported": true,
+      "label": "Adresse de SYNAPSE",
+      "placeholder": "http://192.0.2.30:8140",
+      "defaultPort": 8140,
+      "setupHelp": "Pour une mémoire déjà en service ailleurs : créer un jeton avec `docker compose exec synapse node src/cli.js source add hub --scope read+write`, puis le coller ici."
+    },
+    "healthcheck": {
+      "type": "http",
+      "path": "/healthz",
+      "expect": 200,
+      "timeout": "5s"
+    }
+  },
+  "config": [
+    {
+      "key": "IMAGE_TAG",
+      "label": "Version de l'image",
+      "type": "string",
+      "default": "latest",
+      "advanced": true,
+      "help": "Étiquette de l'image publiée sur ghcr.io."
+    },
+    {
+      "key": "HUB_TOKEN",
+      "label": "Jeton de service",
+      "type": "secret",
+      "generate": "random:32",
+      "help": "Créé par le Hub à l'installation. SYNAPSE le reconnaît au démarrage : aucune commande à taper."
+    },
+    {
+      "key": "EMBED_MODEL",
+      "label": "Modèle de vectorisation",
+      "type": "string",
+      "default": "nomic-embed-text",
+      "help": "Sert au niveau 2 de la cascade. S'il est absent, les niveaux 0 et 1 fonctionnent quand même."
+    },
+    {
+      "key": "ANSWER_MODEL",
+      "label": "Modèle de synthèse",
+      "type": "string",
+      "default": "qwen3:8b",
+      "help": "Rédige les réponses du niveau 3 et distille les profils. Un modèle qui suit les consignes JSON donne de meilleurs traits."
+    },
+    {
+      "key": "OLLAMA_URL",
+      "label": "Adresse d'Ollama",
+      "type": "string",
+      "default": "http://ollama:11434",
+      "help": "Le Hub la remplit tout seul si une instance Ollama est déjà installée."
+    },
+    {
+      "key": "CONSOLIDATION_INTERVAL",
+      "label": "Rythme de consolidation",
+      "type": "string",
+      "default": "1800000",
+      "advanced": true,
+      "help": "Millisecondes entre deux passes de distillation des échanges en traits. 0 désactive. Un profil qui bouge à chaque phrase n'est pas un profil."
+    },
+    {
+      "key": "AUTH_ORIGIN",
+      "label": "Origine de l'interface",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Adresse exacte tapée dans le navigateur pour ouvrir SYNAPSE. Nécessaire uniquement pour les clés d'accès WebAuthn."
+    }
+  ],
+  "api": {
+    "baseUrl": "{{service.url}}",
+    "auth": {
+      "type": "bearer",
+      "token": "{{service.token}}",
+      "localToken": "HUB_TOKEN",
+      "remoteToken": "HUB_TOKEN"
+    }
+  },
+  "capabilities": {
+    "provides": [
+      "memory.ingest",
+      "memory.search",
+      "memory.brief",
+      "memory.learn",
+      "memory.correct"
+    ],
+    "requires": [
+      "llm.embed"
+    ],
+    "accepts": [
+      "llm.chat"
+    ]
+  },
+  "triggers": [],
+  "actions": [
+    {
+      "id": "memory.search",
+      "name": "Chercher dans la mémoire",
+      "description": "Recherche en cascade : correspondance exacte, lexical, vecteurs. S'arrête au premier niveau qui suffit.",
+      "icon": "search",
+      "group": "Mémoire",
+      "capability": "memory.search",
+      "risk": "read",
+      "idempotent": true,
+      "params": [
+        {
+          "key": "query",
+          "label": "Question",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "space",
+          "label": "Espace",
+          "type": "string",
+          "default": "shared",
+          "help": "Les espaces sont étanches : une source qui écrit dans l'un ne voit pas l'autre."
+        },
+        {
+          "key": "limit",
+          "label": "Nombre de résultats",
+          "type": "number",
+          "default": 6,
+          "min": 1,
+          "max": 30
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/v1/search",
+        "query": {
+          "q": "{{params.query}}",
+          "ns": "{{params.space}}",
+          "limit": "{{params.limit}}"
+        }
+      },
+      "output": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "number"
+            },
+            "title": {
+              "type": "string"
+            },
+            "snippet": {
+              "type": "string"
+            },
+            "level": {
+              "type": "string"
+            },
+            "score": {
+              "type": "number"
+            },
+            "occurred_at": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "sample": [
+        {
+          "id": 412,
+          "title": "Le Hub déploie en Compose",
+          "snippet": "Les piles sont rendues depuis le manifeste…",
+          "level": "L2",
+          "score": 0.81,
+          "occurred_at": "2026-03-04T09:12:00.000Z"
+        }
+      ]
+    },
+    {
+      "id": "memory.ingest",
+      "name": "Écrire dans la mémoire",
+      "description": "Enregistre un fait. Un fait déjà connu est compté, pas dupliqué.",
+      "icon": "plus",
+      "group": "Mémoire",
+      "capability": "memory.ingest",
+      "risk": "reversible",
+      "params": [
+        {
+          "key": "text",
+          "label": "Le fait",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "space",
+          "label": "Espace",
+          "type": "string",
+          "default": "shared"
+        },
+        {
+          "key": "tags",
+          "label": "Étiquettes",
+          "type": "string",
+          "help": "Séparées par des espaces."
+        },
+        {
+          "key": "kind",
+          "label": "Nature",
+          "type": "string",
+          "default": "note",
+          "advanced": true
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/v1/ingest",
+        "body": {
+          "ns": "{{params.space}}",
+          "kind": "{{params.kind}}",
+          "title": "{{params.text}}",
+          "body": "{{params.text}}",
+          "tags": "{{params.tags}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "number"
+          },
+          "duplicate": {
+            "type": "boolean"
+          }
+        }
+      },
+      "sample": {
+        "ok": true,
+        "id": 413,
+        "duplicate": false
+      }
+    },
+    {
+      "id": "brief",
+      "name": "Briefing avant de répondre",
+      "description": "Tout ce qu'il faut savoir en un appel : le profil de l'utilisateur, ce que ce modèle a déjà mal compris, et la mémoire pertinente.",
+      "icon": "sparkle",
+      "group": "Apprentissage",
+      "capability": "memory.brief",
+      "risk": "read",
+      "idempotent": true,
+      "params": [
+        {
+          "key": "agent",
+          "label": "Modèle qui va répondre",
+          "type": "expression",
+          "required": true,
+          "help": "Le profil commun est partagé ; les leçons sont propres à chaque modèle."
+        },
+        {
+          "key": "query",
+          "label": "Question posée",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "space",
+          "label": "Espace",
+          "type": "string",
+          "default": "shared"
+        },
+        {
+          "key": "budget",
+          "label": "Budget de temps (ms)",
+          "type": "number",
+          "default": 1200,
+          "advanced": true,
+          "help": "Au-delà, la mémoire est absente du briefing plutôt qu'attendue."
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/v1/brief",
+        "body": {
+          "agent": "{{params.agent}}",
+          "q": "{{params.query}}",
+          "ns": "{{params.space}}",
+          "budget": "{{params.budget}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "profil": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "portee": {
+                  "type": "string"
+                },
+                "cle": {
+                  "type": "string"
+                },
+                "valeur": {
+                  "type": "string"
+                },
+                "confiance": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "corrections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "correction": {
+                  "type": "string"
+                },
+                "n": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "memoire": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "titre": {
+                  "type": "string"
+                },
+                "extrait": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "texte": {
+            "type": "string"
+          },
+          "tronque": {
+            "type": "boolean"
+          },
+          "ms": {
+            "type": "number"
+          }
+        }
+      },
+      "sample": {
+        "agent": "qwen3-14b",
+        "profil": [
+          {
+            "portee": "commun",
+            "cle": "format_commandes",
+            "valeur": "Donne les commandes groupées en un seul bloc à coller.",
+            "confiance": 0.82
+          }
+        ],
+        "corrections": [
+          {
+            "question": "quel modèle utiliser",
+            "correction": "Ne jamais inventer un nom de modèle : lire la liste du service.",
+            "n": 2
+          }
+        ],
+        "memoire": [
+          {
+            "titre": "Le Hub déploie en Compose",
+            "extrait": "Les piles sont rendues depuis le manifeste…"
+          }
+        ],
+        "texte": "Ce que tu sais de ton utilisateur :\n- Donne les commandes groupées en un seul bloc à coller.",
+        "tronque": false,
+        "ms": 38
+      }
+    },
+    {
+      "id": "echange",
+      "name": "Consigner un échange",
+      "description": "La question et la réponse, telles quelles. La distillation en tirera des traits plus tard, en arrière-plan.",
+      "icon": "chat",
+      "group": "Apprentissage",
+      "capability": "memory.learn",
+      "risk": "reversible",
+      "params": [
+        {
+          "key": "agent",
+          "label": "Modèle",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "question",
+          "label": "Question",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "reponse",
+          "label": "Réponse",
+          "type": "expression"
+        },
+        {
+          "key": "space",
+          "label": "Espace",
+          "type": "string",
+          "default": "shared"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/v1/echange",
+        "body": {
+          "agent": "{{params.agent}}",
+          "question": "{{params.question}}",
+          "reponse": "{{params.reponse}}",
+          "ns": "{{params.space}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "number"
+          },
+          "duplicate": {
+            "type": "boolean"
+          }
+        }
+      },
+      "sample": {
+        "ok": true,
+        "id": 414,
+        "duplicate": false
+      }
+    },
+    {
+      "id": "apprendre",
+      "name": "Corriger une réponse",
+      "description": "Ce qui a été dit de faux et ce qu'il fallait dire. La prochaine question proche ramènera la correction avant que le modèle recommence.",
+      "icon": "check",
+      "group": "Apprentissage",
+      "capability": "memory.correct",
+      "risk": "reversible",
+      "params": [
+        {
+          "key": "agent",
+          "label": "Modèle",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "question",
+          "label": "Question concernée",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "correction",
+          "label": "Ce qu'il fallait dire",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "faux",
+          "label": "Ce qui a été dit",
+          "type": "expression"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/v1/apprendre",
+        "body": {
+          "agent": "{{params.agent}}",
+          "question": "{{params.question}}",
+          "correction": "{{params.correction}}",
+          "faux": "{{params.faux}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "correction": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "number"
+              },
+              "n": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "sample": {
+        "correction": {
+          "id": 7,
+          "n": 2
+        }
+      }
+    },
+    {
+      "id": "recall",
+      "name": "Retrouver une résolution passée",
+      "description": "Un incident déjà résolu qui ressemble assez à celui-ci ramène son correctif.",
+      "icon": "refresh",
+      "group": "Mémoire",
+      "risk": "read",
+      "idempotent": true,
+      "params": [
+        {
+          "key": "signature",
+          "label": "Signature",
+          "type": "expression",
+          "required": true
+        },
+        {
+          "key": "service",
+          "label": "Service",
+          "type": "expression"
+        },
+        {
+          "key": "host",
+          "label": "Machine",
+          "type": "expression"
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/v1/recall",
+        "body": {
+          "signature": "{{params.signature}}",
+          "service": "{{params.service}}",
+          "host": "{{params.host}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "found": {
+            "type": "boolean"
+          },
+          "neurons": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "number"
+                },
+                "fix": {
+                  "type": "string"
+                },
+                "similarity": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sample": {
+        "found": true,
+        "neurons": [
+          {
+            "id": 19,
+            "fix": "Relancer le service après avoir relevé la limite mémoire.",
+            "similarity": 0.91
+          }
+        ]
+      }
+    },
+    {
+      "id": "consolider",
+      "name": "Distiller les échanges",
+      "description": "Relit les échanges récents et en tire des traits durables. Tourne aussi toute seule en arrière-plan.",
+      "icon": "sparkle",
+      "group": "Apprentissage",
+      "risk": "reversible",
+      "params": [
+        {
+          "key": "agent",
+          "label": "Modèle",
+          "type": "expression",
+          "required": true
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "path": "/v1/consolider",
+        "body": {
+          "agent": "{{params.agent}}"
+        }
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "lus": {
+            "type": "number"
+          },
+          "traits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "portee": {
+                  "type": "string"
+                },
+                "cle": {
+                  "type": "string"
+                },
+                "etat": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "sample": {
+        "agent": "qwen3-14b",
+        "lus": 12,
+        "traits": [
+          {
+            "portee": "commun",
+            "cle": "format_commandes",
+            "etat": "confirme"
+          }
+        ]
+      }
+    }
+  ],
+  "probes": [
+    {
+      "id": "reachable",
+      "name": "Joignable",
+      "kind": "state",
+      "request": {
+        "method": "GET",
+        "path": "/healthz"
+      },
+      "value": "$.ok",
+      "states": {
+        "ok": [
+          true,
+          "true",
+          "ok"
+        ]
+      },
+      "interval": "30s"
+    },
+    {
+      "id": "entries",
+      "name": "Entrées en mémoire",
+      "kind": "gauge",
+      "unit": "entrées",
+      "request": {
+        "method": "GET",
+        "path": "/v1/stats"
+      },
+      "value": "$.entries",
+      "interval": "5m"
+    },
+    {
+      "id": "queue",
+      "name": "Morceaux en attente de vectorisation",
+      "kind": "gauge",
+      "unit": "morceaux",
+      "request": {
+        "method": "GET",
+        "path": "/v1/stats"
+      },
+      "value": "$.pending",
+      "thresholds": {
+        "warn": 2000,
+        "crit": 5000
+      },
+      "interval": "1m"
+    }
+  ],
+  "permissions": {
+    "dockerSocket": "none",
+    "privileged": false,
+    "hostNetwork": false,
+    "capAdd": [],
+    "egress": []
+  },
+  "ai": {
+    "exposeActions": true,
+    "hints": "SYNAPSE est la mémoire du Hub, pas une base de connaissances à remplir à la main. Les échanges y arrivent tout seuls. Ce qui vaut la peine d'y écrire explicitement : une décision prise, une contrainte énoncée, une résolution d'incident. Le profil se distille, il ne se saisit pas — sauf quand l'utilisateur dit explicitement « retiens que… », auquel cas passe par l'action « Corriger une réponse » ou un trait déclaré. Les espaces sont étanches : écrire dans le mauvais espace revient à ne rien écrire."
+  },
+  "autoWorkflows": [
+    {
+      "id": "memoire-alertes",
+      "name": "Garder trace des alertes",
+      "when": "alerts.source",
+      "steps": [
+        {
+          "use": "trigger:alert.new"
+        },
+        {
+          "use": "capability:memory.ingest",
+          "params": {
+            "text": "Alerte {{ $json.severity }} : {{ $json.title | default($json.message) }}",
+            "space": "shared",
+            "tags": "alerte",
+            "kind": "alert"
+          }
+        }
+      ]
+    }
+  ]
+}

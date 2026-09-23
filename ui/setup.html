@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SYNAPSE — premier démarrage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{ --panel:rgba(13,13,14,.9); --line:rgba(255,255,255,.09); --txt:#f1f1f1;
+       --mut:#9c9c9c; --dim:#575757; --mint:#3fe8a8; --coral:#ff5c7a; --amber:#ffb45e;
+       --mono:'JetBrains Mono',monospace; --disp:'Space Grotesk',sans-serif; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 35%,#0c0c0d 0%,#050505 62%);
+  color:var(--txt);font-family:var(--mono);font-size:13px;padding:20px}
+.box{width:min(460px,100%);background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:30px 28px;backdrop-filter:blur(14px)}
+h1{font-family:var(--disp);font-weight:600;font-size:21px;letter-spacing:.26em;text-align:center}
+.sub{text-align:center;font-size:9px;letter-spacing:.2em;color:var(--dim);margin:6px 0 22px}
+.etapes{display:flex;gap:6px;margin-bottom:22px}
+.etapes i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.08)}
+.etapes i.on{background:#fff}.etapes i.ok{background:var(--mint)}
+h2{font-family:var(--disp);font-size:15px;font-weight:600;margin-bottom:4px}
+.expl{font-size:11px;color:var(--mut);line-height:1.55;margin-bottom:14px}
+label{display:block;font-size:9px;letter-spacing:.18em;color:var(--dim);margin:14px 0 6px}
+input{width:100%;background:rgba(255,255,255,.045);border:1px solid var(--line);
+  border-radius:6px;color:#fff;padding:11px 13px;font-family:var(--mono);font-size:14px}
+input:focus{outline:1.5px solid rgba(255,255,255,.35);outline-offset:0}
+#code{letter-spacing:.5em;text-align:center;font-size:19px}
+button{width:100%;margin-top:18px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.3);
+  color:#fff;padding:12px;border-radius:6px;font-family:var(--mono);font-size:11px;letter-spacing:.16em;cursor:pointer}
+button:hover:not(:disabled){background:rgba(255,255,255,.11)}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:none;border-color:var(--line);color:var(--mut);margin-top:9px}
+#msg{margin-top:14px;font-size:11px;min-height:17px;text-align:center;color:var(--coral)}
+#msg.ok{color:var(--mint)}
+.step{display:none}.step.on{display:block}
+#qr{display:block;margin:12px auto;background:#fff;padding:10px;border-radius:8px;width:196px;height:196px}
+.secret{font-size:11px;word-break:break-all;text-align:center;color:var(--mut);margin-top:6px}
+.codes{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:12px 0;font-size:13px;letter-spacing:.08em}
+.codes span{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:5px;padding:8px;text-align:center}
+.warn{border-left:2px solid var(--amber);padding-left:10px;font-size:11px;color:var(--amber);line-height:1.5;margin-top:12px}
+.force{display:flex;gap:4px;margin-top:6px}.force i{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.08)}
+
+.secret-bloc{border:1px solid var(--line,rgba(255,255,255,.12));border-radius:8px;
+  padding:16px;text-align:center;margin:18px 0}
+.secret-libelle{font-size:9px;letter-spacing:.18em;color:var(--dim,#666);margin-bottom:10px}
+.secret{display:block;font-family:var(--mono,monospace);font-size:17px;letter-spacing:.14em;
+  word-break:break-all;line-height:1.7;-webkit-user-select:all;user-select:all}
+.lien-otp{display:inline-block;margin-top:12px;font-size:11px;color:var(--mint,#3fe8a8);
+  text-decoration:none;border-bottom:1px solid currentColor}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>SYNAPSE</h1>
+  <div class="sub">PREMIER DÉMARRAGE</div>
+  <div class="etapes"><i id="e1" class="on"></i><i id="e2"></i><i id="e3"></i><i id="e4"></i></div>
+
+  <!-- 1 · identite -->
+  <div class="step on" id="s1">
+    <h2>Ton compte</h2>
+    <div class="expl">Le compte <b>admin / Temp1234</b> n'existe que pour arriver ici. Il sera supprimé à la fin.</div>
+    <label for="user">NOUVEL IDENTIFIANT</label>
+    <input id="user" autocomplete="username" autocapitalize="off" spellcheck="false">
+    <label for="pass">MOT DE PASSE · 12 CARACTÈRES MINIMUM</label>
+    <input id="pass" type="password" autocomplete="new-password">
+    <div class="force"><i></i><i></i><i></i><i></i></div>
+    <label for="pass2">CONFIRMATION</label>
+    <input id="pass2" type="password" autocomplete="new-password">
+    <button id="b1">CONTINUER</button>
+  </div>
+
+  <!-- 2 · TOTP -->
+  <div class="step" id="s2">
+    <h2>Second facteur</h2>
+    <div class="expl">Scanne ce code dans ton application d'authentification, puis saisis le code affiché pour prouver que ça marche.</div>
+    <div class="secret-bloc">
+      <div class="secret-libelle">CLÉ À SAISIR DANS TON APPLICATION</div>
+      <code id="secret" class="secret"></code>
+      <a id="lien" class="lien-otp">Ouvrir directement dans l'application</a>
+    </div>
+    <div class="secret" id="secret"></div>
+    <label for="code">CODE AFFICHÉ PAR L'APPLICATION</label>
+    <input id="code" inputmode="numeric" maxlength="6" placeholder="······">
+    <button id="b2">VÉRIFIER ET CRÉER LE COMPTE</button>
+    <button class="ghost" id="bBack">RETOUR</button>
+  </div>
+
+  <!-- 3 · codes de secours -->
+  <div class="step" id="s3">
+    <h2>Codes de secours</h2>
+    <div class="expl">Chacun ne sert qu'une fois. Ils remplacent l'application si tu perds ton téléphone. <b>Ils ne seront plus jamais affichés.</b></div>
+    <div class="codes" id="codes"></div>
+    <div class="warn">Note-les maintenant, dans ton coffre — pas dans un fichier texte sur le bureau.</div>
+    <button id="b3">JE LES AI NOTÉS</button>
+  </div>
+
+  <!-- 4 · passkey (facultatif) -->
+  <div class="step" id="s4">
+    <h2>Clé d'accès</h2>
+    <div class="expl">Facultatif mais recommandé : Touch ID, Face ID, Windows Hello ou une clé physique. Plus rapide que le code, et impossible à hameçonner.</div>
+    <button id="b4">AJOUTER UNE CLÉ D'ACCÈS</button>
+    <button class="ghost" id="bSkip">PLUS TARD</button>
+  </div>
+
+  <div id="msg"></div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const msg = (t, ok) => { const m = $('#msg'); m.textContent = t || ''; m.className = ok ? 'ok' : ''; };
+function etape(n) {
+  for (let i = 1; i <= 4; i++) {
+    $('#s' + i).classList.toggle('on', i === n);
+    $('#e' + i).className = i < n ? 'ok' : i === n ? 'on' : '';
+  }
+}
+async function collecteur(url, corps, methode = 'POST') {
+  const r = await fetch(url, { method: methode, credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: methode === 'GET' ? undefined : JSON.stringify(corps || {}) });
+  return { code: r.status, json: await r.json().catch(() => ({})) };
+}
+
+/* Force du mot de passe : longueur et variété, sans prétendre plus. */
+$('#pass').addEventListener('input', e => {
+  const p = e.target.value;
+  let f = 0;
+  if (p.length >= 12) f++;
+  if (p.length >= 16) f++;
+  if (/[a-z]/.test(p) && /[A-Z]/.test(p)) f++;
+  if (/\d/.test(p) && /[^a-zA-Z0-9]/.test(p)) f++;
+  document.querySelectorAll('.force i').forEach((b, i) =>
+    b.style.background = i < f ? (f < 2 ? '#ff5c7a' : f < 4 ? '#ffb45e' : '#3fe8a8') : 'rgba(255,255,255,.08)');
+});
+
+/* ── 1 ─────────────────────────────────────────────────────────────── */
+let TOTP = null;
+$('#b1').onclick = async () => {
+  const user = $('#user').value.trim(), pass = $('#pass').value, pass2 = $('#pass2').value;
+  if (!/^[a-z0-9._-]{3,32}$/i.test(user)) return msg('Identifiant : 3 à 32 caractères simples.');
+  if (pass.length < 12) return msg('Mot de passe : 12 caractères minimum.');
+  if (pass !== pass2) return msg('Les deux mots de passe diffèrent.');
+  if (user === 'admin' && pass === 'Temp1234') return msg('Choisis autre chose que le compte temporaire.');
+  msg('');
+  const r = await fetch('/v1/auth/setup/totp', { credentials: 'same-origin', headers: { 'x-nouveau-nom': user } });
+  const j = await r.json().catch(() => ({}));
+  if (r.status !== 200) return msg(j.error || 'Impossible de préparer le second facteur.');
+  TOTP = j.secret;
+  $('#secret').textContent = j.secret.replace(/(.{4})/g, '$1 ').trim();
+  /* Le QR code n'est PAS genere par un service distant.
+     L'URL otpauth:// contient le secret TOTP en clair : l'envoyer a un
+     generateur d'images tiers revient a lui confier le second facteur
+     de chaque compte cree. On affiche le secret et un lien direct, que
+     toute application d'authentification sait lire. */
+  $('#secret').textContent = (j.otpauth.match(/secret=([A-Z2-7]+)/) || [])[1] || '';
+  $('#lien').href = j.otpauth;
+  etape(2); $('#code').focus();
+};
+$('#bBack').onclick = () => { TOTP = null; etape(1); };
+
+/* ── 2 ─────────────────────────────────────────────────────────────── */
+$('#b2').onclick = async () => {
+  const code = $('#code').value.trim();
+  if (!/^\d{6}$/.test(code)) return msg('Six chiffres.');
+  $('#b2').disabled = true; msg('');
+  const r = await collecteur('/v1/auth/setup', {
+    user: $('#user').value.trim(), pass: $('#pass').value, totp_secret: TOTP, totp_code: code
+  });
+  $('#b2').disabled = false;
+  if (r.code !== 200) { $('#code').value = ''; return msg(r.json.error || 'Refusé.'); }
+  $('#codes').innerHTML = (r.json.codes || []).map(c => '<span>' + c + '</span>').join('');
+  msg('Compte créé. Le compte temporaire est supprimé.', true);
+  etape(3);
+};
+
+/* ── 3 ─────────────────────────────────────────────────────────────── */
+$('#b3').onclick = () => { msg(''); etape(4); };
+
+/* ── 4 · passkey ───────────────────────────────────────────────────── */
+const deB64 = s => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+const enB64 = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+$('#b4').onclick = async () => {
+  if (!window.PublicKeyCredential) return msg('Ce navigateur ne gère pas les clés d\u2019accès.');
+  try {
+    const { json: o } = await collecteur('/v1/auth/passkey/enroll/options', {});
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: deB64(o.challenge), rp: o.rp,
+      user: { id: deB64(o.user.id), name: o.user.name, displayName: o.user.displayName },
+      pubKeyCredParams: o.pubKeyCredParams, authenticatorSelection: o.authenticatorSelection,
+      timeout: o.timeout, attestation: o.attestation
+    }});
+    const r = await collecteur('/v1/auth/passkey/enroll', {
+      id: cred.id, clientDataJSON: enB64(cred.response.clientDataJSON),
+      attestationObject: enB64(cred.response.attestationObject),
+      label: navigator.platform || 'clé'
+    });
+    if (r.code !== 201) return msg(r.json.error || 'Enregistrement refusé.');
+    msg('Clé d\u2019accès enregistrée.', true);
+    setTimeout(() => location.href = '/', 900);
+  } catch (e) {
+    if (e && /NotAllowed|AbortError/.test(e.name || '')) return msg('');
+    msg('Clé d\u2019accès indisponible : ' + (e.message || '').slice(0, 80));
+  }
+};
+$('#bSkip').onclick = () => location.href = '/';
+
+for (const [c, b] of [['#user','#b1'],['#pass','#b1'],['#pass2','#b1'],['#code','#b2']])
+  $(c).addEventListener('keydown', e => { if (e.key === 'Enter') $(b).click(); });
+$('#user').focus();
+</script>
+</body>
+</html>
