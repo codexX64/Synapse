@@ -85,7 +85,7 @@ async function titrerEchanges(db, { demander, lot = LOT_TITRES } = {}) {
      WHERE kind='echange' AND json_extract(meta,'$.sujet') IS NOT NULL
      GROUP BY s ORDER BY n DESC LIMIT 12`).all().map(r => r.s);
   const texte = (sujets.length ? `Sujets déjà utilisés : ${sujets.join(', ')}\n\n` : '')
-    + rows.map((r, i) => `[${i + 1}]\n${String(r.body || r.title).slice(0, 900)}`).join('\n\n');
+    + rows.map((r, i) => `[${i + 1}]\n${String(r.body || r.title).slice(0, 700)}`).join('\n\n');
 
   let brut;
   try { brut = await demander(CONSIGNE_TITRES, texte); }

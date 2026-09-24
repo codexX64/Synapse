@@ -45,7 +45,7 @@ const MAX_CORRECTIONS = 300;
 const DEMI_VIE_JOURS = 180;
 const PLANCHER = 0.15;        /* en dessous, le trait est oublié */
 
-const LOT_CONSOLIDATION = 40; /* échanges relus par passe */
+const LOT_CONSOLIDATION = 12; /* échanges relus par appel : tient dans 8 k jetons de contexte */
 
 function migrate(db) {
   db.exec(`
@@ -432,7 +432,7 @@ async function consolider(db, { agent, demander, ns = null, lot = LOT_CONSOLIDAT
   if (!rows.length) return { agent: a, lus: 0, traits: [], raison: 'rien de nouveau' };
   if (typeof demander !== 'function') return { agent: a, lus: 0, traits: [], raison: 'aucun modèle de synthèse' };
 
-  const corpus = rows.map((r, i) => `[${i + 1}] ${String(r.occurred_at || '').slice(0, 16).replace('T', ' ')} · ${r.title}\n${String(r.body || '').slice(0, 800)}`).join('\n\n');
+  const corpus = rows.map((r, i) => `[${i + 1}] ${String(r.occurred_at || '').slice(0, 16).replace('T', ' ')} · ${r.title}\n${String(r.body || '').slice(0, 600)}`).join('\n\n');
   /* La fiche actuelle, pour que le modèle la complète au lieu de repartir
      de zéro à chaque passe : c'est ce qui fait évoluer une fiche plutôt
      que d'en empiler de nouvelles. */

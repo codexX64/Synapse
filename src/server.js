@@ -74,6 +74,14 @@ const PLANIF = require('./planif.js');
 /* Reecriture d'un titre faible par le modele local. Le modele ne
    choisit pas quoi garder : il tire le FOND de l'extrait qu'on lui
    donne. Un titre invente serait pire que le titre vague. */
+/* Une seule taille de contexte pour tous les appels au modèle. Ollama
+   recharge le modèle dès que num_ctx change : des réponses au contexte par
+   défaut et des passes de fond à un autre contexte se faisaient recharger
+   un 14b à tour de rôle — d'où les délais dépassés. Le défaut d'Ollama
+   (2 à 4 k jetons) tronquait en plus, sans le dire, les lots d'échanges. */
+const CTX_MODELE = Number(process.env.OLLAMA_NUM_CTX || 8192);
+const GARDE = process.env.ANSWER_KEEP_ALIVE || '30m';
+
 async function reecritTitre(entree) {
   if (!embedder.url) return null;
   const r = await fetch(embedder.url + '/api/generate', {
@@ -86,9 +94,10 @@ Un bon titre enonce le FOND : ce que le document affirme, pas le sujet qu'il abo
 Reponds par le titre seul : pas de guillemets, pas de point final, 6 a 14 mots, en francais.
 Si l'extrait ne permet pas d'ecrire un titre precis, reponds exactement : RIEN`,
       prompt: `Titre actuel, trop vague : ${entree.title}\n\nDebut du document :\n${entree.extrait}\n\nEcris le titre.`,
-      options: { temperature: 0.2, num_predict: 60 }
+      keep_alive: GARDE,
+      options: { temperature: 0.2, num_predict: 60, num_ctx: CTX_MODELE }
     }),
-    signal: AbortSignal.timeout(60000)
+    signal: AbortSignal.timeout(90000)
   });
   const j = await r.json();
   if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status);
@@ -155,9 +164,12 @@ async function demanderAuModele(consigne, texte) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model, prompt: `${consigne}\n\n---\n${texte}`, stream: false, think: false,
-      format: 'json', options: { temperature: 0.1, num_predict: 700 },
+      format: 'json', keep_alive: GARDE,
+      options: { temperature: 0.1, num_predict: 1000, num_ctx: CTX_MODELE },
     }),
-    signal: AbortSignal.timeout(45000),
+    /* Passe de fond : personne n'attend. Le délai couvre un chargement
+       du modèle à froid, pas une réponse lente à une question. */
+    signal: AbortSignal.timeout(Number(process.env.APPRENTISSAGE_TIMEOUT || 180000)),
   });
   const j = await o.json();
   if (!o.ok || j.error) throw new Error(j.error || 'HTTP ' + o.status);
@@ -219,6 +231,11 @@ let dernierePasse = null;
 let derniereUtile = null;   /* la dernière passe qui a appris quelque chose */
 let minuteurEchange = null;
 function passeApprentissage(raison) {
+  /* Une demande manuelle pendant une passe de fond ne s'y greffe pas :
+     elle aurait reçu le résultat d'une passe lancée avant elle (et avant
+     une éventuelle remise à zéro). Elle attend son tour. */
+  if (passeEnCours && (raison === 'manuel' || raison === 'relecture'))
+    return passeEnCours.catch(() => {}).then(() => passeApprentissage(raison));
   if (passeEnCours) return passeEnCours;
   passeEnCours = (async () => {
     const t0 = Date.now();
@@ -231,11 +248,16 @@ function passeApprentissage(raison) {
         if (!r.restants || !r.titres) break;
       }
       if (raison !== 'échange' || enAttenteDeFiche() >= ECHANGES_AVANT_FICHE) {
-        const c = await APP.consoliderTous(db, { demander: demanderAuModele });
-        bilan.lus = c.lus || 0;
-        bilan.traits = c.traits || [];
-        bilan.oublies = c.oublies || [];
-        if (c.raison && c.raison !== 'rien de nouveau') bilan.erreur = bilan.erreur || c.raison;
+        /* Par lots : un lot tient dans le contexte ; tout relire en un
+           seul appel dépassait le contexte ou le délai. */
+        for (let i = 0; i < 8; i++) {
+          const c = await APP.consoliderTous(db, { demander: demanderAuModele });
+          bilan.lus += c.lus || 0;
+          bilan.traits.push(...(c.traits || []));
+          bilan.oublies.push(...(c.oublies || []));
+          if (c.raison && c.raison !== 'rien de nouveau') { bilan.erreur = bilan.erreur || c.raison; break; }
+          if (!c.lus || !enAttenteDeFiche()) break;
+        }
       }
       /* Une passe demandée à la main se journalise toujours, même vide :
          « rien ne s'est passé » est une réponse, le silence n'en est pas une. */
@@ -1139,7 +1161,7 @@ const routes = {
         const o = await fetch(embedder.url + '/api/generate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model, prompt, stream: false, think: false, keep_alive: GARDE_MODELE,
-            options: { temperature: 0.2, num_predict: MAX_JETONS } }),
+            options: { temperature: 0.2, num_predict: MAX_JETONS, num_ctx: CTX_MODELE } }),
           signal: AbortSignal.timeout(20000)
         });
         const j = await o.json();
@@ -1249,7 +1271,7 @@ async function repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie,
       const o = await fetch(embedder.url + '/api/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, prompt, stream: true, think: false, keep_alive: GARDE_MODELE,
-          options: { temperature: 0.2, num_predict: MAX_JETONS } }),
+          options: { temperature: 0.2, num_predict: MAX_JETONS, num_ctx: CTX_MODELE } }),
         signal: AbortSignal.any([ac.signal, AbortSignal.timeout(60000)]),
       });
       if (!o.ok) { const j = await o.json().catch(() => ({})); throw new Error(j.error || 'HTTP ' + o.status); }
