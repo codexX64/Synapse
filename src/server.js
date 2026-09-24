@@ -24,6 +24,7 @@ const { buildGraph } = require('./graph.js');
 const inc = require('./incidents.js');
 const neu = require('./neurons.js');
 const APP = require('./apprentissage.js');
+const MOI = require('./moi.js');
 const A = require('./auth.js');
 const C = require('./comptes.js');
 const ACT = require('./activite.js');
@@ -194,21 +195,67 @@ PLANIF.demarre(db, reecritTitre);
 const embedder = new Embedder();
 startWorker(db, embedder);
 
-/* ---------- consolidation périodique ----------
-   La distillation est coûteuse — elle appelle un modèle — et n'a aucune
-   raison d'être synchrone : personne n'attend un profil pendant qu'il
-   pose sa question. Elle tourne donc en fond, par agent, et seulement
-   s'il y a du neuf à lire. Un intervalle long est voulu : un profil qui
-   bouge à chaque phrase n'est pas un profil, c'est une humeur. */
+/* ---------- apprentissage de fond ----------
+   Titrer les échanges puis en distiller la fiche : deux appels au modèle,
+   jamais pendant qu'on pose une question, et jamais deux passes à la fois
+   — Ollama n'a qu'un GPU, deux passes simultanées se ralentissent l'une
+   l'autre sans rien gagner.
+
+   Une passe part : peu après chaque échange reçu (le temps qu'une rafale
+   se termine), toutes les 30 minutes par sécurité, et sur demande depuis
+   l'interface. Sans cela, la fiche n'évoluait qu'une fois par demi-heure
+   au mieux, et on ne voyait jamais rien bouger. */
 const CONSOLIDATION_MS = Number(process.env.CONSOLIDATION_INTERVAL || 1800000);
-if (CONSOLIDATION_MS > 0) {
-  setInterval(async () => {
+const APRES_ECHANGE_MS = Number(process.env.APPRENTISSAGE_DELAI || 60000);
+/* Après un échange, on titre tout de suite (un appel court) ; la fiche,
+   elle, attend d'avoir un peu de matière — relire le modèle sur un seul
+   échange coûte autant qu'en relire dix, pour moins de sens. */
+const ECHANGES_AVANT_FICHE = Number(process.env.APPRENTISSAGE_LOT || 3);
+const enAttenteDeFiche = () => db.prepare(
+  `SELECT count(*) n FROM entries e WHERE kind='echange'
+     AND id > COALESCE((SELECT c.dernier_id FROM consolidation c WHERE c.agent=json_extract(e.meta,'$.agent')),0)`).get().n;
+let passeEnCours = null;
+let dernierePasse = null;
+let derniereUtile = null;   /* la dernière passe qui a appris quelque chose */
+let minuteurEchange = null;
+function passeApprentissage(raison) {
+  if (passeEnCours) return passeEnCours;
+  passeEnCours = (async () => {
+    const t0 = Date.now();
+    const bilan = { raison, titres: 0, lus: 0, traits: [], erreur: null };
     try {
-      const r = await APP.consoliderTous(db, { demander: demanderAuModele });
-      if (r.traits?.length) console.log(`[synapse] profils ${r.agents.join(', ')} : ${r.traits.length} trait(s) sur ${r.lus} échange(s)`);
-    } catch (e) { console.warn('[synapse] consolidation', e.message); }
-  }, CONSOLIDATION_MS).unref?.();
+      for (let i = 0; i < 6; i++) {
+        const r = await MOI.titrerEchanges(db, { demander: demanderAuModele });
+        bilan.titres += r.titres;
+        if (r.raison) { bilan.erreur = r.raison; break; }
+        if (!r.restants || !r.titres) break;
+      }
+      if (raison !== 'échange' || enAttenteDeFiche() >= ECHANGES_AVANT_FICHE) {
+        const c = await APP.consoliderTous(db, { demander: demanderAuModele });
+        bilan.lus = c.lus || 0;
+        bilan.traits = c.traits || [];
+        if (c.raison && c.raison !== 'rien de nouveau') bilan.erreur = bilan.erreur || c.raison;
+      }
+      if (bilan.titres || bilan.traits.length)
+        console.log(`[synapse] apprentissage (${raison}) : ${bilan.titres} titre(s), ${bilan.traits.length} trait(s) sur ${bilan.lus} échange(s)`);
+    } catch (e) {
+      bilan.erreur = e.message;
+      console.warn('[synapse] apprentissage', e.message);
+    }
+    dernierePasse = { ...bilan, le: new Date().toISOString(), ms: Date.now() - t0 };
+    if (bilan.titres || bilan.traits.length) derniereUtile = dernierePasse;
+    return dernierePasse;
+  })().finally(() => { passeEnCours = null; });
+  return passeEnCours;
 }
+function apresEchange() {
+  clearTimeout(minuteurEchange);
+  minuteurEchange = setTimeout(() => passeApprentissage('échange'), APRES_ECHANGE_MS);
+  minuteurEchange.unref?.();
+}
+if (CONSOLIDATION_MS > 0) setInterval(() => passeApprentissage('périodique'), CONSOLIDATION_MS).unref?.();
+/* Au démarrage : rattraper les échanges arrivés titrés par leur question. */
+setTimeout(() => passeApprentissage('démarrage'), 30000).unref?.();
 
 /* ---------- jetons ----------
    Seul le hash est stocké. Comparaison à temps constant : une
@@ -792,7 +839,54 @@ const routes = {
     if (!b.question) return send(res, 400, { error: 'question requise' });
     const evt = APP.evenementEchange({ agent: b.agent, question: b.question, reponse: b.reponse, ns: b.ns || 'shared' });
     const r = ingest.insert(db, evt, ctx.src.name);
+    if (r.ok && !r.duplicate) apresEchange();
     send(res, 202, r);
+  },
+
+  /* ---------- ce que SYNAPSE sait de toi ----------
+     La fiche (ce qu'un modèle a compris) et les habitudes (ce que les
+     données montrent). Lecture pour toute session ; modifier la fiche
+     est un geste humain. */
+  'GET /v1/moi': async (req, res, ctx) => {
+    if (!can(ctx.src, 'read') && !pilote(ctx.src)) return send(res, 403, { error: 'portée read requise' });
+    const traits = APP.profil(db, APP.COMMUN, { seuil: 0.1 }).filter(t => t.portee === 'commun');
+    const agents = db.prepare(
+      `SELECT agent, count(*) n, max(maj) maj FROM profil WHERE agent <> ? GROUP BY agent ORDER BY maj DESC`).all(APP.COMMUN);
+    send(res, 200, {
+      traits,
+      agents,
+      habitudes: MOI.habitudes(db),
+      attente: {
+        titres: MOI.aTitrer(db, 1000).length,
+        echanges: enAttenteDeFiche(),
+      },
+      passe: dernierePasse,
+      derniereUtile,
+      enCours: !!passeEnCours,
+    });
+  },
+
+  'POST /v1/moi/analyser': async (req, res, ctx) => {
+    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session humaine' });
+    send(res, 200, await passeApprentissage('manuel'));
+  },
+
+  /* Corriger une fiche : ce que tu écris devient « déclaré », et aucune
+     distillation ne l'écrasera ensuite. */
+  'PUT /v1/moi/trait': async (req, res, ctx) => {
+    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session humaine' });
+    const b = await readBody(req);
+    const valeur = String(b.valeur || '').trim();
+    if (!b.cle || valeur.length < 3) return send(res, 400, { error: 'clé et valeur requises' });
+    const r = APP.poser(db, { agent: APP.COMMUN, cle: b.cle, valeur, confiance: 0.9, origine: 'declare' });
+    send(res, 200, r || { error: 'refusé' });
+  },
+
+  'DELETE /v1/moi/trait': async (req, res, ctx) => {
+    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session humaine' });
+    const cle = ctx.url.searchParams.get('cle');
+    if (!cle) return send(res, 400, { error: 'cle requise' });
+    send(res, 200, APP.oublier(db, APP.COMMUN, cle));
   },
 
   'GET /v1/profil': async (req, res, ctx) => {

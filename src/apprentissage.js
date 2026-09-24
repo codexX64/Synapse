@@ -95,6 +95,11 @@ function migrate(db) {
       maj        TEXT
     );
   `);
+  /* Ce qu'un trait disait avant, et comment il a bougé : une fiche qui
+     change sans dire ce qu'elle a changé ne se relit pas. */
+  for (const col of ['precedent TEXT', "etat TEXT NOT NULL DEFAULT 'nouveau'"]) {
+    try { db.exec(`ALTER TABLE profil ADD COLUMN ${col}`); } catch { /* déjà là */ }
+  }
 }
 
 /* ---------- utilitaires ---------- */
@@ -141,12 +146,13 @@ function confianceVive(row, now = Date.now()) {
 function profil(db, agent, { seuil = PLANCHER } = {}) {
   const a = agentId(agent);
   const rows = db.prepare(
-    `SELECT agent,cle,valeur,confiance,n,origine,maj FROM profil
+    `SELECT agent,cle,valeur,confiance,n,origine,maj,cree_le,precedent,etat FROM profil
      WHERE agent IN (?,?) ORDER BY agent = ? DESC, confiance DESC`).all(COMMUN, a, COMMUN);
   const now = Date.now();
   return rows.map(r => ({
     portee: r.agent === COMMUN ? 'commun' : 'agent',
     cle: r.cle, valeur: r.valeur, n: r.n, origine: r.origine,
+    etat: r.etat || 'nouveau', precedent: r.precedent || null, cree_le: r.cree_le, maj: r.maj,
     confiance: Number(confianceVive(r, now).toFixed(3)),
   })).filter(t => t.confiance >= seuil);
 }
@@ -159,7 +165,7 @@ function profil(db, agent, { seuil = PLANCHER } = {}) {
  * mais en repartant d'une confiance modérée, parce qu'une observation
  * isolée ne doit pas effacer d'un coup dix confirmations.
  */
-function poser(db, { agent, cle, valeur, confiance = 0.5, origine = 'distille', exemple = '' }) {
+function poser(db, { agent, cle, valeur, confiance = 0.5, origine = 'distille', exemple = '', evolution = '' }) {
   const a = agentId(agent);
   const k = txt(cle, 60).toLowerCase().replace(/\s+/g, '_');
   const v = txt(valeur, 400);
@@ -168,8 +174,8 @@ function poser(db, { agent, cle, valeur, confiance = 0.5, origine = 'distille', 
   const ex = db.prepare(`SELECT * FROM profil WHERE agent=? AND cle=?`).get(a, k);
 
   if (!ex) {
-    db.prepare(`INSERT INTO profil(agent,cle,valeur,confiance,n,origine,exemples,cree_le,maj)
-                VALUES (?,?,?,?,1,?,?,?,?)`)
+    db.prepare(`INSERT INTO profil(agent,cle,valeur,confiance,n,origine,exemples,cree_le,maj,etat)
+                VALUES (?,?,?,?,1,?,?,?,?,'nouveau')`)
       .run(a, k, v, Math.min(0.95, Math.max(0.1, confiance)), origine, txt(exemple, 300), now, now);
     elaguer(db, a);
     return { cle: k, valeur: v, etat: 'nouveau' };
@@ -179,7 +185,7 @@ function poser(db, { agent, cle, valeur, confiance = 0.5, origine = 'distille', 
     /* Confirmation : la confiance monte, sans jamais atteindre 1 — on
        ne devient pas certain d'une observation à force de la répéter. */
     const c = Math.min(0.95, confianceVive(ex) + (1 - confianceVive(ex)) * 0.35);
-    db.prepare(`UPDATE profil SET confiance=?, n=n+1, maj=?, origine=? WHERE agent=? AND cle=?`)
+    db.prepare(`UPDATE profil SET confiance=?, n=n+1, maj=?, origine=?, etat='confirme' WHERE agent=? AND cle=?`)
       .run(c, now, ex.origine === 'declare' ? 'declare' : origine, a, k);
     return { cle: k, valeur: v, etat: 'confirme' };
   }
@@ -189,8 +195,18 @@ function poser(db, { agent, cle, valeur, confiance = 0.5, origine = 'distille', 
      a cru deviner. */
   if (ex.origine === 'declare' && origine !== 'declare') return { cle: k, etat: 'garde' };
 
-  db.prepare(`UPDATE profil SET valeur=?, confiance=?, n=1, origine=?, exemples=?, maj=? WHERE agent=? AND cle=?`)
-    .run(v, Math.min(0.7, Math.max(0.3, confiance)), origine, txt(exemple, 300), now, a, k);
+  /* Précisé plutôt que contredit : la fiche s'enrichit de ce qu'on vient
+     d'apprendre, et garde le crédit de ses confirmations passées. C'est
+     le cas courant — on en apprend un peu plus, pas le contraire. */
+  if (evolution === 'affine' && origine === ex.origine) {
+    const c = Math.min(0.95, Math.max(confianceVive(ex), confiance) + 0.05);
+    db.prepare(`UPDATE profil SET valeur=?, confiance=?, n=n+1, precedent=?, etat='affine', exemples=?, maj=? WHERE agent=? AND cle=?`)
+      .run(v, c, ex.valeur, txt(exemple, 300), now, a, k);
+    return { cle: k, valeur: v, etat: 'affine' };
+  }
+
+  db.prepare(`UPDATE profil SET valeur=?, confiance=?, n=1, origine=?, exemples=?, maj=?, precedent=?, etat='remplace' WHERE agent=? AND cle=?`)
+    .run(v, Math.min(0.7, Math.max(0.3, confiance)), origine, txt(exemple, 300), now, ex.valeur, a, k);
   return { cle: k, valeur: v, etat: 'remplace' };
 }
 
@@ -363,19 +379,27 @@ function briefTexte(b) {
 /* ---------- consolidation ----------
    C'est ici que l'historique devient un apprentissage. */
 
-const CONSIGNE = `Tu lis des échanges entre un utilisateur et un assistant technique.
-Tu n'y réponds pas : tu en extrais ce qui restera vrai dans six mois.
+const CONSIGNE = `Tu lis des échanges entre un utilisateur et un assistant technique qui gère son homelab.
+Tu n'y réponds pas : tu apprends à CONNAÎTRE l'utilisateur, et tu tiens sa fiche à jour.
 
-Renvoie UNIQUEMENT du JSON : {"traits":[{"portee":"commun"|"agent","cle":"...","valeur":"...","confiance":0.0-1.0}]}
+Renvoie UNIQUEMENT du JSON : {"traits":[{"portee":"commun"|"agent","cle":"...","valeur":"...","confiance":0.0-1.0,"evolution":"nouveau"|"affine"|"contredit"}]}
 
-- portee "commun" : ce qui est vrai de l'UTILISATEUR — sa langue, sa façon de nommer les choses, ses outils, ses choix déjà faits, ce qu'il refuse, la forme de réponse qu'il attend.
-- portee "agent" : ce qui est vrai de l'ASSISTANT — une erreur qu'il répète, un sujet où il part à côté, une consigne qui le remet dans l'axe.
-- "cle" : le SUJET du trait en un mot ou deux, sans accent ni espace (langue, format_reponse, outils, angle_mort). Deux observations sur le même sujet doivent porter la même clé.
-- "valeur" : une phrase courte, à la deuxième personne, directement utilisable comme consigne.
-- "confiance" : 0.8 si l'utilisateur l'a dit explicitement, 0.5 si c'est une régularité observée, 0.3 si c'est une impression.
+Ce qu'on cherche sur l'UTILISATEUR (portee "commun") :
+- ses projets en cours et ce qu'il cherche à obtenir avec ;
+- sa façon de travailler : tester avant de valider, aller vite, tout automatiser, déléguer à l'IA, vérifier lui-même… ;
+- ce qu'il demande souvent, ce qui revient d'un échange à l'autre ;
+- ses exigences : forme des réponses, langue, niveau de détail, ce qui l'agace ;
+- ses choix techniques déjà faits, ses outils, son matériel, ce qu'il refuse ;
+- son niveau technique, par domaine.
+Portee "agent" : ce qui est vrai de l'ASSISTANT — une erreur qu'il répète, un sujet où il part à côté.
 
-N'invente rien. Un échange banal ne produit aucun trait : renvoie {"traits":[]} plutôt qu'une généralité.
-Au plus 5 traits.`;
+La fiche actuelle est donnée plus bas. Règles :
+- Même sujet qu'une fiche existante : REPRENDS SA CLÉ. "affine" si tu la précises ou l'enrichis (la nouvelle valeur remplace l'ancienne, écris-la complète) ; "contredit" si l'utilisateur a changé d'avis.
+- Sujet absent de la fiche : "nouveau", clé courte sans accent ni espace (projets, facon_de_travailler, exigences, outils, niveau_reseau…).
+- "valeur" : une ou deux phrases concrètes, à la deuxième personne (« Tu construis… », « Tu préfères… »), avec les vrais noms.
+- "confiance" : 0.8 si l'utilisateur l'a dit, 0.5 si c'est une régularité observée sur plusieurs échanges, 0.3 si c'est une impression.
+- Ne reformule pas une fiche sans rien y ajouter. N'invente rien : pas de trait → {"traits":[]}.
+Au plus 6 traits.`;
 
 /**
  * Relit les échanges non encore digérés et en tire des traits.
@@ -401,17 +425,21 @@ async function consolider(db, { agent, demander, ns = null, lot = LOT_CONSOLIDAT
   if (!rows.length) return { agent: a, lus: 0, traits: [], raison: 'rien de nouveau' };
   if (typeof demander !== 'function') return { agent: a, lus: 0, traits: [], raison: 'aucun modèle de synthèse' };
 
-  const corpus = rows.map((r, i) => `[${i + 1}] ${r.title}\n${String(r.body || '').slice(0, 800)}`).join('\n\n');
+  const corpus = rows.map((r, i) => `[${i + 1}] ${String(r.occurred_at || '').slice(0, 16).replace('T', ' ')} · ${r.title}\n${String(r.body || '').slice(0, 800)}`).join('\n\n');
+  /* La fiche actuelle, pour que le modèle la complète au lieu de repartir
+     de zéro à chaque passe : c'est ce qui fait évoluer une fiche plutôt
+     que d'en empiler de nouvelles. */
+  const fiche = profil(db, a).map(t => `- [${t.portee}] ${t.cle} : ${t.valeur}`).join('\n') || '(vide)';
 
   let brut;
-  try { brut = await demander(CONSIGNE, corpus); }
+  try { brut = await demander(CONSIGNE, `FICHE ACTUELLE\n${fiche}\n\nÉCHANGES\n${corpus}`); }
   catch (e) { return { agent: a, lus: 0, traits: [], raison: `modèle indisponible : ${e.message}` }; }
 
   const traits = extraireTraits(brut);
   const poses = [];
   for (const t of traits) {
     const cible = t.portee === 'agent' ? a : COMMUN;
-    const r = poser(db, { agent: cible, cle: t.cle, valeur: t.valeur, confiance: t.confiance, origine: 'distille' });
+    const r = poser(db, { agent: cible, cle: t.cle, valeur: t.valeur, confiance: t.confiance, origine: 'distille', evolution: t.evolution });
     if (r) poses.push({ portee: t.portee, ...r });
   }
 
@@ -442,9 +470,10 @@ function extraireTraits(brut) {
     if (i >= 0 && j > i) { try { obj = JSON.parse(s.slice(i, j + 1)); } catch { obj = null; } }
   }
   const liste = Array.isArray(obj?.traits) ? obj.traits : [];
-  return liste.slice(0, 5).map(t => ({
+  return liste.slice(0, 6).map(t => ({
     portee: t?.portee === 'agent' ? 'agent' : 'commun',
-    cle: txt(t?.cle, 60),
+    evolution: ['affine', 'contredit'].includes(t?.evolution) ? t.evolution : 'nouveau',
+    cle: norm(t?.cle).replace(/\s+/g, '_').slice(0, 60),
     valeur: txt(t?.valeur, 400),
     confiance: Math.min(0.95, Math.max(0.1, Number(t?.confiance) || 0.4)),
   })).filter(t => t.cle && t.valeur);

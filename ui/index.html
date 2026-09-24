@@ -192,6 +192,61 @@ body.cherche #console{z-index:50}
 #veil i::after{content:'';position:absolute;left:-40%;width:40%;height:100%;background:#fff;animation:ld 1.1s infinite}
 @keyframes ld{to{left:100%}}
 
+
+/* ---- Fiche : ce que SYNAPSE sait de toi ---- */
+#moiBtn{background:none;border:1px solid var(--panel-line);color:var(--mut);font-size:10px;letter-spacing:.16em;padding:6px 11px;border-radius:5px;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:7px}
+#moiBtn:hover,#moiBtn.act{color:#fff;border-color:rgba(255,255,255,.35)}
+#moiBtn i{width:6px;height:6px;border-radius:50%;background:var(--dim)}
+#moiBtn.neuf i{background:var(--mint);box-shadow:0 0 8px var(--mint);animation:bl 1.6s infinite}
+#moi{position:fixed;right:14px;top:64px;bottom:140px;z-index:36;width:min(430px,calc(100vw - 28px));display:none;flex-direction:column;overflow:hidden}
+#moi.on{display:flex}
+#moiTete{display:flex;align-items:flex-start;gap:10px;padding:16px 16px 12px;border-bottom:1px solid var(--panel-line)}
+#moiTete h2{font-family:var(--disp);font-weight:600;font-size:15px;letter-spacing:.14em}
+#moiTete p{font-size:10px;color:var(--mut);margin-top:5px;line-height:1.5}
+#moiTete .grow{flex:1;min-width:0}
+#moiAn{background:rgba(63,232,168,.08);border:1px solid rgba(63,232,168,.45);color:var(--mint);font-size:9.5px;letter-spacing:.14em;padding:7px 11px;border-radius:6px;cursor:pointer;white-space:nowrap}
+#moiAn:disabled{opacity:.55;cursor:default;animation:bl 1s infinite}
+#moiX{background:none;border:none;color:var(--dim);font-size:15px;cursor:pointer;padding:4px 2px}
+#moiX:hover{color:#fff}
+#moiCorps{overflow-y:auto;scrollbar-width:thin;padding:6px 16px 18px}
+.mT{font-size:9px;letter-spacing:.24em;color:var(--dim);margin:16px 0 9px;display:flex;align-items:baseline;gap:8px}
+.mT b{color:var(--mut);font-weight:400}
+.mStats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.mStats div{border:1px solid var(--panel-line);border-radius:6px;padding:8px 7px;background:rgba(255,255,255,.02)}
+.mStats b{display:block;font-size:15px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mStats span{font-size:8px;letter-spacing:.12em;color:var(--mut)}
+.carte7{display:grid;grid-template-columns:18px repeat(24,1fr);gap:2px;align-items:center}
+.carte7 em{font-style:normal;font-size:8px;color:var(--dim);letter-spacing:.05em}
+.carte7 i{aspect-ratio:1;border-radius:2px;background:rgba(255,255,255,.05)}
+.carte7 .h{font-size:7.5px;color:var(--dim);text-align:center}
+.suj{display:flex;align-items:center;gap:9px;margin:6px 0;font-size:10.5px}
+.suj label{width:96px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.suj .tr{flex:1;height:7px;border-radius:4px;background:rgba(255,255,255,.05);overflow:hidden}
+.suj .fl{height:100%;border-radius:4px}
+.suj em{font-style:normal;color:var(--mut);font-size:9.5px;width:26px;text-align:right}
+.fiche{position:relative;border:1px solid var(--panel-line);border-radius:9px;padding:12px 12px 10px;margin-bottom:9px;background:rgba(255,255,255,.025);transition:.4s}
+.fiche.neuve{border-color:rgba(63,232,168,.55);box-shadow:0 0 18px -6px rgba(63,232,168,.55)}
+.fiche .ft{display:flex;align-items:center;gap:9px}
+.fiche .gl{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:13px;flex:none}
+.fiche .ft b{flex:1;font-size:11px;letter-spacing:.08em;color:#fff;font-weight:500}
+.fiche .et{font-size:8px;letter-spacing:.14em;padding:2px 6px;border-radius:3px;border:1px solid}
+.fiche p{font-size:12px;line-height:1.6;margin:9px 0 8px;color:var(--txt)}
+.fiche .av{font-size:10px;color:var(--dim);line-height:1.5;margin:-2px 0 8px;padding-left:8px;border-left:2px solid rgba(255,255,255,.08)}
+.fiche .av s{color:var(--mut)}
+.fiche .pied{display:flex;align-items:center;gap:8px;font-size:9px;color:var(--dim);letter-spacing:.06em}
+.fiche .jauge{width:54px;height:4px;border-radius:2px;background:rgba(255,255,255,.07);overflow:hidden}
+.fiche .jauge i{display:block;height:100%}
+.fiche .ac{margin-left:auto;display:flex;gap:4px;opacity:.5;transition:.2s}
+.fiche:hover .ac{opacity:1}
+.fiche .ac button{background:none;border:1px solid var(--panel-line);color:var(--mut);font-size:10px;border-radius:4px;padding:2px 7px;cursor:pointer}
+.fiche .ac button:hover{color:#fff;border-color:rgba(255,255,255,.35)}
+.fiche textarea{width:100%;min-height:70px;background:rgba(0,0,0,.35);border:1px solid var(--panel-line);border-radius:6px;color:#fff;font:12px/1.55 var(--mono);padding:8px;margin:9px 0 6px;resize:vertical}
+.rec{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:11px}
+.rec span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec em{font-style:normal;font-size:8.5px;letter-spacing:.08em;padding:2px 6px;border-radius:3px;border:1px solid var(--panel-line);color:var(--mut)}
+.rec small{color:var(--dim);font-size:9px;white-space:nowrap}
+.mVide{font-size:11px;line-height:1.7;color:var(--mut);border:1px dashed var(--panel-line);border-radius:8px;padding:14px}
+@media (max-width:860px){#moi{top:58px;bottom:150px}}
 @media (max-width:860px){
   #hud{transform:translateX(-115%);transition:transform .3s;background:rgba(8,8,8,.96);bottom:150px}
   #hud.open{transform:none}
@@ -230,6 +285,7 @@ body.cherche #console{z-index:50}
     <button id="vCard" title="Carte 2D">▤</button>
   </div>
   <div id="status"><i></i><span>VECTEURS · …</span></div>
+  <button id="moiBtn" title="Ce que SYNAPSE sait de toi"><i></i>FICHE</button>
   <a href="/parametres" id="paramBtn" title="Paramètres et rangement">⚙</a>
   <button id="hudBtn">STATS</button>
 </header>
@@ -264,6 +320,11 @@ body.cherche #console{z-index:50}
   </div>
 </aside>
 
+<aside id="moi" class="glass" aria-label="Ce que SYNAPSE sait de toi">
+  <div id="moiTete"><div class="grow"><h2>CE QUE JE SAIS DE TOI</h2><p id="moiEtat">Lecture…</p></div>
+    <button id="moiAn" title="Titrer les nouveaux échanges et mettre la fiche à jour maintenant">ANALYSER</button><button id="moiX" aria-label="Fermer">✕</button></div>
+  <div id="moiCorps"></div>
+</aside>
 <aside id="insp" class="glass">
   <button id="inspClose" aria-label="Fermer">✕</button>
   <div id="inspBody"></div>
@@ -1020,7 +1081,7 @@ function renderInspector(n){
     '<h2>'+esc(n.name)+'</h2><h3>DONNÉES</h3>'+(rows||'<p class="mu" style="font-size:10px">—</p>')+
     '<div id="inspCorps"><p class="mu" style="font-size:10px">Lecture de l’entrée…</p></div>'+
     '<h3>SYNAPSES · '+E.filter(([a,b])=>a===n.id||b===n.id).length+'</h3>'+cxOf(n.id);
-  insp.classList.add('on');bindInsp();
+  if($('#moi').classList.contains('on'))ouvreMoi(false);insp.classList.add('on');bindInsp();
   const id=Number(String(n.id).replace(/^e/,''));
   if(!id)return;
   fetch('/v1/entry?id='+id,{credentials:'same-origin'}).then(r=>r.ok?r.json():null).then(e=>{
@@ -1258,7 +1319,7 @@ async function think(q){
     inspBody.innerHTML=badge(esc(domain.toUpperCase()),'#b18cff')+(arret?badge('ARRÊT '+(arret==='VIDE'?'∅':arret),BAR_C[arret]||'#9c9c9c'):'')+badge(esc(temps),'#9c9c9c')+(src&&src.verifie?badge('VÉRIFIÉ EN DIRECT','#3fe8a8'):'')+
       '<h2 style="font-size:14px">« '+qh+' »</h2><div class="ans">'+corps+(hits.length?'<h3>SOURCES · '+hits.length+'</h3>'+liste:'')+'</div>'+
       (moteurs.length?'<h3>TRACE</h3><div class="tl">'+moteurs.map(esc).join(' → ')+'</div>':'');
-    insp.classList.add('on');bindInsp();
+    if($('#moi').classList.contains('on'))ouvreMoi(false);insp.classList.add('on');bindInsp();
   };
   const surSources=()=>{
     const ids=(src.hits||[]).map(h=>'e'+h.id).filter(id=>byId[id]);
@@ -1521,6 +1582,140 @@ function loop(){
   renderer.render(scene,camera);
   if(first){first=false;$('#veil').classList.add('off');}
 }
+
+/* ============================== FICHE ==============================
+   Ce que SYNAPSE a compris de toi (les fiches, distillées de tes
+   échanges et affinées à chaque passe) et ce que les données montrent
+   (quand tu travailles, de quoi tu parles). Une fiche qui a bougé depuis
+   ta dernière visite est entourée : on voit ce qu'il vient d'apprendre
+   sans avoir à relire. */
+const MOI={data:null,vu:{},timer:null,edition:null};
+try{MOI.vu=JSON.parse(localStorage.getItem('syn_fiche_vue')||'{}');}catch{MOI.vu={};}
+const PALETTE=['#46e3ff','#3fe8a8','#b18cff','#ffb45e','#ff5c7a','#ffd75e','#5aa7ff','#6ef3d6','#f08fff','#93a4bd'];
+const teinte=t=>PALETTE[[...String(t||'')].reduce((a,c)=>(a*31+c.charCodeAt(0))%997,3)%PALETTE.length];
+const GLYPHES=[[/projet|objectif|chantier/,'◆'],[/travail|methode|facon|approche|rythme|habitude/,'⚙'],[/exigence|format|reponse|ton|langue|style|forme/,'✎'],[/outil|stack|materiel|techno|infra|choix/,'⌘'],[/niveau|competence|expertise/,'▲'],[/refus|agace|evite|interdit/,'⊘'],[/securite|anonym/,'⛨']];
+const glyphe=c=>(GLYPHES.find(([r])=>r.test(c))||[0,'●'])[1];
+const joli=c=>{const s=String(c||'').replace(/_/g,' ').replace(/\bfacon\b/,'façon').replace(/\bmateriel\b/,'matériel').replace(/\bsecurite\b/,'sécurité').replace(/\bcompetence/,'compétence');return s.charAt(0).toUpperCase()+s.slice(1);};
+const ETATS={nouveau:['NOUVEAU','var(--mint)'],affine:['AFFINÉ','var(--cyan)'],confirme:['CONFIRMÉ','var(--violet)'],remplace:['CHANGÉ','var(--amber)']};
+const JOURS=['L','M','M','J','V','S','D'];
+async function apiMoi(chemin,corps,methode){
+  const r=await fetch(chemin,{method:methode||(corps?'POST':'GET'),credentials:'same-origin',headers:corps?{'Content-Type':'application/json'}:{},body:corps?JSON.stringify(corps):undefined});
+  if(r.status===401){location.href='/login';throw new Error('session');}
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||'HTTP '+r.status);
+  return j;
+}
+function marqueVu(){
+  if(!MOI.data)return;
+  MOI.data.traits.forEach(t=>{MOI.vu[t.cle]=t.maj;});
+  try{localStorage.setItem('syn_fiche_vue',JSON.stringify(MOI.vu));}catch{}
+}
+const estNeuve=t=>MOI.vu[t.cle]!==t.maj;
+function dessineRythme(h){
+  const m=h.moments.map(t=>new Date(t)).filter(d=>!isNaN(d));
+  if(!m.length)return '<div class="mVide">Pas encore assez d’activité pour voir un rythme. Chaque échange avec l’assistant du Hub et chaque question posée ici s’ajoutent.</div>';
+  const grille=Array.from({length:7},()=>Array(24).fill(0));
+  const parJour=Array(7).fill(0),parHeure=Array(24).fill(0);
+  m.forEach(d=>{const j=(d.getDay()+6)%7,hh=d.getHours();grille[j][hh]++;parJour[j]++;parHeure[hh]++;});
+  const max=Math.max(...grille.flat());
+  const jMax=parJour.indexOf(Math.max(...parJour));
+  // Plage de 3 h la plus chargée.
+  let best=0,deb=0;for(let i=0;i<24;i++){const s=parHeure[i]+parHeure[(i+1)%24]+parHeure[(i+2)%24];if(s>best){best=s;deb=i;}}
+  const joursActifs=new Set(m.map(d=>d.toDateString())).size;
+  const nomsJ=['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+  return '<div class="mStats">'+
+    '<div title="'+fmtN(h.echanges)+' échanges avec l’assistant, '+fmtN(h.questions)+' questions posées ici"><b>'+fmtN(m.length)+'</b><span>INTERACTIONS · '+h.jours+' J</span></div>'+
+    '<div><b>'+fmtN(joursActifs)+'</b><span>JOURS ACTIFS</span></div>'+
+    '<div><b>'+nomsJ[jMax].slice(0,3).toUpperCase()+'</b><span>JOUR FORT</span></div>'+
+    '<div><b>'+deb+'h–'+((deb+3)%24)+'h</b><span>PLAGE FORTE</span></div></div>'+
+    '<div class="carte7" style="margin-top:12px" title="Activité par jour et par heure, dans ton fuseau">'+
+    grille.map((l,j)=>'<em>'+JOURS[j]+'</em>'+l.map((v,hh)=>'<i title="'+nomsJ[j]+' '+hh+'h : '+v+'" style="'+(v?'background:rgba(63,232,168,'+(.18+.82*v/max).toFixed(2)+')':'')+'"></i>').join('')).join('')+
+    '<em></em>'+Array.from({length:24},(_,hh)=>'<span class="h">'+(hh%6===0?hh:'')+'</span>').join('')+'</div>';
+}
+function dessineSujets(h){
+  if(!h.sujets.length)return '<div class="mVide">Les sujets apparaissent une fois les échanges titrés : c’est la première chose que fait ANALYSER.</div>';
+  const tot=h.sujets.reduce((a,s)=>a+s.n,0);
+  return h.sujets.map(s=>{const c=teinte(s.sujet);const p=Math.round(s.n/tot*100);
+    return '<div class="suj" title="Dernier : '+esc(quand(s.dernier))+'"><label style="color:'+c+'">'+esc(s.sujet)+'</label><div class="tr"><div class="fl" style="width:'+p+'%;background:'+c+'"></div></div><em>'+p+'%</em></div>';}).join('');
+}
+function dessineFiche(t){
+  const c=teinte(t.cle),[etL,etC]=t.origine==='declare'?['DÉCLARÉ','var(--gold)']:(ETATS[t.etat]||ETATS.nouveau);
+  const edite=MOI.edition===t.cle;
+  const avant=t.precedent&&(t.etat==='affine'||t.etat==='remplace')?'<div class="av">avant : <s>'+esc(t.precedent)+'</s></div>':'';
+  return '<div class="fiche'+(estNeuve(t)?' neuve':'')+'" data-cle="'+esc(t.cle)+'">'+
+    '<div class="ft"><span class="gl" style="background:'+c+'1f;color:'+c+'">'+glyphe(t.cle)+'</span><b>'+esc(joli(t.cle))+'</b>'+
+    '<span class="et" style="color:'+etC+';border-color:'+etC+'">'+etL+(t.etat==='confirme'&&t.n>1?' ×'+t.n:'')+'</span></div>'+
+    (edite?'<textarea data-ed>'+esc(t.valeur)+'</textarea><div class="pied"><span>Ce que tu écris ici fait foi : aucune analyse ne l’écrasera.</span><span class="ac" style="opacity:1"><button data-ok>ENREGISTRER</button><button data-annule>ANNULER</button></span></div>'
+      :'<p>'+esc(t.valeur)+'</p>'+avant+
+      '<div class="pied"><span class="jauge" title="Confiance '+Math.round(t.confiance*100)+' %"><i style="width:'+Math.round(t.confiance*100)+'%;background:'+c+'"></i></span>'+
+      '<span>'+(t.origine==='declare'?'dit par toi':'déduit')+' · '+esc(quand(t.maj))+'</span>'+
+      '<span class="ac"><button data-edit title="Corriger">✎</button><button data-oubli title="Oublier">✕</button></span></div>')+
+    '</div>';
+}
+function dessineMoi(){
+  const d=MOI.data;if(!d)return;
+  const a=d.attente||{},p=d.passe;
+  const etat=[];
+  if(d.enCours)etat.push('analyse en cours…');
+  else if(p)etat.push('dernière analyse '+quand(p.le)+(p.erreur?' · '+p.erreur:(p.titres||p.traits.length)?' · '+p.titres+' titre'+(p.titres>1?'s':'')+', '+p.traits.length+' fiche'+(p.traits.length>1?'s':'')+' touchée'+(p.traits.length>1?'s':''):' · rien de nouveau'));
+  else etat.push('pas encore d’analyse depuis le démarrage');
+  if(d.derniereUtile&&(!p||d.derniereUtile.le!==p.le))etat.push('dernier apprentissage '+quand(d.derniereUtile.le));
+  if(a.echanges)etat.push(a.echanges+' échange'+(a.echanges>1?'s':'')+' à lire');
+  if(a.titres)etat.push(a.titres+' à titrer');
+  $('#moiEtat').textContent=etat.join(' · ');
+  $('#moiAn').disabled=!!d.enCours;$('#moiAn').textContent=d.enCours?'ANALYSE…':'ANALYSER';
+  const neuves=d.traits.filter(estNeuve).length;
+  const h=d.habitudes;
+  $('#moiCorps').innerHTML=
+    '<div class="mT">FICHE <b>'+d.traits.length+(neuves?' · '+neuves+' nouveauté'+(neuves>1?'s':''):'')+'</b></div>'+
+    (d.traits.length?d.traits.slice().sort((x,y)=>(estNeuve(y)-estNeuve(x))||String(y.maj).localeCompare(String(x.maj))).map(dessineFiche).join('')
+      :'<div class="mVide">Rien d’appris sur toi pour l’instant. La fiche se remplit en relisant tes échanges avec l’assistant du Hub : tes projets, ta façon de travailler, ce que tu exiges. '+(a.echanges?'<b style="color:#fff">'+a.echanges+' échange'+(a.echanges>1?'s':'')+'</b> attendent — ANALYSER lance la lecture.':'')+'</div>')+
+    '<div class="mT">RYTHME</div>'+dessineRythme(h)+
+    '<div class="mT">DE QUOI TU PARLES</div>'+dessineSujets(h)+
+    (h.recents.length?'<div class="mT">DERNIERS ÉCHANGES</div>'+h.recents.map(r=>'<div class="rec"><span title="'+esc(r.title)+'">'+esc(r.title)+'</span>'+(r.sujet?'<em style="color:'+teinte(r.sujet)+'">'+esc(r.sujet)+'</em>':'')+'<small>'+esc(quand(r.occurred_at))+'</small></div>').join(''):'')+
+    (d.agents.length?'<div class="mT">LEÇONS DES MODÈLES</div>'+d.agents.map(g=>'<div class="rec"><span>'+esc(g.agent)+'</span><em>'+g.n+' leçon'+(g.n>1?'s':'')+'</em><small>'+esc(quand(g.maj))+'</small></div>').join(''):'');
+  document.querySelectorAll('#moiCorps .fiche').forEach(f=>{
+    const cle=f.dataset.cle;
+    const b=s=>f.querySelector(s);
+    if(b('[data-edit]'))b('[data-edit]').onclick=()=>{MOI.edition=cle;dessineMoi();const ta=document.querySelector('#moiCorps [data-ed]');ta&&ta.focus();};
+    if(b('[data-annule]'))b('[data-annule]').onclick=()=>{MOI.edition=null;dessineMoi();};
+    if(b('[data-ok]'))b('[data-ok]').onclick=async()=>{
+      try{await apiMoi('/v1/moi/trait',{cle,valeur:b('[data-ed]').value},'PUT');MOI.edition=null;toast('Fiche corrigée');chargeMoi();}catch(e){toast(e.message);}
+    };
+    if(b('[data-oubli]'))b('[data-oubli]').onclick=async()=>{
+      if(!confirm('Oublier « '+joli(cle)+' » ?'))return;
+      try{await apiMoi('/v1/moi/trait?cle='+encodeURIComponent(cle),null,'DELETE');toast('Oublié');chargeMoi();}catch(e){toast(e.message);}
+    };
+  });
+}
+async function chargeMoi(){
+  try{
+    MOI.data=await apiMoi('/v1/moi');
+    $('#moiBtn').classList.toggle('neuf',MOI.data.traits.some(estNeuve));
+    if($('#moi').classList.contains('on')&&MOI.edition==null)dessineMoi();
+  }catch(e){if($('#moi').classList.contains('on'))$('#moiEtat').textContent='Fiche indisponible : '+e.message;}
+}
+function ouvreMoi(on){
+  const el=$('#moi');const ouvert=on==null?!el.classList.contains('on'):on;
+  if(!ouvert&&MOI.data)marqueVu();
+  el.classList.toggle('on',ouvert);$('#moiBtn').classList.toggle('act',ouvert);
+  clearInterval(MOI.timer);
+  if(ouvert){if(state.selected)clearSelection();dessineMoi();chargeMoi();MOI.timer=setInterval(chargeMoi,15000);}
+  else{MOI.edition=null;$('#moiBtn').classList.toggle('neuf',!!MOI.data&&MOI.data.traits.some(estNeuve));}
+}
+$('#moiBtn').onclick=()=>ouvreMoi();
+$('#moiX').onclick=()=>ouvreMoi(false);
+$('#moiAn').onclick=async()=>{
+  $('#moiAn').disabled=true;$('#moiAn').textContent='ANALYSE…';$('#moiEtat').textContent='je relis tes échanges…';
+  try{
+    const r=await apiMoi('/v1/moi/analyser',{});
+    toast(r.erreur?r.erreur:(r.titres+' titre'+(r.titres>1?'s':'')+' · '+r.traits.length+' fiche'+(r.traits.length>1?'s':'')+' mise'+(r.traits.length>1?'s':'')+' à jour'));
+  }catch(e){toast(e.message);}
+  await chargeMoi();dessineMoi();
+};
+addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#moi').classList.contains('on'))ouvreMoi(false);});
+chargeMoi();setInterval(()=>{if(!$('#moi').classList.contains('on'))chargeMoi();},120000);
+
 loop();
 if(!reduced)setInterval(()=>{
   if(!state.selected&&nodes.length)spawnSignal(nodes[Math.floor(Math.random()*nodes.length)].id,false);
