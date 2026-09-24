@@ -322,7 +322,7 @@ body.cherche #console{z-index:50}
 
 <aside id="moi" class="glass" aria-label="Ce que SYNAPSE sait de toi">
   <div id="moiTete"><div class="grow"><h2>CE QUE JE SAIS DE TOI</h2><p id="moiEtat">Lecture…</p></div>
-    <button id="moiAn" title="Titrer les nouveaux échanges et mettre la fiche à jour maintenant">ANALYSER</button><button id="moiX" aria-label="Fermer">✕</button></div>
+    <button id="moiAn" title="Titrer les nouveaux échanges et mettre la fiche à jour maintenant — Maj-clic : tout relire depuis le début">ANALYSER</button><button id="moiX" aria-label="Fermer">✕</button></div>
   <div id="moiCorps"></div>
 </aside>
 <aside id="insp" class="glass">
@@ -1705,11 +1705,14 @@ function ouvreMoi(on){
 }
 $('#moiBtn').onclick=()=>ouvreMoi();
 $('#moiX').onclick=()=>ouvreMoi(false);
-$('#moiAn').onclick=async()=>{
-  $('#moiAn').disabled=true;$('#moiAn').textContent='ANALYSE…';$('#moiEtat').textContent='je relis tes échanges…';
+/* Maj-clic : tout relire depuis le début (après un changement de consigne,
+   ou pour faire le ménage dans une fiche mal partie). */
+$('#moiAn').onclick=async e=>{
+  const tout=!!(e&&e.shiftKey);
+  $('#moiAn').disabled=true;$('#moiAn').textContent='ANALYSE…';$('#moiEtat').textContent=tout?'je relis tout l’historique…':'je relis tes échanges…';
   try{
-    const r=await apiMoi('/v1/moi/analyser',{});
-    toast(r.erreur?r.erreur:(r.titres+' titre'+(r.titres>1?'s':'')+' · '+r.traits.length+' fiche'+(r.traits.length>1?'s':'')+' mise'+(r.traits.length>1?'s':'')+' à jour'));
+    const r=await apiMoi('/v1/moi/analyser',{toutRelire:tout});
+    toast(r.erreur?r.erreur:(r.titres+' titre'+(r.titres>1?'s':'')+' · '+r.traits.length+' fiche'+(r.traits.length>1?'s':'')+' mise'+(r.traits.length>1?'s':'')+' à jour'+((r.oublies||[]).length?' · '+r.oublies.length+' retirée'+(r.oublies.length>1?'s':''):'')));
   }catch(e){toast(e.message);}
   await chargeMoi();dessineMoi();
 };

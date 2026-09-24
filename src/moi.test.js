@@ -119,3 +119,22 @@ test('habitudes : instants bruts, sujets comptés', () => {
   assert.equal(h.sujets[0].n, 2);
   assert.equal(h.recents[0].title, 'Second titre utile');
 });
+
+test('consolidation : le modèle fait le ménage, sans toucher à ce qui a été dit', async () => {
+  const db = base();
+  APP.poser(db, { agent: APP.COMMUN, cle: 'probleme', valeur: 'Répare les 2 workflows.', confiance: 0.8 });
+  APP.poser(db, { agent: APP.COMMUN, cle: 'langue', valeur: 'Français avec des fautes.', confiance: 0.8 });
+  APP.poser(db, { agent: APP.COMMUN, cle: 'outil', valeur: 'Tu utilises SYNAPSE.', confiance: 0.8 });
+  APP.poser(db, { agent: APP.COMMUN, cle: 'format', valeur: 'Un seul bloc de commandes.', confiance: 0.9, origine: 'declare' });
+  echange(db, 'répare les workflows', 'ok');
+  const demander = async () => JSON.stringify({
+    traits: [{ portee: 'commun', cle: 'outils', valeur: 'Tu utilises SYNAPSE, le Hub et Ollama.', confiance: 0.6, evolution: 'nouveau' },
+             { portee: 'commun', cle: 'langue', valeur: 'Tu écris en français.', confiance: 0.8, evolution: 'contredit' }],
+    oublier: ['probleme', 'outil', 'format', 'langue', 'inconnue'],
+  });
+  const r = await APP.consolider(db, { agent: 'qwen', demander });
+  const cles = APP.profil(db, 'qwen').map(t => t.cle).sort();
+  assert.deepEqual(cles, ['format', 'langue', 'outils'], 'demande ponctuelle et doublon retirés, le déclaré reste');
+  assert.deepEqual(r.oublies.map(o => o.cle).sort(), ['outil', 'probleme']);
+  assert.equal(APP.profil(db, 'qwen').find(t => t.cle === 'langue').valeur, 'Tu écris en français.', 'un trait réécrit dans la même passe n’est pas oublié');
+});

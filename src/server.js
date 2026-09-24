@@ -222,7 +222,7 @@ function passeApprentissage(raison) {
   if (passeEnCours) return passeEnCours;
   passeEnCours = (async () => {
     const t0 = Date.now();
-    const bilan = { raison, titres: 0, lus: 0, traits: [], erreur: null };
+    const bilan = { raison, titres: 0, lus: 0, traits: [], oublies: [], erreur: null };
     try {
       for (let i = 0; i < 6; i++) {
         const r = await MOI.titrerEchanges(db, { demander: demanderAuModele });
@@ -234,16 +234,19 @@ function passeApprentissage(raison) {
         const c = await APP.consoliderTous(db, { demander: demanderAuModele });
         bilan.lus = c.lus || 0;
         bilan.traits = c.traits || [];
+        bilan.oublies = c.oublies || [];
         if (c.raison && c.raison !== 'rien de nouveau') bilan.erreur = bilan.erreur || c.raison;
       }
-      if (bilan.titres || bilan.traits.length)
-        console.log(`[synapse] apprentissage (${raison}) : ${bilan.titres} titre(s), ${bilan.traits.length} trait(s) sur ${bilan.lus} échange(s)`);
+      /* Une passe demandée à la main se journalise toujours, même vide :
+         « rien ne s'est passé » est une réponse, le silence n'en est pas une. */
+      if (bilan.titres || bilan.traits.length || bilan.oublies.length || bilan.erreur || raison !== 'périodique')
+        console.log(`[synapse] apprentissage (${raison}) : ${bilan.titres} titre(s), ${bilan.traits.length} trait(s), ${bilan.oublies.length} oublié(s) sur ${bilan.lus} échange(s)${bilan.erreur ? ' — ' + bilan.erreur : ''}`);
     } catch (e) {
       bilan.erreur = e.message;
       console.warn('[synapse] apprentissage', e.message);
     }
     dernierePasse = { ...bilan, le: new Date().toISOString(), ms: Date.now() - t0 };
-    if (bilan.titres || bilan.traits.length) derniereUtile = dernierePasse;
+    if (bilan.titres || bilan.traits.length || bilan.oublies.length) derniereUtile = dernierePasse;
     return dernierePasse;
   })().finally(() => { passeEnCours = null; });
   return passeEnCours;
@@ -868,7 +871,12 @@ const routes = {
 
   'POST /v1/moi/analyser': async (req, res, ctx) => {
     if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session humaine' });
-    send(res, 200, await passeApprentissage('manuel'));
+    const b = await readBody(req).catch(() => ({}));
+    /* Tout relire : utile quand la consigne a changé, ou pour repartir
+       d'une fiche mal partie. La fiche n'est pas vidée — elle est
+       relue, corrigée et élaguée par le modèle. */
+    if (b && b.toutRelire) db.prepare(`UPDATE consolidation SET dernier_id=0`).run();
+    send(res, 200, await passeApprentissage(b && b.toutRelire ? 'relecture' : 'manuel'));
   },
 
   /* Corriger une fiche : ce que tu écris devient « déclaré », et aucune

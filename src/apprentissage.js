@@ -382,7 +382,7 @@ function briefTexte(b) {
 const CONSIGNE = `Tu lis des échanges entre un utilisateur et un assistant technique qui gère son homelab.
 Tu n'y réponds pas : tu apprends à CONNAÎTRE l'utilisateur, et tu tiens sa fiche à jour.
 
-Renvoie UNIQUEMENT du JSON : {"traits":[{"portee":"commun"|"agent","cle":"...","valeur":"...","confiance":0.0-1.0,"evolution":"nouveau"|"affine"|"contredit"}]}
+Renvoie UNIQUEMENT du JSON : {"traits":[{"portee":"commun"|"agent","cle":"...","valeur":"...","confiance":0.0-1.0,"evolution":"nouveau"|"affine"|"contredit"}],"oublier":["cle",...]}
 
 Ce qu'on cherche sur l'UTILISATEUR (portee "commun") :
 - ses projets en cours et ce qu'il cherche à obtenir avec ;
@@ -398,8 +398,15 @@ La fiche actuelle est donnée plus bas. Règles :
 - Sujet absent de la fiche : "nouveau", clé courte sans accent ni espace (projets, facon_de_travailler, exigences, outils, niveau_reseau…).
 - "valeur" : une ou deux phrases concrètes, à la deuxième personne (« Tu construis… », « Tu préfères… »), avec les vrais noms.
 - "confiance" : 0.8 si l'utilisateur l'a dit, 0.5 si c'est une régularité observée sur plusieurs échanges, 0.3 si c'est une impression.
-- Ne reformule pas une fiche sans rien y ajouter. N'invente rien : pas de trait → {"traits":[]}.
-Au plus 6 traits.`;
+- Ne reformule pas une fiche sans rien y ajouter. N'invente rien.
+
+Ce qui n'est PAS un trait :
+- une demande ponctuelle (« répare les 2 workflows », « liste les services ») : c'est une tâche, pas une habitude — sauf si elle revient souvent, et alors écris l'habitude ;
+- un jugement sur la personne : orthographe, intelligence, humeur, caractère. Jamais ;
+- une généralité vraie de n'importe qui.
+
+"oublier" : les clés de la FICHE ACTUELLE à retirer — une demande ponctuelle, un jugement, un doublon d'une autre clé (outil / outils : garde la meilleure, oublie l'autre), un trait que les échanges démentent.
+Au plus 6 traits. Rien à dire → {"traits":[],"oublier":[]}.`;
 
 /**
  * Relit les échanges non encore digérés et en tire des traits.
@@ -436,6 +443,17 @@ async function consolider(db, { agent, demander, ns = null, lot = LOT_CONSOLIDAT
   catch (e) { return { agent: a, lus: 0, traits: [], raison: `modèle indisponible : ${e.message}` }; }
 
   const traits = extraireTraits(brut);
+  /* Le ménage : une fiche qui ne fait que grossir garde ses erreurs de
+     jeunesse. Ce qui a été DÉCLARÉ par l'utilisateur ne se retire pas. */
+  const oublies = [];
+  const presentes = new Set(profil(db, a, { seuil: 0 }).map(t => `${t.portee}|${t.cle}`));
+  for (const cle of extraireOublis(brut)) {
+    for (const [portee, cible] of [['commun', COMMUN], ['agent', a]]) {
+      if (!presentes.has(`${portee}|${cle}`) || traits.some(t => t.cle === cle && t.portee === portee)) continue;
+      const r = db.prepare(`DELETE FROM profil WHERE agent=? AND cle=? AND origine <> 'declare'`).run(cible, cle);
+      if (r.changes) oublies.push({ portee, cle });
+    }
+  }
   const poses = [];
   for (const t of traits) {
     const cible = t.portee === 'agent' ? a : COMMUN;
@@ -449,7 +467,7 @@ async function consolider(db, { agent, demander, ns = null, lot = LOT_CONSOLIDAT
               ON CONFLICT(agent) DO UPDATE SET dernier_id=excluded.dernier_id, passes=passes+1, maj=excluded.maj`)
     .run(a, rows[rows.length - 1].id, (etat.passes || 0) + 1, maintenant());
 
-  return { agent: a, lus: rows.length, traits: poses };
+  return { agent: a, lus: rows.length, traits: poses, oublies };
 }
 
 /**
@@ -459,6 +477,19 @@ async function consolider(db, { agent, demander, ns = null, lot = LOT_CONSOLIDAT
  * Refuser ces réponses reviendrait à ne consolider qu'avec les modèles
  * les plus obéissants ; on récupère donc le premier objet bien formé.
  */
+function objetJson(brut) {
+  const s = String(brut || '');
+  try { return JSON.parse(s.trim()); } catch { /* plus bas */ }
+  const i = s.indexOf('{'), j = s.lastIndexOf('}');
+  if (i >= 0 && j > i) { try { return JSON.parse(s.slice(i, j + 1)); } catch { /* */ } }
+  return null;
+}
+function extraireOublis(brut) {
+  const o = objetJson(brut);
+  return (Array.isArray(o?.oublier) ? o.oublier : []).slice(0, 10)
+    .map(c => norm(c).replace(/\s+/g, '_').slice(0, 60)).filter(Boolean);
+}
+
 function extraireTraits(brut) {
   const s = String(brut || '');
   let obj = null;
@@ -529,6 +560,7 @@ async function consoliderTous(db, { demander, ns = null } = {}) {
     agents: out.map(r => r.agent),
     lus: out.reduce((n, r) => n + r.lus, 0),
     traits: out.flatMap(r => r.traits),
+    oublies: out.flatMap(r => r.oublies || []),
     raison: out.find(r => r.raison)?.raison,
   };
 }
@@ -575,6 +607,6 @@ function resumeGlobal(db, { limite = 6 } = {}) {
 module.exports = {
   resumeGlobal,
   migrate, profil, poser, oublier, corriger, correctionsPour,
-  brief, briefTexte, consolider, consoliderTous, agentsEnAttente, extraireTraits, evenementEchange, stats,
+  brief, briefTexte, consolider, consoliderTous, agentsEnAttente, extraireTraits, extraireOublis, evenementEchange, stats,
   agentId, confianceVive, COMMUN, MAX_TRAITS, DEMI_VIE_JOURS,
 };
