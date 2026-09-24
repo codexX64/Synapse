@@ -164,3 +164,32 @@ test('ménage : jugements retirés, doublons fusionnés, le déclaré intact', a
   assert.equal(ex.etat, 'affine');
   assert.deepEqual(m.oublies.sort(), ['ecriture', 'services_installes']);
 });
+
+test('échange complété : le résultat réel remplace la promesse, et le titre est à refaire', async () => {
+  const db = base();
+  const id = echange(db, 'passe synapse sur kimi', 'Je vais modifier la connexion de Synapse.\nRésultat : aucune action — réponse seule, rien n’a été modifié');
+  MOI.renomme(db, id, 'Synapse utilise maintenant Kimi via API', { titre: 'auto', sujet: 'SYNAPSE' });
+  assert.equal(MOI.aTitrer(db).length, 0);
+  MOI.remplaceCorps(db, id, 'Question : passe synapse sur kimi\nRéponse : ok\nRésultat : Modifier les réglages de synapse : appliqué, service relancé');
+  const e = db.prepare(`SELECT body, meta FROM entries WHERE id=?`).get(id);
+  assert.match(e.body, /appliqué, service relancé/);
+  assert.equal(JSON.parse(e.meta).titre, undefined, 'repart au titrage');
+  assert.equal(JSON.parse(e.meta).sujet, 'SYNAPSE', 'le reste de la méta est gardé');
+  assert.equal(MOI.aTitrer(db).length, 1);
+  const ch = db.prepare(`SELECT text, embedded FROM chunks WHERE entry_id=?`).all(id);
+  assert.ok(ch.length && ch.every(c => /appliqué/.test(c.text) && c.embedded === 0));
+  // La consigne de titrage distingue la demande du fait.
+  assert.match(MOI.CONSIGNE_TITRES, /« Résultat » fait foi/);
+  assert.match(MOI.CONSIGNE_TITRES, /demandé, non fait/);
+});
+
+test('migration : les anciens titres automatiques sont refaits, une seule fois', () => {
+  const db = base();
+  const a = echange(db, 'q1', 'r1'); const b = echange(db, 'q2', 'r2');
+  MOI.renomme(db, a, 'Titre affirmatif douteux', { titre: 'auto' });
+  db.prepare(`UPDATE entries SET title='Titre posé à la main' WHERE id=?`).run(b);
+  assert.equal(MOI.migrer(db), 1);
+  assert.equal(MOI.aTitrer(db).map(r => r.id).sort().join(), [a, b].sort().join(), 'le titre à la main n’avait pas de marque auto : il était déjà à titrer');
+  MOI.renomme(db, a, 'Nouveau titre honnête', { titre: 'auto' });
+  assert.equal(MOI.migrer(db), 0, 'jamais deux fois');
+});

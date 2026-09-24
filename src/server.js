@@ -179,6 +179,7 @@ APP.migrate(db);
 A.migrate(db);
 C.migrate(db);
 ACT.migrate(db);
+MOI.migrer(db);
 amorcerSourceHub(db);
 if (A.assureInitial(db))
   console.log('[synapse] aucun compte : admin / Temp1234 cree, a remplacer a la premiere connexion');
@@ -851,6 +852,17 @@ const routes = {
     const b = await readBody(req);
     if (!b.question) return send(res, 400, { error: 'question requise' });
     const evt = APP.evenementEchange({ agent: b.agent, question: b.question, reponse: b.reponse, ns: b.ns || 'shared' });
+    /* Le Hub envoie l'échange deux fois : à la réponse (« rien n'est encore
+       fait »), puis après exécution, avec le résultat réel. La seconde
+       version remplace la première au lieu de s'y ajouter, et le titre est
+       refait d'après ce qui s'est vraiment passé. */
+    const avant = db.prepare(`SELECT id, title FROM entries WHERE kind='echange' AND ref=? AND ns=? AND occurred_at >= ? ORDER BY id DESC LIMIT 1`)
+      .get(evt.ref, evt.ns, new Date(Date.now() - 86400000).toISOString());
+    if (avant) {
+      MOI.remplaceCorps(db, avant.id, evt.body);
+      apresEchange();
+      return send(res, 202, { ok: true, id: avant.id, updated: true });
+    }
     const r = ingest.insert(db, evt, ctx.src.name);
     if (r.ok && !r.duplicate) apresEchange();
     send(res, 202, r);
@@ -1143,7 +1155,7 @@ const routes = {
           + `\nROUTES PUBLIÉES : ${rt.length}${rtHs ? ' · hors ligne : ' + rtHs : ' · toutes en ligne'}`
           + (m ? `\n${m}` : '');
       }
-      prompt = construirePrompt({ q, extraits, bloc, avecEtat: !!etat, present: parleDuPresent });
+      prompt = construirePrompt({ q, extraits, bloc, avecEtat: !!etat, present: parleDuPresent, soi: etatDeSoi() });
       model = LLM.etat().modele;
       if (!veutFlux) try {
         answer = (await LLM.genere({ prompt, maxTokens: MAX_JETONS, timeout: LLM.etat().distant ? 45000 : 20000 })) || null;
@@ -1201,7 +1213,18 @@ const MAX_JETONS = 180;
    toujours « dis vérifié à l'instant » : sans agrégateur, le modèle
    l'écrivait quand même, et affirmait en direct ce qu'il tirait d'un
    vieux souvenir. */
-function construirePrompt({ q, extraits, bloc, avecEtat, present }) {
+/* Ce que SYNAPSE sait de lui-même sans rien chercher : quelle IA rédige,
+   quels vecteurs. C'est vérifiable à l'instant, et c'est la seule réponse
+   juste à « tu utilises quelle IA ? » — la mémoire, elle, ne contient que
+   ce qu'on en a DIT, y compris des promesses jamais tenues. */
+function etatDeSoi() {
+  const r = LLM.etat();
+  return `SYNAPSE LUI-MÊME — vérifié à l'instant, fait foi sur la mémoire :`
+    + `\n- rédige ses réponses avec ${r.distant ? `${r.fournisseur} (API), modèle ${r.modele}` : `Ollama, modèle ${r.modele}`}${r.repli ? ` (${r.repli})` : ''}`
+    + `\n- recherche par vecteurs avec Ollama, modèle ${embedder.model}${embedder.ok ? '' : ' — injoignable en ce moment'}`;
+}
+
+function construirePrompt({ q, extraits, bloc, avecEtat, present, soi = '' }) {
   const regles = [
     'Tu es la mémoire du homelab. Réponds en français, en 2 ou 3 phrases, sans préambule.',
     avecEtat
@@ -1211,6 +1234,8 @@ function construirePrompt({ q, extraits, bloc, avecEtat, present }) {
       ? 'La question porte sur l\'état présent : commence par dire que la mémoire ne permet pas de le vérifier en direct, puis donne ce qu\'elle en sait, avec la date de l\'extrait.'
       : '',
     'Cite les numéros [n] des extraits que tu utilises. N\'utilise que ces sources.',
+    'LES ÉCHANGES. Un extrait « Question / Réponse » rapporte une conversation : ce qu\'on a demandé et ce que l\'assistant a dit. Seule sa ligne « Résultat » dit ce qui a été fait. Sans elle, ou si elle dit que rien n\'est fait, ne présente JAMAIS l\'action comme faite : dis qu\'elle a été demandée.',
+    soi ? 'SUR SYNAPSE LUI-MÊME (son IA, ses vecteurs), le bloc « SYNAPSE LUI-MÊME » est vérifié à l\'instant et fait foi sur tout extrait : tu peux le dire au présent.' : '',
     'LIRE LE CORPS, PAS LE TITRE. Un titre résume, il n\'affirme rien : si le corps contredit le titre, le corps a raison.',
     'UNE FLÈCHE N\'EST PAS UNE DÉPENDANCE. « A → B » décrit un flux de données, pas un besoin de fonctionner.',
     'UNE RELATION DOIT ÊTRE ÉCRITE. « dépend de », « héberge », « a besoin de » ne s\'infèrent jamais : à défaut d\'un extrait qui l\'énonce, dis que la mémoire ne le décrit pas.',
@@ -1220,7 +1245,7 @@ function construirePrompt({ q, extraits, bloc, avecEtat, present }) {
     'RÉPONDS À LA QUESTION POSÉE. Si tu ne la comprends pas, demande une reformulation.',
     'Si les sources ne permettent pas de répondre, dis-le en une phrase, sans inventer.',
   ].filter(Boolean).join('\n');
-  return `${regles}\n\nMÉMOIRE :\n${extraits || '(rien de pertinent)'}${bloc}\n\nQUESTION : ${q}`;
+  return `${regles}\n\nMÉMOIRE :\n${extraits || '(rien de pertinent)'}${bloc}${soi ? `\n\n${soi}` : ''}\n\nQUESTION : ${q}`;
 }
 
 const vueHits = r => r.hits.map(h => ({ id: h.id, title: h.title, snippet: h.snippet, source: h.source,

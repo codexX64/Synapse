@@ -21,12 +21,19 @@
 const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+const ingest = require('./ingest.js');
+
 const LOT_TITRES = 12;
 const ESSAIS_MAX = 3;
 
 const CONSIGNE_TITRES = `Tu ranges les échanges entre un utilisateur et l'assistant de son homelab.
 Pour chaque échange, écris :
-- "titre" : 3 à 8 mots qui résument ce qui s'est passé ou ce qui a été établi. Pas la question recopiée, pas de point d'interrogation, pas de guillemets. Exemples : « Workflow quarantaine réparé et activé », « Hub joignable par le VPN seulement », « Latence des réponses SYNAPSE réduite ».
+- "titre" : 3 à 8 mots qui résument ce qui s'est RÉELLEMENT passé. Pas la question recopiée, pas de point d'interrogation, pas de guillemets.
+  La ligne « Résultat » fait foi. « Je vais modifier… », un plan proposé ou une promesse ne sont PAS des faits :
+  - Résultat « fait » / « réussi » → le fait : « Workflow quarantaine réparé et activé ».
+  - Résultat « rien n'est encore fait », « aucune action », « refusé », ou pas de ligne Résultat → la DEMANDE, en le disant : « Passage de SYNAPSE sur Kimi demandé, non fait ».
+  - Résultat « ÉCHEC » → l'échec : « Activation du workflow Scan en échec ».
+  - Une simple question → ce qui a été répondu : « Hub joignable par le VPN seulement ».
 - "sujet" : un ou deux mots pour le domaine (Workflows, Réseau, SYNAPSE, Docker, Sécurité, Services…). Reprends un sujet déjà utilisé quand il convient.
 
 Renvoie UNIQUEMENT du JSON : {"echanges":[{"n":1,"titre":"...","sujet":"..."}]}`;
@@ -69,6 +76,31 @@ function renomme(db, id, titre, ajout) {
     maj.run(titre + t.slice(e.title.length), c.embedded === -1 ? -1 : 0, c.id);
   }
   return true;
+}
+
+/* Le corps d'un échange complété (le résultat réel est arrivé) : nouveau
+   texte, nouveaux morceaux à vectoriser, et le titre à refaire. */
+function remplaceCorps(db, id, body) {
+  const e = db.prepare(`SELECT title FROM entries WHERE id=?`).get(id);
+  if (!e) return false;
+  db.prepare(`UPDATE entries SET body=?, meta=json_remove(COALESCE(meta,'{}'),'$.titre','$.titre_essais') WHERE id=?`).run(body, id);
+  db.prepare(`DELETE FROM chunks WHERE entry_id=?`).run(id);
+  const ins = db.prepare(`INSERT INTO chunks(entry_id,seq,text,embedded) VALUES(?,?,?,?)`);
+  ingest.chunk({ title: e.title, body }).forEach((p, i) => ins.run(id, i, p.text, p.embedded));
+  return true;
+}
+
+/* Une fois : les titres écrits avant que la ligne « Résultat » existe ont
+   pu présenter une promesse comme un fait (« SYNAPSE utilise maintenant
+   Kimi » pour un « je vais modifier » jamais suivi d'effet). On les refait
+   avec la consigne qui distingue la demande du fait. */
+function migrer(db) {
+  db.exec(`CREATE TABLE IF NOT EXISTS moi_migrations (nom TEXT PRIMARY KEY, le TEXT NOT NULL)`);
+  if (db.prepare(`SELECT 1 FROM moi_migrations WHERE nom='titres-resultat'`).get()) return 0;
+  const r = db.prepare(`UPDATE entries SET meta=json_remove(meta,'$.titre','$.titre_essais')
+                        WHERE kind='echange' AND json_extract(meta,'$.titre') = 'auto'`).run();
+  db.prepare(`INSERT INTO moi_migrations(nom,le) VALUES ('titres-resultat',?)`).run(new Date().toISOString());
+  return r.changes;
 }
 
 /**
@@ -144,4 +176,4 @@ function habitudes(db, { jours = 90 } = {}) {
   return { jours, moments: [...echanges, ...questions].sort().reverse(), echanges: echanges.length, questions: questions.length, sujets, recents };
 }
 
-module.exports = { titrerEchanges, habitudes, aTitrer, renomme, propre, questionDe, CONSIGNE_TITRES };
+module.exports = { remplaceCorps, migrer, titrerEchanges, habitudes, aTitrer, renomme, propre, questionDe, CONSIGNE_TITRES };
