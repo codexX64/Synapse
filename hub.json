@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.6.3",
+  "version": "1.7.0",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
   "repository": "https://github.com/codexX64/synapse",
@@ -71,6 +71,52 @@
       "type": "secret",
       "generate": "random:32",
       "help": "Créé par le Hub. Lui seul gère les comptes de SYNAPSE (page Utilisateurs), séparément du jeton de service."
+    },
+    {
+      "key": "LLM_FOURNISSEUR",
+      "label": "IA qui rédige les réponses",
+      "type": "select",
+      "default": "ollama",
+      "options": [
+        {
+          "value": "ollama",
+          "label": "Ollama (celui relié à SYNAPSE)"
+        },
+        {
+          "value": "kimi",
+          "label": "Kimi (Moonshot, par API)"
+        },
+        {
+          "value": "openai",
+          "label": "OpenAI (par API)"
+        },
+        {
+          "value": "compatible",
+          "label": "Autre API compatible OpenAI"
+        }
+      ],
+      "help": "Réponses, titres et fiche. La recherche par vecteurs reste sur Ollama dans tous les cas. Sans clé, SYNAPSE continue avec Ollama et l'indique."
+    },
+    {
+      "key": "LLM_CLE",
+      "label": "Clé d'API de l'IA",
+      "type": "secret",
+      "help": "Seulement pour Kimi, OpenAI ou une autre API. Kimi : platform.moonshot.ai → API Keys."
+    },
+    {
+      "key": "LLM_MODELE",
+      "label": "Modèle de l'IA",
+      "type": "string",
+      "default": "",
+      "help": "Vide = le modèle par défaut du fournisseur (Kimi : kimi-k2-0905-preview)."
+    },
+    {
+      "key": "LLM_URL",
+      "label": "Adresse de l'API",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Vide = l'adresse du fournisseur choisi. À remplir pour « Autre API compatible OpenAI » (se termine par /v1)."
     },
     {
       "key": "CONSOLIDATION_INTERVAL",

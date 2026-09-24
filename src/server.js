@@ -25,6 +25,7 @@ const inc = require('./incidents.js');
 const neu = require('./neurons.js');
 const APP = require('./apprentissage.js');
 const MOI = require('./moi.js');
+const LLM = require('./llm.js');
 const A = require('./auth.js');
 const C = require('./comptes.js');
 const ACT = require('./activite.js');
@@ -83,25 +84,15 @@ const CTX_MODELE = Number(process.env.OLLAMA_NUM_CTX || 8192);
 const GARDE = process.env.ANSWER_KEEP_ALIVE || '30m';
 
 async function reecritTitre(entree) {
-  if (!embedder.url) return null;
-  const r = await fetch(embedder.url + '/api/generate', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: process.env.ANSWER_MODEL || 'qwen3.8:9b', stream: false, think: false,
-      system: `Tu rediges des titres pour une base de connaissances technique.
+  let t = (await LLM.genere({
+    system: `Tu rediges des titres pour une base de connaissances technique.
 Un bon titre enonce le FOND : ce que le document affirme, pas le sujet qu'il aborde.
 « Installation » est mauvais. « api-interne s'installe par compose, sans base externe » est bon.
 Reponds par le titre seul : pas de guillemets, pas de point final, 6 a 14 mots, en francais.
 Si l'extrait ne permet pas d'ecrire un titre precis, reponds exactement : RIEN`,
-      prompt: `Titre actuel, trop vague : ${entree.title}\n\nDebut du document :\n${entree.extrait}\n\nEcris le titre.`,
-      keep_alive: GARDE,
-      options: { temperature: 0.2, num_predict: 60, num_ctx: CTX_MODELE }
-    }),
-    signal: AbortSignal.timeout(90000)
-  });
-  const j = await r.json();
-  if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status);
-  let t = String(j.response || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim().split('\n')[0];
+    prompt: `Titre actuel, trop vague : ${entree.title}\n\nDebut du document :\n${entree.extrait}\n\nEcris le titre.`,
+    maxTokens: 60, timeout: 90000,
+  })).split('\n')[0];
   t = t.replace(/^["'«»\s]+|["'«»\s.]+$/g, '').trim();
   if (/^RIEN\b/i.test(t) || t.length < 20) return null;
   if (t.toLowerCase() === String(entree.title).toLowerCase()) return null;
@@ -159,21 +150,10 @@ function videCookie(res) {
    ni où. Elle reçoit cette fonction ; si le modèle est absent, elle le
    signale et ne fait rien — une passe manquée n'est pas une panne. */
 async function demanderAuModele(consigne, texte) {
-  const model = process.env.ANSWER_MODEL || 'qwen3:8b';
-  const o = await fetch(embedder.url + '/api/generate', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model, prompt: `${consigne}\n\n---\n${texte}`, stream: false, think: false,
-      format: 'json', keep_alive: GARDE,
-      options: { temperature: 0.1, num_predict: 1000, num_ctx: CTX_MODELE },
-    }),
-    /* Passe de fond : personne n'attend. Le délai couvre un chargement
-       du modèle à froid, pas une réponse lente à une question. */
-    signal: AbortSignal.timeout(Number(process.env.APPRENTISSAGE_TIMEOUT || 180000)),
-  });
-  const j = await o.json();
-  if (!o.ok || j.error) throw new Error(j.error || 'HTTP ' + o.status);
-  return String(j.response || '');
+  /* Passe de fond : personne n'attend. Le délai couvre un chargement du
+     modèle à froid, pas une réponse lente à une question. */
+  return LLM.genere({ prompt: `${consigne}\n\n---\n${texte}`, json: true, temperature: 0.1, maxTokens: 1000,
+    timeout: Number(process.env.APPRENTISSAGE_TIMEOUT || 180000) });
 }
 
 function amorcerSourceHub(db) {
@@ -410,6 +390,7 @@ const routes = {
         activite: ACT.resume(db, { jours: Math.min(30, Number(ctx.url.searchParams.get('days') || 7)) }),
         apprentissage: APP.resumeGlobal(db, { limite: 6 }),
         embedder: { model: embedder.model, ok: embedder.ok },
+        redacteur: LLM.etat(),
         chunks: {
           embedded: db.prepare(`SELECT count(*) n FROM chunks WHERE embedded=1`).get().n,
           pending: db.prepare(`SELECT count(*) n FROM chunks WHERE embedded=0`).get().n,
@@ -1163,17 +1144,9 @@ const routes = {
           + (m ? `\n${m}` : '');
       }
       prompt = construirePrompt({ q, extraits, bloc, avecEtat: !!etat, present: parleDuPresent });
-      model = process.env.ANSWER_MODEL || 'qwen3:8b';
+      model = LLM.etat().modele;
       if (!veutFlux) try {
-        const o = await fetch(embedder.url + '/api/generate', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, prompt, stream: false, think: false, keep_alive: GARDE_MODELE,
-            options: { temperature: 0.2, num_predict: MAX_JETONS, num_ctx: CTX_MODELE } }),
-          signal: AbortSignal.timeout(20000)
-        });
-        const j = await o.json();
-        if (!o.ok || j.error) throw new Error(j.error || 'HTTP ' + o.status);
-        answer = String(j.response || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim() || null;
+        answer = (await LLM.genere({ prompt, maxTokens: MAX_JETONS, timeout: LLM.etat().distant ? 45000 : 20000 })) || null;
       } catch (e) {
         /* Un echec de l IA doit se VOIR : un modele absent chez Ollama
            repondait en 60 ms par un « model not found » que le catch
@@ -1275,30 +1248,8 @@ async function repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie,
     const ac = new AbortController();
     res.on('close', () => { if (!res.writableFinished) { coupe = true; ac.abort(); } });
     try {
-      const o = await fetch(embedder.url + '/api/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt, stream: true, think: false, keep_alive: GARDE_MODELE,
-          options: { temperature: 0.2, num_predict: MAX_JETONS, num_ctx: CTX_MODELE } }),
-        signal: AbortSignal.any([ac.signal, AbortSignal.timeout(60000)]),
-      });
-      if (!o.ok) { const j = await o.json().catch(() => ({})); throw new Error(j.error || 'HTTP ' + o.status); }
-      const dec = new TextDecoder();
-      let buf = '', dansPensee = false;
-      for await (const morceau of o.body) {
-        buf += dec.decode(morceau, { stream: true });
-        let i;
-        while ((i = buf.indexOf('\n')) >= 0) {
-          const ligne = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-          if (!ligne) continue;
-          const j = JSON.parse(ligne);
-          if (j.error) throw new Error(j.error);
-          let t = j.response || '';
-          /* Un modèle qui pense malgré think:false : on ne diffuse pas sa pensée. */
-          if (t.includes('<think>')) { dansPensee = true; t = t.split('<think>')[0]; }
-          if (dansPensee) { if (t.includes('</think>')) { dansPensee = false; t = t.split('</think>').pop(); } else t = ''; }
-          if (t) { texte += t; ev('jeton', { t }); }
-        }
-      }
+      await LLM.flux({ prompt, maxTokens: MAX_JETONS, signal: AbortSignal.any([ac.signal, AbortSignal.timeout(60000)]) },
+        t => { texte += t; ev('jeton', { t }); });
     } catch (e) {
       if (coupe) return;
       erreurIA = String(e && e.message || e).slice(0, 120);

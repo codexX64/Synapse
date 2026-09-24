@@ -28,6 +28,13 @@ services:
       OLLAMA_URL: {{provider.llm.embed.url}}
       EMBED_MODEL: {{provider.llm.embed.config.EMBED_MODEL}}
       ANSWER_MODEL: {{provider.llm.embed.config.DEFAULT_MODEL}}
+      # L'IA qui rédige (réponses, titres, fiche). Ollama par défaut ; Kimi
+      # ou une autre API compatible OpenAI si on la choisit dans les réglages
+      # du service. Les vecteurs restent sur Ollama ci-dessus.
+      LLM_FOURNISSEUR: {{config.LLM_FOURNISSEUR}}
+      LLM_CLE: {{config.LLM_CLE}}
+      LLM_MODELE: {{config.LLM_MODELE}}
+      LLM_URL: {{config.LLM_URL}}
       CONSOLIDATION_INTERVAL: {{config.CONSOLIDATION_INTERVAL}}
       AUTH_ORIGIN: {{config.AUTH_ORIGIN}}
 

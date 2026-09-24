@@ -39,6 +39,7 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;height:52px;display:flex;a
 #demoTag.vide{color:var(--amber);border-color:rgba(255,180,94,.35)}
 #demoTag.hs{color:var(--coral);border-color:rgba(255,92,122,.35)}
 #nsSel{background:rgba(255,255,255,.04);border:1px solid var(--panel-line);color:var(--mut);font:inherit;font-size:9px;letter-spacing:.16em;padding:3px 6px;border-radius:4px;margin-left:8px}
+#status.repli i{background:var(--amber);box-shadow:0 0 8px var(--amber)}
 #status.hs i{background:var(--coral);box-shadow:0 0 8px var(--coral);animation:none}
 #vide{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;padding-top:58vh;pointer-events:none;z-index:5}
 #vide.on{display:flex}
@@ -1228,7 +1229,10 @@ async function majInstrumentation(){
     if(st){
       const em=s.embedder||{};
       st.classList.toggle('hs',!em.ok);
-      st.querySelector('span').textContent='VECTEURS · '+(em.model||'?').toUpperCase()+(em.ok?'':' · INJOIGNABLE');
+      const rd=s.redacteur||{};
+      st.querySelector('span').textContent='VECTEURS · '+(em.model||'?').toUpperCase()+(em.ok?'':' · INJOIGNABLE')+(rd.modele?' — RÉPONSES · '+String(rd.distant?rd.fournisseur+' '+rd.modele:rd.modele).toUpperCase():'');
+      st.title=rd.repli||'';
+      st.classList.toggle('repli',!!rd.repli);
     }
   }catch(e){
     const st=$('#status');if(st){st.classList.add('hs');st.querySelector('span').textContent='STATISTIQUES INDISPONIBLES';}
