@@ -206,6 +206,9 @@ body.cherche #console{z-index:50}
 #moiTete .grow{flex:1;min-width:0}
 #moiAn{background:rgba(63,232,168,.08);border:1px solid rgba(63,232,168,.45);color:var(--mint);font-size:9.5px;letter-spacing:.14em;padding:7px 11px;border-radius:6px;cursor:pointer;white-space:nowrap}
 #moiAn:disabled{opacity:.55;cursor:default;animation:bl 1s infinite}
+#moiTout{background:none;border:none;color:var(--dim);font-size:9.5px;letter-spacing:.08em;padding:4px 0 0;cursor:pointer;text-decoration:underline dotted}
+#moiTout:hover{color:#fff}
+#moiTout:disabled{opacity:.4;cursor:default}
 #moiX{background:none;border:none;color:var(--dim);font-size:15px;cursor:pointer;padding:4px 2px}
 #moiX:hover{color:#fff}
 #moiCorps{overflow-y:auto;scrollbar-width:thin;padding:6px 16px 18px}
@@ -321,7 +324,7 @@ body.cherche #console{z-index:50}
 </aside>
 
 <aside id="moi" class="glass" aria-label="Ce que SYNAPSE sait de toi">
-  <div id="moiTete"><div class="grow"><h2>CE QUE JE SAIS DE TOI</h2><p id="moiEtat">Lecture…</p></div>
+  <div id="moiTete"><div class="grow"><h2>CE QUE JE SAIS DE TOI</h2><p id="moiEtat">Lecture…</p><button id="moiTout" title="Relire tout l’historique avec la consigne actuelle, puis faire le ménage">↻ tout relire</button></div>
     <button id="moiAn" title="Titrer les nouveaux échanges et mettre la fiche à jour maintenant — Maj-clic : tout relire depuis le début">ANALYSER</button><button id="moiX" aria-label="Fermer">✕</button></div>
   <div id="moiCorps"></div>
 </aside>
@@ -1707,15 +1710,17 @@ $('#moiBtn').onclick=()=>ouvreMoi();
 $('#moiX').onclick=()=>ouvreMoi(false);
 /* Maj-clic : tout relire depuis le début (après un changement de consigne,
    ou pour faire le ménage dans une fiche mal partie). */
-$('#moiAn').onclick=async e=>{
-  const tout=!!(e&&e.shiftKey);
-  $('#moiAn').disabled=true;$('#moiAn').textContent='ANALYSE…';$('#moiEtat').textContent=tout?'je relis tout l’historique…':'je relis tes échanges…';
+async function analyse(tout){
+  $('#moiAn').disabled=true;$('#moiTout').disabled=true;$('#moiAn').textContent='ANALYSE…';$('#moiEtat').textContent=tout?'je relis tout l’historique…':'je relis tes échanges…';
   try{
     const r=await apiMoi('/v1/moi/analyser',{toutRelire:tout});
-    toast(r.erreur?r.erreur:(r.titres+' titre'+(r.titres>1?'s':'')+' · '+r.traits.length+' fiche'+(r.traits.length>1?'s':'')+' mise'+(r.traits.length>1?'s':'')+' à jour'+((r.oublies||[]).length?' · '+r.oublies.length+' retirée'+(r.oublies.length>1?'s':''):'')));
+    toast(r.erreur?r.erreur:(r.titres+' titre'+(r.titres>1?'s':'')+' · '+r.traits.length+' fiche'+(r.traits.length>1?'s':'')+' mise'+(r.traits.length>1?'s':'')+' à jour'+((r.oublies||[]).length?' · '+r.oublies.length+' retirée'+(r.oublies.length>1?'s':''):'')+((r.fusions||[]).length?' · '+r.fusions.length+' fusion'+(r.fusions.length>1?'s':''):'')));
   }catch(e){toast(e.message);}
+  $('#moiTout').disabled=false;
   await chargeMoi();dessineMoi();
-};
+}
+$('#moiAn').onclick=e=>analyse(!!(e&&e.shiftKey));
+$('#moiTout').onclick=()=>analyse(true);
 addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#moi').classList.contains('on'))ouvreMoi(false);});
 chargeMoi();setInterval(()=>{if(!$('#moi').classList.contains('on'))chargeMoi();},120000);
 

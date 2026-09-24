@@ -138,3 +138,29 @@ test('consolidation : le modèle fait le ménage, sans toucher à ce qui a été
   assert.deepEqual(r.oublies.map(o => o.cle).sort(), ['outil', 'probleme']);
   assert.equal(APP.profil(db, 'qwen').find(t => t.cle === 'langue').valeur, 'Tu écris en français.', 'un trait réécrit dans la même passe n’est pas oublié');
 });
+
+test('ménage : jugements retirés, doublons fusionnés, le déclaré intact', async () => {
+  const db = base();
+  APP.poser(db, { agent: APP.COMMUN, cle: 'outil', valeur: 'Tu utilises SYNAPSE.', confiance: 0.8 });
+  // outils → rejoint la clé existante au lieu d'en créer une seconde
+  const r = APP.poser(db, { agent: APP.COMMUN, cle: 'outils', valeur: 'Tu utilises SYNAPSE et Ollama.', confiance: 0.8 });
+  assert.equal(r.cle, 'outil');
+  assert.equal(APP.poser(db, { agent: APP.COMMUN, cle: 'langue', valeur: 'Tu écris en français avec des fautes d’orthographe.' }).etat, 'refuse');
+  db.prepare(`INSERT INTO profil(agent,cle,valeur,confiance,n,origine,cree_le,maj) VALUES ('commun','ecriture','Beaucoup de fautes de grammaire.',0.8,1,'distille','x','x')`).run();
+  APP.poser(db, { agent: APP.COMMUN, cle: 'format_reponse', valeur: 'Réponses courtes.', confiance: 0.7 });
+  APP.poser(db, { agent: APP.COMMUN, cle: 'exigences', valeur: 'Tu veux du direct et du visuel.', confiance: 0.7 });
+  APP.poser(db, { agent: APP.COMMUN, cle: 'services_installes', valeur: 'Tu veux connaître les services installés.', confiance: 0.8 });
+  APP.poser(db, { agent: APP.COMMUN, cle: 'commandes', valeur: 'Un seul bloc.', origine: 'declare', confiance: 0.9 });
+  let vu = '';
+  const m = await APP.menage(db, { demander: async (c, t) => { vu = t; return JSON.stringify({
+    oublier: ['services_installes', 'commandes'],
+    fusionner: [{ garder: 'exigences', retirer: ['format_reponse', 'commandes'], valeur: 'Tu veux des réponses courtes, directes et visuelles.' }],
+  }); } });
+  assert.ok(!/grammaire/.test(vu), 'le jugement est retiré avant même l’appel');
+  const cles = APP.profil(db, 'x').map(t => t.cle).sort();
+  assert.deepEqual(cles, ['commandes', 'exigences', 'outil']);
+  const ex = APP.profil(db, 'x').find(t => t.cle === 'exigences');
+  assert.match(ex.valeur, /courtes, directes et visuelles/);
+  assert.equal(ex.etat, 'affine');
+  assert.deepEqual(m.oublies.sort(), ['ecriture', 'services_installes']);
+});

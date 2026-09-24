@@ -165,11 +165,28 @@ function profil(db, agent, { seuil = PLANCHER } = {}) {
  * mais en repartant d'une confiance modérée, parce qu'une observation
  * isolée ne doit pas effacer d'un coup dix confirmations.
  */
+/* Un jugement sur la personne n'est pas un trait : il n'aide aucune
+   réponse et n'a rien à faire dans une fiche. Le modèle a la consigne de
+   ne pas en écrire ; ce filtre tient quand il l'oublie. */
+const JUGEMENT = /\bfautes? d|orthograph|grammai|mal [ée]crit|intelligen|paresse/i;
+
+/* « outil » et « outils », « projet » et « projets » : le même sujet.
+   La clé déjà en place l'emporte, pour que la fiche évolue au lieu de
+   se dédoubler. */
+function cleExistante(db, agent, k) {
+  const racine = k.replace(/s$/, '');
+  const r = db.prepare(`SELECT cle FROM profil WHERE agent=? AND (cle=? OR cle=? OR cle=?)`)
+    .get(agent, k, racine, racine + 's');
+  return r ? r.cle : k;
+}
+
 function poser(db, { agent, cle, valeur, confiance = 0.5, origine = 'distille', exemple = '', evolution = '' }) {
   const a = agentId(agent);
-  const k = txt(cle, 60).toLowerCase().replace(/\s+/g, '_');
+  const brute = txt(cle, 60).toLowerCase().replace(/\s+/g, '_');
   const v = txt(valeur, 400);
-  if (!k || !v) return null;
+  if (!brute || !v) return null;
+  if (origine !== 'declare' && JUGEMENT.test(v)) return { cle: brute, etat: 'refuse' };
+  const k = cleExistante(db, a, brute);
   const now = maintenant();
   const ex = db.prepare(`SELECT * FROM profil WHERE agent=? AND cle=?`).get(a, k);
 
@@ -470,6 +487,62 @@ async function consolider(db, { agent, demander, ns = null, lot = LOT_CONSOLIDAT
   return { agent: a, lus: rows.length, traits: poses, oublies };
 }
 
+const CONSIGNE_MENAGE = `Voici la fiche qu'un assistant tient sur son utilisateur. Fais le ménage.
+
+Renvoie UNIQUEMENT du JSON : {"oublier":["cle",...],"fusionner":[{"garder":"cle","retirer":["cle",...],"valeur":"..."}]}
+
+- "oublier" : une demande ponctuelle (« tu veux connaître les services installés ») qui n'est pas une habitude ; un jugement sur la personne (orthographe, caractère) ; une banalité vraie de n'importe qui.
+- "fusionner" : plusieurs clés qui parlent du même sujet (outil / outils / services, format_reponse / exigences). Garde la meilleure clé, retire les autres, et écris dans "valeur" une seule phrase à la deuxième personne qui réunit ce qu'elles disent de juste.
+- Ne touche pas à une fiche correcte et unique. Rien à faire → {"oublier":[],"fusionner":[]}.`;
+
+/**
+ * Le ménage de la fiche, dans un appel à part.
+ *
+ * Demandé en même temps que la lecture des échanges, un petit modèle le
+ * faisait mal : il ajoutait sans retirer. Seul, sur la fiche seule, il
+ * voit les doublons. Ce qui a été déclaré à la main n'est jamais touché.
+ */
+async function menage(db, { agent = COMMUN, demander } = {}) {
+  const a = agent === COMMUN ? COMMUN : agentId(agent);
+  const rows = db.prepare(`SELECT cle,valeur,origine FROM profil WHERE agent=? ORDER BY cle`).all(a);
+  const out = { oublies: [], fusions: [] };
+  /* Filet déterministe d'abord : les jugements déjà enregistrés. */
+  for (const r of rows) {
+    if (r.origine !== 'declare' && JUGEMENT.test(r.valeur)) {
+      db.prepare(`DELETE FROM profil WHERE agent=? AND cle=?`).run(a, r.cle);
+      out.oublies.push(r.cle);
+    }
+  }
+  const restant = rows.filter(r => !out.oublies.includes(r.cle));
+  if (restant.length < 3 || typeof demander !== 'function') return out;
+  let o;
+  try { o = objetJson(await demander(CONSIGNE_MENAGE, restant.map(r => `- ${r.cle}${r.origine === 'declare' ? ' (déclaré)' : ''} : ${r.valeur}`).join('\n'))); }
+  catch (e) { return { ...out, erreur: e.message }; }
+  const touchable = new Set(restant.filter(r => r.origine !== 'declare').map(r => r.cle));
+  const cleOk = c => norm(c).replace(/\s+/g, '_').slice(0, 60);
+  for (const f of Array.isArray(o?.fusionner) ? o.fusionner.slice(0, 6) : []) {
+    const garder = cleOk(f?.garder);
+    const retirer = (Array.isArray(f?.retirer) ? f.retirer : []).map(cleOk).filter(c => c && c !== garder && touchable.has(c));
+    const v = txt(f?.valeur, 400);
+    if (!garder || !retirer.length || !v || JUGEMENT.test(v)) continue;
+    if (!restant.some(r => r.cle === garder)) continue;
+    if (touchable.has(garder)) {
+      const ex = db.prepare(`SELECT valeur FROM profil WHERE agent=? AND cle=?`).get(a, garder);
+      db.prepare(`UPDATE profil SET valeur=?, precedent=?, etat='affine', n=n+1, maj=? WHERE agent=? AND cle=?`)
+        .run(v, ex.valeur, maintenant(), a, garder);
+    }
+    for (const c of retirer) { db.prepare(`DELETE FROM profil WHERE agent=? AND cle=?`).run(a, c); touchable.delete(c); }
+    out.fusions.push({ garder, retirer });
+  }
+  for (const c of (Array.isArray(o?.oublier) ? o.oublier : []).map(cleOk)) {
+    if (!touchable.has(c)) continue;
+    db.prepare(`DELETE FROM profil WHERE agent=? AND cle=?`).run(a, c);
+    touchable.delete(c);
+    out.oublies.push(c);
+  }
+  return out;
+}
+
 /**
  * Sort la liste de traits d'une réponse de modèle.
  *
@@ -607,6 +680,6 @@ function resumeGlobal(db, { limite = 6 } = {}) {
 module.exports = {
   resumeGlobal,
   migrate, profil, poser, oublier, corriger, correctionsPour,
-  brief, briefTexte, consolider, consoliderTous, agentsEnAttente, extraireTraits, extraireOublis, evenementEchange, stats,
+  brief, briefTexte, consolider, consoliderTous, menage, JUGEMENT, agentsEnAttente, extraireTraits, extraireOublis, evenementEchange, stats,
   agentId, confianceVive, COMMUN, MAX_TRAITS, DEMI_VIE_JOURS,
 };

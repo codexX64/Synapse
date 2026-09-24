@@ -259,10 +259,17 @@ function passeApprentissage(raison) {
           if (!c.lus || !enAttenteDeFiche()) break;
         }
       }
+      /* Le ménage, quand la fiche a bougé ou qu'on l'a demandé. */
+      if (bilan.traits.length || raison === 'manuel' || raison === 'relecture' || raison === 'démarrage') {
+        const m = await APP.menage(db, { demander: demanderAuModele });
+        bilan.oublies.push(...m.oublies.map(cle => ({ portee: 'commun', cle })));
+        bilan.fusions = m.fusions;
+        if (m.erreur) bilan.erreur = bilan.erreur || m.erreur;
+      }
       /* Une passe demandée à la main se journalise toujours, même vide :
          « rien ne s'est passé » est une réponse, le silence n'en est pas une. */
       if (bilan.titres || bilan.traits.length || bilan.oublies.length || bilan.erreur || raison !== 'périodique')
-        console.log(`[synapse] apprentissage (${raison}) : ${bilan.titres} titre(s), ${bilan.traits.length} trait(s), ${bilan.oublies.length} oublié(s) sur ${bilan.lus} échange(s)${bilan.erreur ? ' — ' + bilan.erreur : ''}`);
+        console.log(`[synapse] apprentissage (${raison}) : ${bilan.titres} titre(s), ${bilan.traits.length} trait(s), ${bilan.oublies.length} oublié(s), ${(bilan.fusions || []).length} fusion(s) sur ${bilan.lus} échange(s)${bilan.erreur ? ' — ' + bilan.erreur : ''}`);
     } catch (e) {
       bilan.erreur = e.message;
       console.warn('[synapse] apprentissage', e.message);
