@@ -25,6 +25,7 @@ const inc = require('./incidents.js');
 const neu = require('./neurons.js');
 const APP = require('./apprentissage.js');
 const MOI = require('./moi.js');
+const CER = require('./cerveaux.js');
 const LLM = require('./llm.js');
 const A = require('./auth.js');
 const C = require('./comptes.js');
@@ -180,6 +181,7 @@ A.migrate(db);
 C.migrate(db);
 ACT.migrate(db);
 MOI.migrer(db);
+CER.migrate(db);
 amorcerSourceHub(db);
 if (A.assureInitial(db))
   console.log('[synapse] aucun compte : admin / Temp1234 cree, a remplacer a la premiere connexion');
@@ -292,8 +294,24 @@ function auth(req) {
   const hash = hashToken(brut);
   const row = db.prepare(
     `SELECT name, scope, channel, enabled FROM sources WHERE token_hash = ?`).get(hash);
-  if (!row || !row.enabled) return null;
-  return row;
+  if (row) return row.enabled ? row : null;
+  return jetonDeCerveau(brut, hash);
+}
+
+/* Un jeton de cerveau (cer_<nom>_<hmac>), dérivé par le Hub du jeton qu'il
+   a semé ici. Vérifié par le calcul, puis enregistré comme une source
+   ordinaire — canal D — pour apparaître, se désactiver et se compter comme
+   les autres. Il ne peut pas prendre le nom d'une source qui existe déjà
+   sous un autre canal (le Hub, TRIAGE…). */
+function jetonDeCerveau(brut, hash) {
+  const nom = CER.verifieJeton(process.env.HUB_TOKEN_SEED, brut);
+  if (!nom) return null;
+  const deja = db.prepare(`SELECT name, channel, enabled FROM sources WHERE name = ?`).get(nom);
+  if (deja && deja.channel !== 'D') return null;
+  if (deja && !deja.enabled) return null;
+  db.prepare(`INSERT INTO sources(name,token_hash,scope,channel,created_at) VALUES (?,?,'read+write','D',?)
+              ON CONFLICT(name) DO UPDATE SET token_hash=excluded.token_hash`).run(nom, hash, new Date().toISOString());
+  return { name: nom, scope: 'read+write', channel: 'D', enabled: 1 };
 }
 const adminDistant = src => !!(src && !src.humain && src.scope === 'admin');
 
@@ -818,11 +836,14 @@ const routes = {
       signature: b.signature,
       search, embed: t => embedder.embed(t),
     });
+    /* Les autres cerveaux concernés par la question, avec leur état : un
+       service qui ne sait pas répondre sait au moins qui sait. */
+    out.cerveaux = CER.pourBrief(db, b.q || b.query || '', b.agent || ctx.src.name);
     ACT.noter(db, { route: 'brief', source: ctx.src.name, q: b.q || b.query || '',
       ms: out.ms != null ? out.ms : performance.now() - tBrief, decision: null,
       arret: (out.memoire || []).length ? 'L1' : 'VIDE',
       hits: (out.memoire || []).length });
-    send(res, 200, { ...out, texte: APP.briefTexte(out) });
+    send(res, 200, { ...out, texte: [APP.briefTexte(out), CER.texteBrief(out.cerveaux)].filter(Boolean).join('\n') });
   },
 
   /* Le retour d'expérience de l'assistant : ce qu'il a dit de faux, et
@@ -872,6 +893,38 @@ const routes = {
      La fiche (ce qu'un modèle a compris) et les habitudes (ce que les
      données montrent). Lecture pour toute session ; modifier la fiche
      est un geste humain. */
+  /* ---------- cerveaux ----------
+     Chaque IA de service a sa fiche ici : ce qu'elle sait, ce qu'elle fait,
+     ses règles, son état. Le nom vient toujours du jeton : un service ne
+     peut écrire que SA fiche. */
+  'GET /v1/cerveaux': async (req, res, ctx) => {
+    if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
+    send(res, 200, { cerveaux: CER.tous(db) });
+  },
+  'PUT /v1/cerveaux/moi': async (req, res, ctx) => {
+    if (ctx.src.humain || !can(ctx.src, 'write')) return send(res, 403, { error: 'réservé aux services (portée write)' });
+    const r = CER.inscrire(db, ctx.src.name, await readBody(req));
+    send(res, r.ok ? 200 : 400, r.ok ? r : { error: r.raison });
+  },
+  'PUT /v1/cerveaux/moi/etat': async (req, res, ctx) => {
+    if (ctx.src.humain || !can(ctx.src, 'write')) return send(res, 403, { error: 'réservé aux services (portée write)' });
+    const b = await readBody(req);
+    const r = CER.poserEtat(db, ctx.src.name, b.etat);
+    send(res, r.ok ? 200 : 409, r.ok ? r : { error: r.raison });
+  },
+  'DELETE /v1/cerveaux/moi': async (req, res, ctx) => {
+    if (ctx.src.humain || !can(ctx.src, 'write')) return send(res, 403, { error: 'réservé aux services (portée write)' });
+    send(res, 200, { retire: CER.retirer(db, ctx.src.name) });
+  },
+  'POST /v1/cerveaux/orienter': async (req, res, ctx) => {
+    if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
+    const b = await readBody(req);
+    const t0 = performance.now();
+    const r = CER.orienter(db, String(b.q || '').slice(0, 2000), { depuis: ctx.src.name, limite: Math.min(5, Number(b.limite) || 3) });
+    ACT.noter(db, { route: 'orienter', source: ctx.src.name, q: String(b.q || ''), ms: performance.now() - t0, decision: null, arret: r.cerveaux.length ? 'L0' : 'VIDE', hits: r.cerveaux.length });
+    send(res, 200, r);
+  },
+
   'GET /v1/moi': async (req, res, ctx) => {
     if (!can(ctx.src, 'read') && !pilote(ctx.src)) return send(res, 403, { error: 'portée read requise' });
     const traits = APP.profil(db, APP.COMMUN, { seuil: 0.1 }).filter(t => t.portee === 'commun');

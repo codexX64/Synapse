@@ -84,7 +84,29 @@ POST /v1/recall              retrouver une résolution passée
 POST /v1/neurons             enregistrer une résolution
 GET  /v1/graph               le graphe
 GET  /v1/stats               compteurs
+
+GET    /v1/cerveaux              l'annuaire des cerveaux (les IA des services)
+PUT    /v1/cerveaux/moi          poser sa fiche : titre, périmètre, sujets, actions, règles, adresse
+PUT    /v1/cerveaux/moi/etat     poser son état du moment (court résumé)
+POST   /v1/cerveaux/orienter     « qui sait ça ? » — et, pour une action, qui a le droit de la faire
 ```
+
+## Les cerveaux
+
+SYNAPSE est le cerveau du homelab ; chaque service qui a son IA y a un
+mini-cerveau. Sa fiche dit ce qu'il sait et ce qu'il fait ; son état dit
+où il en est ; ses échanges et ses corrections, qui passaient déjà par
+`/v1/echange` et `/v1/apprendre`, font ses traits appris.
+
+Le brief (`/v1/brief`) renvoie en plus les **autres** cerveaux concernés
+par la question, avec leur état : une IA qui ne sait pas répondre sait au
+moins qui sait. Une action hors de son périmètre (« crée des workflows »
+depuis MapMyLAN) est renvoyée à son propriétaire — un cerveau n'en pilote
+jamais un autre.
+
+Un service installé par le Hub reçoit un jeton de cerveau dérivé du jeton
+du Hub (`cer_<nom>_<hmac>`) : il ne vaut que pour ce nom, n'écrit que sa
+propre fiche, et changer le jeton du Hub les révoque tous.
 
 Serveur MCP sur `/mcp` pour les agents qui parlent ce protocole.
 
