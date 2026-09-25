@@ -161,9 +161,10 @@ function orienter(db, q, { depuis = null, limite = 3 } = {}) {
 }
 
 /** Pour le brief : les AUTRES cerveaux concernés par la question, avec leur état. */
-function pourBrief(db, q, agent) {
+function pourBrief(db, q, soi) {
   if (!String(q || '').trim()) return [];
-  return orienter(db, q, { depuis: agent, limite: 3 }).cerveaux.filter(c => !c.lui && c.score >= 2);
+  const moi = new Set([].concat(soi || []).filter(Boolean));
+  return orienter(db, q, { limite: 4 }).cerveaux.filter(c => !moi.has(c.nom) && c.score >= 2).slice(0, 3);
 }
 
 function texteBrief(cerveaux) {

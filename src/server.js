@@ -838,7 +838,7 @@ const routes = {
     });
     /* Les autres cerveaux concernés par la question, avec leur état : un
        service qui ne sait pas répondre sait au moins qui sait. */
-    out.cerveaux = CER.pourBrief(db, b.q || b.query || '', b.agent || ctx.src.name);
+    out.cerveaux = CER.pourBrief(db, b.q || b.query || '', [b.agent, ctx.src.name]);
     ACT.noter(db, { route: 'brief', source: ctx.src.name, q: b.q || b.query || '',
       ms: out.ms != null ? out.ms : performance.now() - tBrief, decision: null,
       arret: (out.memoire || []).length ? 'L1' : 'VIDE',
