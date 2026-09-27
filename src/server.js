@@ -26,6 +26,7 @@ const neu = require('./neurons.js');
 const APP = require('./apprentissage.js');
 const MOI = require('./moi.js');
 const CER = require('./cerveaux.js');
+const SRC = require('./sources.js');
 const LLM = require('./llm.js');
 const A = require('./auth.js');
 const C = require('./comptes.js');
@@ -400,6 +401,9 @@ const routes = {
   'GET /v1/stats': async (req, res, ctx) => {
     if (!canIncident(ctx.src, 'read') && ctx.src?.scope !== 'admin')
       return send(res, 403, { error: 'portée read requise' });
+    // Qui écrit ici, combien, depuis quand : des noms et des comptes, jamais un contenu.
+    if (ctx.url.searchParams.get('scope') === 'sources')
+      return send(res, 200, { sources: SRC.parSource(db) });
     if (ctx.url.searchParams.get('scope') === 'neurons')
       return send(res, 200, neu.stats(db, Number(ctx.url.searchParams.get('days') || 30)));
     /* Ce que l'interface affiche dans son panneau d'instrumentation :

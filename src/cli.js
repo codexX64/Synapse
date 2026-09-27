@@ -61,6 +61,15 @@ function sourceRotate(name) {
   console.log("L'ancien ne fonctionne plus. Mets à jour le service avant son prochain envoi.");
 }
 
+/* Changer la portée d'une source garde son jeton : rien à redistribuer. */
+function sourceScope(name, scope) {
+  if (!name || !scope) die('usage : source scope <nom> <read|write|read+write>');
+  if (!['read', 'write', 'read+write'].includes(scope)) die('portée : read, write ou read+write');
+  const r = db.prepare(`UPDATE sources SET scope=? WHERE name=?`).run(scope, name);
+  if (!Number(r.changes)) die('source inconnue : ' + name);
+  console.log(`source « ${name} » : portée ${scope}`);
+}
+
 function sourceList() {
   const rows = db.prepare(
     `SELECT name,scope,channel,enabled,last_seen,n_events FROM sources ORDER BY name`).all();
@@ -188,6 +197,8 @@ function usage() {
   source add <nom> [--scope write|read|read+write|incidents|admin] [--channel A|B|C]
   source rotate <nom>
   source list
+  source scope <nom> <read|write|read+write>
+  simulation purger
   prompt set <agent> --file <chemin>
   stats
 
@@ -210,7 +221,14 @@ switch (cmd) {
     if (rest[0] === 'add')         sourceAdd(rest[1]);
     else if (rest[0] === 'rotate') sourceRotate(rest[1]);
     else if (rest[0] === 'list')   sourceList();
+    else if (rest[0] === 'scope')  sourceScope(rest[1], rest[2]);
     else usage();
+    break;
+  case 'simulation':
+    if (rest[0] === 'purger') {
+      const r = require('./sources.js').purgerSimulation(db);
+      console.log(`${r.supprimees} entrée(s) simulée(s) supprimée(s)`);
+    } else usage();
     break;
   case 'prompt':
     if (rest[0] === 'set') promptSet(rest[1]); else usage();

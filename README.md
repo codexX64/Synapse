@@ -84,6 +84,7 @@ POST /v1/recall              retrouver une résolution passée
 POST /v1/neurons             enregistrer une résolution
 GET  /v1/graph               le graphe
 GET  /v1/stats               compteurs
+GET  /v1/stats?scope=sources qui écrit, combien, quels types (noms et comptes, jamais un contenu)
 
 GET    /v1/cerveaux              l'annuaire des cerveaux (les IA des services)
 PUT    /v1/cerveaux/moi          poser sa fiche : titre, périmètre, sujets, actions, règles, adresse
