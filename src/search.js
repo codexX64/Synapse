@@ -107,8 +107,15 @@ function whereClause(p, ns) {
 /* ---------- FTS5 ----------
    La requête est construite en OR de préfixes : une frappe partielle
    ou un pluriel ne doit pas faire chuter le rappel à zéro. */
+/* Le pluriel français : « alertes » doit trouver « alerte », « réseaux »
+   doit trouver « réseau ». La recherche est déjà par préfixe : il suffit
+   de retirer le s ou le x final d'un mot assez long pour que le préfixe
+   couvre le singulier comme le pluriel. */
+function racine(x) {
+  return x.length > 4 && /[^s][sx]$/.test(x) ? x.slice(0, -1) : x;
+}
 function ftsQuery(t) {
-  return t.map(x => '"' + x.replace(/"/g, '') + '"*').join(' OR ');
+  return t.map(x => '"' + racine(x).replace(/"/g, '') + '"*').join(' OR ');
 }
 
 function lexical(db, p, ns, limit) {
@@ -379,4 +386,4 @@ function finish(p, hits, t0, gap, decision, reason, flags) {
   };
 }
 
-module.exports = { search, parse, norm, toks, decide };
+module.exports = { search, parse, norm, toks, decide, ftsQuery };

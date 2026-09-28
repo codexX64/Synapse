@@ -17,7 +17,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { open } = require('./db.js');
 const ingest = require('./ingest.js');
-const { search } = require('./search.js');
+const { search, parse: analyseRequete } = require('./search.js');
 const { Embedder, startWorker } = require('./embed.js');
 const { handleMcp } = require('./mcp.js');
 const { buildGraph } = require('./graph.js');
@@ -1138,7 +1138,8 @@ const routes = {
     if (!nsAllowed(ctx.src, ns)) return send(res, 403, { error: 'espace interdit' });
     const t0 = performance.now();
 
-    const r = await search(db, { q, ns, limit: 8, embed: t => embedder.query(t) });
+    /* Un résumé lit plus large qu'une réponse : douze extraits au lieu de huit. */
+    const r = await search(db, { q, ns, limit: analyseRequete(q).redige ? 12 : 8, embed: t => embedder.query(t) });
     const question = r.intent === 'QUESTION' || r.decision === 'SYNTHESE';
     let answer = null, model = null, erreurIA, etat = null, verifie = false, prompt = null;
     /* ?stream=1 : les sources partent dès la recherche finie, puis la

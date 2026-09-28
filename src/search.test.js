@@ -21,3 +21,26 @@ test('les autres tournures de rédaction, et ce qui n’en est pas', () => {
     assert.equal(parse(q).redige, false, q);
   assert.deepEqual(parse('résume').toks, ['resume'], 'un verbe seul reste un terme : rien d’autre à chercher');
 });
+
+test('le pluriel trouve le singulier : « alertes » cherche alerte*', () => {
+  const { ftsQuery } = require('./search.js');
+  assert.equal(ftsQuery(['alertes', 'reseaux', 'cves', 'mapmylan', 'acces', 'bus']), '"alerte"* OR "reseau"* OR "cves"* OR "mapmylan"* OR "acce"* OR "bus"*');
+});
+
+test('recherche réelle : « Résume les alertes » remonte les alertes de MapMyLAN', async () => {
+  const openDb = require('./db.js').open;
+  const ingest = require('./ingest.js');
+  const { search } = require('./search.js');
+  const os = require('node:os'), path = require('node:path'), fs = require('node:fs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'syn-'));
+  const db = openDb(path.join(dir, 't.db'));
+  ingest.insert(db, { kind: 'incident.network', title: 'Vulnérabilité CVE-2021-36260 sur camera-213', body: 'Alerte MapMyLAN, gravité critique.', tags: ['mapmylan', 'alerte', 'critical'] }, 'mapmylan');
+  ingest.insert(db, { kind: 'network.alert', title: 'Port 23 ouvert sur pont-hue-38', body: 'Alerte MapMyLAN, gravité élevée.', tags: ['mapmylan', 'alerte', 'high'] }, 'mapmylan');
+  ingest.insert(db, { kind: 'note', title: 'Recette de cuisine', body: 'Rien à voir.' }, 'hub');
+  const r = await search(db, { q: 'Résume les alertes', ns: 'shared', limit: 8 });
+  assert.equal(r.decision, 'SYNTHESE');
+  const titres = r.hits.map(h => h.title);
+  assert.ok(titres.some(t => /CVE-2021-36260/.test(t)) && titres.some(t => /Port 23/.test(t)), JSON.stringify(titres));
+  assert.ok(!titres.some(t => /cuisine/.test(t)));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
