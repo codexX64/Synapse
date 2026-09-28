@@ -42,6 +42,13 @@ const STOP = new Set(('le la les de des du un une et ou a au aux en dans sur pou
 
 const ASK = /(^|\s)(pourquoi|comment|quand|qui|quoi|quel|quelle|quels|quelles|ou|est-ce|combien|c'est quoi)(\s|$)|\?\s*$/i;
 
+/* Une demande de rédaction : on ne veut pas la liste, on veut que l'IA
+   la lise et l'écrive (« résume les alertes », « explique l'incident »).
+   Ces verbes disent QUOI faire des résultats, pas QUOI chercher : ils
+   sortent des termes de recherche. */
+const REDIGE = /(^|\s)(resume[rsz]?|synthetise[rz]?|fais(-| )moi (le point|un resume|une synthese)|fais le point|explique[rz]?|analyse[rz]?|compare[rz]?|recapitule[rz]?|recap|raconte[rz]?|decri[rst]|decrire)(\s|$)/;
+const VERBES_REDIGE = new Set('resume resumer resumes resumez synthetise synthetiser synthetisez explique expliquer expliquez analyse analyser analysez compare comparer comparez recapitule recapituler recap raconte raconter decris decrire decrit fais point moi'.split(' '));
+
 function norm(s) {
   return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -65,17 +72,19 @@ function parse(raw) {
   rest = rest.replace(/"([^"]+)"/g,                (_, v) => { f.phrase = v;               return ' '; });
 
   const text = rest.replace(/\s+/g, ' ').trim();
-  const t = toks(text);
+  const redige = REDIGE.test(norm(text));
+  let t = toks(text);
+  if (redige) { const sans = t.filter(x => !VERBES_REDIGE.has(x)); if (sans.length) t = sans; }
   const hasFilter = !!(f.source || f.level || f.kind || f.tag || f.days !== null || f.ref);
 
   let intent;
   if (!text && hasFilter) intent = 'FILTRE';
-  else if (ASK.test(text)) intent = 'QUESTION';
+  else if (ASK.test(text) || redige) intent = 'QUESTION';
   else if (t.length >= 4) intent = 'QUESTION';
   else if (t.length <= 1) intent = 'NAVIGATION';
   else intent = 'RECHERCHE';
 
-  return { filters: f, text, toks: t, intent, hasFilter, raw };
+  return { filters: f, text, toks: t, intent, hasFilter, raw, redige };
 }
 
 /* ---------- SQL de filtrage, partagé par les trois moteurs ---------- */
@@ -222,6 +231,8 @@ function decide(p, hits, gap) {
     reason: "Aucune entrée ne contient ces termes dans cet espace." };
   if (p.intent === 'FILTRE') return { decision: 'FILTRE',
     reason: "Requête composée uniquement de filtres : tri chronologique, pas de scoring." };
+  if (p.redige) return { decision: 'SYNTHESE',
+    reason: "Demande de rédaction (résumer, expliquer, comparer…) : l'IA lit les résultats et répond." };
   if (hits.length === 1) return { decision: 'DIRECT',
     reason: "Un seul résultat correspond : sans concurrent, il n'y a rien à départager." };
   if (gap > 0.30) return { decision: 'DIRECT',
