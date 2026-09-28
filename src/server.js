@@ -1139,7 +1139,8 @@ const routes = {
     const t0 = performance.now();
 
     /* Un résumé lit plus large qu'une réponse : douze extraits au lieu de huit. */
-    const r = await search(db, { q, ns, limit: analyseRequete(q).redige ? 12 : 8, embed: t => embedder.query(t) });
+    const redige = analyseRequete(q).redige;
+    const r = await search(db, { q, ns, limit: redige ? 12 : 8, embed: t => embedder.query(t) });
     const question = r.intent === 'QUESTION' || r.decision === 'SYNTHESE';
     let answer = null, model = null, erreurIA, etat = null, verifie = false, prompt = null;
     /* ?stream=1 : les sources partent dès la recherche finie, puis la
@@ -1213,10 +1214,10 @@ const routes = {
           + `\nROUTES PUBLIÉES : ${rt.length}${rtHs ? ' · hors ligne : ' + rtHs : ' · toutes en ligne'}`
           + (m ? `\n${m}` : '');
       }
-      prompt = construirePrompt({ q, extraits, bloc, avecEtat: !!etat, present: parleDuPresent, soi: etatDeSoi() });
+      prompt = construirePrompt({ q, extraits, bloc, avecEtat: !!etat, present: parleDuPresent, soi: etatDeSoi(), redige });
       model = LLM.etat().modele;
       if (!veutFlux) try {
-        answer = (await LLM.genere({ prompt, maxTokens: MAX_JETONS, timeout: LLM.etat().distant ? 45000 : 20000 })) || null;
+        answer = (await LLM.genere({ prompt, maxTokens: redige ? MAX_JETONS_RESUME : MAX_JETONS, timeout: LLM.etat().distant ? 45000 : 20000 })) || null;
       } catch (e) {
         /* Un echec de l IA doit se VOIR : un modele absent chez Ollama
            repondait en 60 ms par un « model not found » que le catch
@@ -1266,6 +1267,8 @@ const routes = {
    après cinq minutes et la question suivante paie le rechargement. */
 const GARDE_MODELE = process.env.ANSWER_KEEP_ALIVE || '30m';
 const MAX_JETONS = 180;
+/* Un résumé de douze extraits ne tient pas en trois phrases. */
+const MAX_JETONS_RESUME = 420;
 
 /* La consigne ne parle d'état en direct que s'il y en a un. Elle disait
    toujours « dis vérifié à l'instant » : sans agrégateur, le modèle
@@ -1282,13 +1285,15 @@ function etatDeSoi() {
     + `\n- recherche par vecteurs avec Ollama, modèle ${embedder.model}${embedder.ok ? '' : ' — injoignable en ce moment'}`;
 }
 
-function construirePrompt({ q, extraits, bloc, avecEtat, present, soi = '' }) {
+function construirePrompt({ q, extraits, bloc, avecEtat, present, soi = '', redige = false }) {
   const regles = [
-    'Tu es la mémoire du homelab. Réponds en français, en 2 ou 3 phrases, sans préambule.',
+    redige
+      ? 'Tu es la mémoire du homelab. On te demande un RÉSUMÉ : réponds en français, sans préambule, en 3 à 6 phrases. Le plus grave d\'abord (critique, puis élevé, puis le reste). Regroupe ce qui se ressemble en une phrase, avec tous ses numéros (« quatre appareils ne répondent plus [1][2][5][6] »). Termine par la période couverte par les extraits.'
+      : 'Tu es la mémoire du homelab. Réponds en français, en 2 ou 3 phrases, sans préambule.',
     avecEtat
       ? 'Tu disposes de deux sources : la MÉMOIRE (extraits datés, peuvent être périmés) et l\'ÉTAT ACTUEL (vérifié à l\'instant). Pour le présent, l\'état actuel fait foi ; pour l\'historique et les décisions, la mémoire. Dis « vérifié à l\'instant » quand tu t\'appuies sur l\'état actuel.'
       : 'Tu ne disposes QUE de la MÉMOIRE : des extraits datés, qui peuvent être périmés. Tu n\'as AUCUN accès à l\'état en direct : n\'écris jamais « vérifié », « à l\'instant », « actuellement » ni « en ce moment ».',
-    !avecEtat && present
+    !avecEtat && present && !redige
       ? 'La question porte sur l\'état présent : commence par dire que la mémoire ne permet pas de le vérifier en direct, puis donne ce qu\'elle en sait, avec la date de l\'extrait.'
       : '',
     'Cite les numéros [n] des extraits que tu utilises. N\'utilise que ces sources.',
@@ -1331,7 +1336,7 @@ async function repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie,
     const ac = new AbortController();
     res.on('close', () => { if (!res.writableFinished) { coupe = true; ac.abort(); } });
     try {
-      await LLM.flux({ prompt, maxTokens: MAX_JETONS, signal: AbortSignal.any([ac.signal, AbortSignal.timeout(60000)]) },
+      await LLM.flux({ prompt, maxTokens: analyseRequete(q).redige ? MAX_JETONS_RESUME : MAX_JETONS, signal: AbortSignal.any([ac.signal, AbortSignal.timeout(60000)]) },
         t => { texte += t; ev('jeton', { t }); });
     } catch (e) {
       if (coupe) return;

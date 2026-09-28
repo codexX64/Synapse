@@ -44,3 +44,21 @@ test('recherche réelle : « Résume les alertes » remonte les alertes de MapMy
   assert.ok(!titres.some(t => /cuisine/.test(t)));
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('un résumé fait passer le grave devant : la CVE critique n’est pas noyée sous les « ne répond plus »', async () => {
+  const openDb = require('./db.js').open;
+  const ingest = require('./ingest.js');
+  const { search } = require('./search.js');
+  const os = require('node:os'), path = require('node:path'), fs = require('node:fs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'syn-'));
+  const db = openDb(path.join(dir, 't.db'));
+  ingest.insert(db, { kind: 'incident.network', title: 'Vulnérabilité CVE-2019-0708 sur portable-40', body: 'Alerte MapMyLAN, gravité critique.', tags: ['mapmylan', 'alerte', 'critical'], occurred_at: new Date(Date.now() - 3 * 3600e3).toISOString() }, 'mapmylan');
+  for (let i = 0; i < 20; i++)
+    ingest.insert(db, { kind: 'network.alert', title: `Alerte : nas-${i} ne répond plus`, body: `Alerte MapMyLAN, gravité faible, appareil nas-${i}. Alerte réseau.`, tags: ['mapmylan', 'alerte', 'low'] }, 'mapmylan');
+  const r = await search(db, { q: 'Résume les alertes', ns: 'shared', limit: 12 });
+  const rang = r.hits.findIndex(h => /CVE-2019-0708/.test(h.title));
+  assert.ok(rang >= 0 && rang < 3, `rang de la CVE : ${rang}`);
+  const r2 = await search(db, { q: 'alertes', ns: 'shared', limit: 12 });
+  assert.equal(r2.decision === 'SYNTHESE', false, 'une simple recherche ne change pas');
+  fs.rmSync(dir, { recursive: true, force: true });
+});

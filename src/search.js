@@ -317,6 +317,22 @@ async function search(db, opts) {
   }
   fused.sort((a, b) => b.score - a.score);
 
+  /* Un résumé veut l'IMPORTANT parmi le pertinent. Le lot pertinent reste
+     décidé par les moteurs (tout ce qui atteint 20 % du premier) ; dans ce
+     lot, le grave passe devant, puis le récent. Sans cela, vingt « ne
+     répond plus » bien placés par les mots noyaient la seule CVE critique. */
+  if (p.redige && fused.length > limit) {
+    const seuil = (fused[0].score || 0) * 0.2;
+    const lot = fused.filter(h => h.score >= seuil);
+    const gravite = h => {
+      const t = h.tags || [];
+      return /^incident\./.test(h.kind) || t.includes('critical') ? 3 : t.includes('high') ? 2 : ['L1', 'L2', 'L3'].includes(h.level) ? 1 : 0;
+    };
+    lot.sort((a, b) => gravite(b) - gravite(a) || String(b.occurred_at).localeCompare(String(a.occurred_at)) || b.score - a.score);
+    for (const h of lot.slice(0, limit)) if (gravite(h) >= 2) h.why.push('grave');
+    fused = [...lot, ...fused.filter(h => h.score < seuil)];
+  }
+
   const top = fused.slice(0, limit);
   const gap = top.length > 1 && top[0].score > 0
     ? (top[0].score - top[1].score) / top[0].score : (top.length ? 1 : 0);
