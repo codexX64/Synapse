@@ -625,12 +625,80 @@ function knot(p,sc,op){
   KNOTS.push({mat,base:op});
 }
 const DEPTH_R=[0,7.5,14,19.5];
+
+/* ---- Partage de la sphere entre les groupes ----
+   Chaque groupe recoit une REGION d'un seul tenant, a sa taille, et aucune
+   region n'en chevauche une autre : les cartes sont les N points d'une
+   spirale de Fibonacci sur toute la sphere, repartis entre les groupes par
+   une affectation a capacite (chaque groupe prend exactement ses cartes),
+   puis affinee par echanges tant qu'un echange rapproche deux cartes de
+   leur groupe. Le resultat est un diagramme de puissance : des regions
+   convexes, donc des branches qui ne se croisent pas.
+   Le noeud d un groupe est pose dans la direction du centre de sa region,
+   a une distance qui suit sa compacite : un petit groupe a son noeud pres
+   de ses cartes, le groupe qui couvre presque toute la sphere a le sien
+   pres du centre, et ses brindilles partent en etoile sans traverser les
+   autres regions. Deterministe : meme memoire, meme dessin. */
+function partageSphere(groupes){
+  const G=groupes.length, N=groupes.reduce((a,g)=>a+g.leaves.length,0);
+  if(!G||!N)return;
+  const or=Math.PI*(3-Math.sqrt(5));
+  const fib=(i,n)=>{const y=1-((i+.5)/n)*2,r=Math.sqrt(Math.max(0,1-y*y)),t=i*or;return new THREE.Vector3(Math.cos(t)*r,y,Math.sin(t)*r);};
+  const pts=Array.from({length:N},(_,i)=>fib(i,N));
+  const cap=groupes.map(g=>g.leaves.length);
+  /* graines : les plus gros groupes d'abord, repartis eux aussi en spirale */
+  const ordre=groupes.map((g,i)=>i).sort((a,b)=>cap[b]-cap[a]||a-b);
+  const graines=new Array(G);
+  ordre.forEach((gi,k)=>{graines[gi]=fib(k,G);});
+  let de=new Int32Array(N);
+  for(let tour=0;tour<6;tour++){
+    /* affectation gloutonne a capacite : les couples les plus proches d'abord */
+    const couples=[];
+    for(let p=0;p<N;p++)for(let g=0;g<G;g++)couples.push([-pts[p].dot(graines[g]),p,g]);
+    couples.sort((a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]);
+    const reste=cap.slice();de.fill(-1);let libres=N;
+    for(const [,p,g] of couples){if(libres===0)break;if(de[p]>=0||reste[g]===0)continue;de[p]=g;reste[g]--;libres--;}
+    /* echanges : deux cartes de deux groupes changent de camp si elles y gagnent ensemble */
+    for(let passe=0;passe<4;passe++){
+      let gain=0;
+      for(let a=0;a<G;a++)for(let b=a+1;b<G;b++){
+        const A=[],B=[];
+        for(let p=0;p<N;p++){
+          if(de[p]===a)A.push([pts[p].dot(graines[b])-pts[p].dot(graines[a]),p]);
+          else if(de[p]===b)B.push([pts[p].dot(graines[a])-pts[p].dot(graines[b]),p]);
+        }
+        A.sort((x,y)=>y[0]-x[0]);B.sort((x,y)=>y[0]-x[0]);
+        for(let k=0;k<Math.min(A.length,B.length);k++){
+          if(A[k][0]+B[k][0]<=1e-9)break;
+          de[A[k][1]]=b;de[B[k][1]]=a;gain++;
+        }
+      }
+      if(!gain)break;
+    }
+    /* les graines vont au centre de leur region */
+    const somme=graines.map(()=>new THREE.Vector3());
+    for(let p=0;p<N;p++)somme[de[p]].add(pts[p]);
+    somme.forEach((v,g)=>{if(v.lengthSq()>1e-9)graines[g]=v.clone().normalize();});
+  }
+  groupes.forEach((g,gi)=>{
+    const dirs=[],centre=new THREE.Vector3();
+    for(let p=0;p<N;p++)if(de[p]===gi){dirs.push(pts[p]);centre.add(pts[p]);}
+    const compact=centre.length()/Math.max(1,dirs.length);      /* 1 : un point ; ~0 : toute la sphere */
+    g.dir=centre.lengthSq()>1e-9?centre.normalize():graines[gi].clone();
+    g.rayon=Math.max(1.2,16*compact);
+    /* chaque carte prend la direction de sa region la plus proche de son rang :
+       les plus proches du centre de la region d'abord */
+    dirs.sort((x,y)=>y.dot(g.dir)-x.dot(g.dir));
+    g.dirs=dirs;
+  });
+}
 const LEAF_R=25.2;
 let seedI=0;
 function build(node,dir,pos,depth,pathPts,pathTags){
   const total=countLeaves(node);
   if(node.name!=='noyau'){
-    INTERNALS.push({name:node.name,pos:pos.clone(),depth,count:total});
+    /* le libelle d'un groupe reste hors du centre, meme si son noeud s'en approche */
+    INTERNALS.push({name:node.name,pos:pos.clone(),lpos:dir.clone().multiplyScalar(Math.max(pos.length(),9)),depth,count:total});
     knot(pos, .45+Math.min(1.2,total*.05), depth===1?.8:.55);
   }
   const kids=node.children?node.children:null;
@@ -638,7 +706,9 @@ function build(node,dir,pos,depth,pathPts,pathTags){
   if(kids){
     kids.forEach((child,ci)=>{
       let cd;
-      if(depth===0){
+      if(depth===0&&child.dir){
+        cd=child.dir.clone();
+      }else if(depth===0){
         const gl=Math.PI*(3-Math.sqrt(5)),y=1-((ci+.5)/kids.length)*2,rad=Math.sqrt(Math.max(0,1-y*y)),th=gl*ci;
         cd=new THREE.Vector3(Math.cos(th)*rad,y,Math.sin(th)*rad);
       }else{
@@ -648,10 +718,10 @@ function build(node,dir,pos,depth,pathPts,pathTags){
           .add(u.clone().multiplyScalar(Math.cos(az)*Math.sin(cone)))
           .add(v.clone().multiplyScalar(Math.sin(az)*Math.sin(cone))).normalize();
       }
-      const cr=DEPTH_R[Math.min(depth+1,3)];
+      const cr=depth===0&&child.rayon?child.rayon:DEPTH_R[Math.min(depth+1,3)];
       const cpos=cd.clone().multiplyScalar(cr);
       const side=u.clone().multiplyScalar(Math.cos(seedR(seedI++)*6.28)).add(v.clone().multiplyScalar(Math.sin(seedR(seedI++)*6.28)));
-      const seg=curveB(pos,cpos,side,1.9-depth*.45,10);
+      const seg=curveB(pos,cpos,side,depth===0&&child.dir?Math.min(.8,cr*.12):1.9-depth*.45,10);
       const tag='e'+(EUID++);
       const strands=depth===0?3:(depth===1?2:1);
       const baseOp=depth===0?.55:(depth===1?.42:.34);
@@ -682,8 +752,25 @@ function build(node,dir,pos,depth,pathPts,pathTags){
     const RAYONS=[LEAF_R, LEAF_R*.78, LEAF_R*.58];
     const capaCalotte=Math.max(1, Math.floor(2*Math.PI*LEAF_R*LEAF_R*(1-Math.cos(theta))/11.4));
     const couches=Math.min(3, Math.ceil(count/capaCalotte));
+    /* region attribuee par partageSphere : une direction par carte, dans l'ordre */
+    const dirsRegion=node.dirs&&node.dirs.length===node.leaves.length?node.leaves.map((id,k)=>byId[id]?node.dirs[k]:null).filter(Boolean):null;
     arr.forEach((n,i2)=>{
       const couche=couches>1 ? (i2 % couches) : 0;
+      if(dirsRegion){
+        const ld=dirsRegion[i2];
+        n.posT=ld.clone().multiplyScalar(RAYONS[couche]);
+        n.couche=couche;
+        /* brindille presque droite : elle reste dans la region de son groupe */
+        let bw=ld.clone().cross(dir);
+        if(bw.lengthSq()<1e-4)bw=u.clone();
+        bw.normalize();
+        n.twigPts=curveB(pos,n.posT,bw,.25,7);
+        treeLine(n.twigPts,.26,'n:'+n.id);
+        n.sigPts=[...pathPts,...n.twigPts.slice(1)];
+        n.pathTags=[...pathTags,'n:'+n.id];
+        if(!typeAimPos[n.type])typeAimPos[n.type]=pos.clone();
+        return;
+      }
       const dans=Math.floor(i2/couches), total=Math.ceil((count-couche)/couches);
       /* spirale de Fibonacci dans la calotte [0, theta] */
       const yy=1-(1-Math.cos(theta))*((dans+.5)/Math.max(total,1));
@@ -708,6 +795,7 @@ function build(node,dir,pos,depth,pathPts,pathTags){
     seedI+=arr.length;
   }
 }
+partageSphere(TREE.children||[]);
 build(TREE,new THREE.Vector3(0,1,0),new THREE.Vector3(0,0,0),0,[new THREE.Vector3(0,0,0)],[]);
 
 /* ---- Filtre par type ----
@@ -731,6 +819,7 @@ function reconstruit(){
   const parType={};
   gardes.forEach(n=>{(parType[n.type]=parType[n.type]||[]).push(n.id);});
   const arbre={name:'noyau',children:Object.keys(parType).sort().map(t=>({name:t,leaves:parType[t]}))};
+  partageSphere(arbre.children);
   build(arbre,new THREE.Vector3(0,1,0),new THREE.Vector3(0,0,0),0,[new THREE.Vector3(0,0,0)],[]);
 
   /* positions des vues alternatives, et taille des cartes */
@@ -1570,7 +1659,7 @@ function loop(){
     for(let i=0;i<INTERNALS.length;i++){
       const it=INTERNALS[i];
       const el=lbl('in'+i,esc(typeDe(it.name).l),it.count+' NEURONE'+(it.count>1?'S':''),it.depth===1?'th1':'th');
-      placeLabel(el,_v1.copy(it.pos).applyMatrix4(world.matrixWorld),now);
+      placeLabel(el,_v1.copy(it.lpos||it.pos).applyMatrix4(world.matrixWorld),now);
     }
   }else{
     // forcer l'extinction des labels d'arbre
