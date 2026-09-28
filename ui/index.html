@@ -266,6 +266,21 @@ body.cherche #console{z-index:50}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 
+
+/* Pendant que l'IA rédige : le chargeur « spectre » (uiverse.io/dexter-st/wicked-elephant-4, MIT). */
+.gen{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;height:74px;margin:6px 0 2px;font-size:1.35em;font-weight:600;letter-spacing:.02em;user-select:none;color:#fff}
+.gen .gen-l{display:inline-block;opacity:0;animation:gen-l 4s infinite linear;z-index:2}
+.gen .gen-f{position:absolute;inset:0;z-index:1;background:transparent;
+  -webkit-mask:repeating-linear-gradient(90deg,transparent 0,transparent 6px,#000 7px,#000 8px);mask:repeating-linear-gradient(90deg,transparent 0,transparent 6px,#000 7px,#000 8px)}
+.gen .gen-f::after{content:"";position:absolute;inset:0;
+  background-image:radial-gradient(circle at 50% 50%,#ff0 0%,transparent 50%),radial-gradient(circle at 45% 45%,#f00 0%,transparent 45%),radial-gradient(circle at 55% 55%,#0ff 0%,transparent 45%),radial-gradient(circle at 45% 55%,#0f0 0%,transparent 45%),radial-gradient(circle at 55% 45%,#00f 0%,transparent 45%);
+  -webkit-mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 10%,#000 25%);mask:radial-gradient(circle at 50% 50%,transparent 0%,transparent 10%,#000 25%);
+  animation:gen-t 2s infinite alternate,gen-o 4s infinite;animation-timing-function:cubic-bezier(.6,.8,.5,1)}
+.gen-m{text-align:center;color:var(--mut);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px}
+@keyframes gen-t{0%{transform:translate(-55%)}100%{transform:translate(55%)}}
+@keyframes gen-o{0%,100%{opacity:0}15%{opacity:1}65%{opacity:0}}
+@keyframes gen-l{0%{opacity:0}5%{opacity:1;text-shadow:0 0 4px #fff;transform:scale(1.1) translateY(-2px)}20%{opacity:.2}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.gen .gen-l{animation:none;opacity:.8}.gen .gen-f::after{animation:none;opacity:.35}}
 </style>
 </head>
 <body>
@@ -1398,6 +1413,10 @@ async function think(q){
      finie (quelques millisecondes), puis le texte mot à mot. */
   let src=null,fin=null,texte='',erreur=null;
   const qh=esc(q);
+  /* « Rédaction », lettre par lettre, sur le spectre qui balaie : le temps que l'IA écrive. */
+  const chargeurRedaction=m=>'<div class="gen" role="status" aria-label="'+esc(m)+' rédige">'
+    +[...'Rédaction'].map((c,i)=>'<span class="gen-l" style="animation-delay:'+(0.1+i*0.105).toFixed(3)+'s">'+esc(c)+'</span>').join('')
+    +'<div class="gen-f"></div></div><div class="gen-m">'+esc(m)+'</div>';
   const rendre=()=>{
     const hits=src?src.hits||[]:[];
     const arret=fin?fin.arret:null;
@@ -1406,7 +1425,7 @@ async function think(q){
     let corps;
     if(!src) corps='<p class="mu" style="color:var(--coral)">'+esc(erreur||'SYNAPSE ne répond pas.')+'</p>';
     else if(texte) corps='<p>'+esc(texte).replace(/\[(\d+)\]/g,'<b>[$1]</b>')+(fin?'':'<span class="curseur">▍</span>')+'</p>';
-    else if(!fin&&src.ia) corps='<p class="mu">'+esc(src.model||'IA locale')+' rédige…</p>';
+    else if(!fin&&src.ia) corps=chargeurRedaction(src.model||'IA locale');
     else if(fin&&fin.ia_erreur) corps='<p class="mu" style="color:var(--coral)">IA locale indisponible : '+esc(fin.ia_erreur)+'</p>';
     else corps='<p class="mu">'+(hits.length?'':'Rien en mémoire pour cette question. ')+esc(src.reason||'')+'</p>';
     const temps=fin?fmtMs(fin.took_ms):src?'recherche '+fmtMs(src.recherche_ms):'—';
