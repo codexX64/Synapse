@@ -13,6 +13,7 @@
    ============================================================ */
 
 const CFG = require('./config.js');
+const LLM = require('./llm.js');
 const T = require('./tache.js');
 
 let dernierDeclenchement = '';   /* AAAA-MM-JJ HH:MM, pour ne pas rejouer */
@@ -44,7 +45,7 @@ async function previens(cfg, texte, clavier) {
       }),
       signal: AbortSignal.timeout(12000)
     });
-    const j = await r.json();
+    const j = await LLM.jsonBorne(r, 64 * 1024);
     return j.ok ? j.result : { erreur: j.description };
   } catch (e) { return { erreur: String(e.message).slice(0, 120) }; }
 }
@@ -53,14 +54,14 @@ async function previens(cfg, texte, clavier) {
    echoue silencieusement a chaque notification. */
 async function testeTelegram(token, chat) {
   try {
-    const me = await (await fetch(`https://api.telegram.org/bot${token}/getMe`,
-      { signal: AbortSignal.timeout(10000) })).json();
+    const me = await LLM.jsonBorne(await fetch(`https://api.telegram.org/bot${token}/getMe`,
+      { signal: AbortSignal.timeout(10000) }), 64 * 1024);
     if (!me.ok) return { ok: false, erreur: me.description || 'jeton refuse' };
-    const env = await (await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const env = await LLM.jsonBorne(await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chat, text: 'SYNAPSE — liaison etablie.' }),
       signal: AbortSignal.timeout(10000)
-    })).json();
+    }), 64 * 1024);
     if (!env.ok) return { ok: false, erreur: 'jeton bon, chat refuse : ' + (env.description || '') };
     return { ok: true, bot: me.result.username };
   } catch (e) { return { ok: false, erreur: String(e.message).slice(0, 120) }; }

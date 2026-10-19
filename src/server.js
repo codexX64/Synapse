@@ -534,6 +534,8 @@ const routes = {
   'POST /v1/rangement/telegram/test': async (req, res, ctx) => {
     exigerHumain(ctx.src, { role: 'admin' });
     const b = await readBody(req);
+    if (b.token && !CFG.TELEGRAM_JETON.test(String(b.token))) return send(res, 400, { error: 'jeton Telegram : la forme donnée par @BotFather' });
+    if (b.chat && !CFG.TELEGRAM_CHAT.test(String(b.chat))) return send(res, 400, { error: 'conversation Telegram : un identifiant numérique ou @nom' });
     const c = CFG.lit(db);
     const r = await PLANIF.testeTelegram(b.token || c.telegram_token, b.chat || c.telegram_chat);
     send(res, r.ok ? 200 : 400, r);
@@ -753,6 +755,8 @@ const routes = {
 
   'POST /v1/moi/analyser': async (req, res, ctx) => {
     exigerHumain(ctx.src);
+    if (!rateLimit('consolider:' + appelant(ctx.src), 4, 60000))
+      return send(res, 429, { error: 'une relecture à la fois : attends une minute' }, { 'Retry-After': '30' });
     const b = await readBody(req).catch(() => ({}));
     /* Tout relire : utile quand la consigne a changé, ou pour repartir
        d'une fiche mal partie. La fiche n'est pas vidée — elle est
@@ -798,6 +802,8 @@ const routes = {
     const b = await readBody(req);
     // Sans agent nommé : tout le monde — pour le Hub ou un jeton admin ; un
     // service ne fait relire que ses propres échanges.
+    if (!rateLimit('consolider:' + appelant(ctx.src), 4, 60000))
+      return send(res, 429, { error: 'une relecture à la fois : attends une minute' }, { 'Retry-After': '30' });
     const agent = agentDe(ctx.src, b.agent) || (relaiHub(ctx.src) ? null : ctx.src.name);
     if (b.ns && !nsAllowed(ctx.src, String(b.ns))) return send(res, 403, { error: 'espace interdit' });
     send(res, 200, agent
@@ -940,6 +946,10 @@ const routes = {
      est nommée, jamais traduite en zéro. */
   'GET /v1/answer': async (req, res, ctx) => {
     if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
+    /* Une réponse peut coûter un appel à une IA payante : trente par minute
+       et par appelant, et le plafond du jour en plus (llm.js). */
+    if (!rateLimit('ia:' + appelant(ctx.src), 30, 60000))
+      return send(res, 429, { error: 'trop de questions : attends une minute' }, { 'Retry-After': '30' });
     const u = ctx.url;
     const q = (u.searchParams.get('q') || '').trim();
     const ns = u.searchParams.get('ns') || 'shared';
@@ -964,7 +974,7 @@ const routes = {
     if (question && AGREG && (parleDuPresent || memoireFaible)) {
       try {
         const e = await fetch(AGREG + '/v1/etat', { signal: AbortSignal.timeout(6000) });
-        if (e.ok) { etat = await e.json(); verifie = true; }
+        if (e.ok) { etat = await LLM.jsonBorne(e, 2 * 1024 * 1024); verifie = true; }
       } catch { etat = null; }
     }
 
@@ -1323,6 +1333,7 @@ function agentDe(src, demande) {
   if (a !== null && a !== src.name) throw new socle.S.ErreurHttp(403, 'Agent d’un autre service : un service ne parle que pour lui.');
   return a;
 }
+const appelant = src => (src.humain ? 'compte:' + src.compte : 'source:' + src.name);
 const relaiHub = src => src.scope === 'admin' || (src.name === 'hub' && src.channel === 'A');
 
 const server = http.createServer((req, res) => {
@@ -1348,6 +1359,8 @@ async function demarrer(env = process.env) {
   s.portail.exporteur = compte => ({ requetes: ACT.duCompte(db, compte) });
   s.comptes.apresSuppression.push(compte => ACT.oublierCompte(db, compte));
   debit = new S.Debit({ max: 1200 });
+  LLM.plafonner({ db, parJour: env.LLM_APPELS_JOUR || 500,
+    surAtteint: n => s.journal.ecrire({ acteur: 'système', action: 'ia.plafond_atteint', resultat: 'refus', details: { plafond: n } }) });
   const b = CFG.sceller(db, s.coffre);
   if (b.retires) {
     console.warn('[coffre] jeton Telegram illisible sous SOCLE_CLE comme sous SOCLE_CLE_ANCIENNE, retiré : à reposer dans les paramètres.');

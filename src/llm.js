@@ -27,6 +27,48 @@ const CONNUS = {
 };
 
 const CTX = Number(process.env.OLLAMA_NUM_CTX || 8192);
+const REPONSE_MAX = 1024 * 1024;     /* une réponse de modèle tient largement en 1 Mio */
+const TEXTE_MAX = 64 * 1024;         /* texte diffusé : au-delà, le flux est coupé */
+
+/* ---------- plafond de l'IA distante ----------
+   Une API payante appelée à chaque question coûte à chaque question : les
+   appels distants sont comptés par jour (UTC) dans la base, et refusés
+   au-delà de LLM_APPELS_JOUR. Ollama, local, n'est pas compté. */
+let compteur = null;
+function plafonner({ db, parJour, surAtteint = () => {} }) {
+  compteur = { db, parJour: Math.max(1, Number(parJour) || 500), surAtteint, signale: null };
+}
+function prendreAppel() {
+  if (!compteur) return;
+  const jour = new Date().toISOString().slice(0, 10), k = 'llm_appels:' + jour;
+  const n = Number((compteur.db.prepare(`SELECT v FROM meta WHERE k=?`).get(k) || {}).v || 0);
+  if (n >= compteur.parJour) {
+    if (compteur.signale !== jour) { compteur.signale = jour; compteur.surAtteint(compteur.parJour); }
+    throw new Error(`plafond du jour atteint pour l'IA distante (${compteur.parJour} appels) : réessaie demain ou relève LLM_APPELS_JOUR`);
+  }
+  compteur.db.prepare(`INSERT INTO meta(k,v) VALUES(?, '1') ON CONFLICT(k) DO UPDATE SET v = CAST(v AS INTEGER) + 1`).run(k);
+  compteur.db.prepare(`DELETE FROM meta WHERE k LIKE 'llm_appels:%' AND k < ?`).run('llm_appels:' + new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+}
+function appelsDuJour() {
+  if (!compteur) return null;
+  const k = 'llm_appels:' + new Date().toISOString().slice(0, 10);
+  return { appels: Number((compteur.db.prepare(`SELECT v FROM meta WHERE k=?`).get(k) || {}).v || 0), plafond: compteur.parJour };
+}
+
+/* Le corps d'une réponse, lu morceau par morceau et abandonné au-delà de max. */
+async function texteBorne(rep, max = REPONSE_MAX) {
+  const morceaux = []; let n = 0;
+  for await (const m of rep.body || []) {
+    n += m.length;
+    if (n > max) { try { await rep.body.cancel(); } catch { /* déjà fermé */ } throw new Error('réponse du modèle démesurée'); }
+    morceaux.push(m);
+  }
+  return Buffer.concat(morceaux.map(m => Buffer.from(m))).toString('utf8');
+}
+async function jsonBorne(rep, max = REPONSE_MAX) {
+  const t = await texteBorne(rep, max);
+  try { return JSON.parse(t); } catch { return {}; }
+}
 const GARDE = process.env.ANSWER_KEEP_ALIVE || '30m';
 const nettoie = t => String(t || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
@@ -48,11 +90,12 @@ function reglage(env = process.env) {
 /* Ce que l'interface affiche : jamais la clé. */
 function etat(env = process.env) {
   const r = reglage(env);
-  return { fournisseur: r.nom, modele: r.modele, distant: r.famille === 'compatible', repli: r.repli || null };
+  return { fournisseur: r.nom, modele: r.modele, distant: r.famille === 'compatible', repli: r.repli || null,
+    ...(r.famille === 'compatible' && compteur ? { jour: appelsDuJour() } : {}) };
 }
 
 async function erreurDe(o) {
-  const j = await o.json().catch(() => ({}));
+  const j = await jsonBorne(o, 64 * 1024).catch(() => ({}));
   return new Error((j.error && (j.error.message || j.error)) || j.message || 'HTTP ' + o.status);
 }
 
@@ -73,10 +116,11 @@ async function genere(o, env = process.env) {
       }),
       signal,
     });
-    const j = await rep.json().catch(() => ({}));
+    const j = await jsonBorne(rep).catch(() => ({}));
     if (!rep.ok || j.error) throw new Error(j.error || 'HTTP ' + rep.status);
     return nettoie(j.response);
   }
+  prendreAppel();
   const rep = await fetch(r.url + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + r.cle },
@@ -89,7 +133,7 @@ async function genere(o, env = process.env) {
     signal,
   });
   if (!rep.ok) throw await erreurDe(rep);
-  const j = await rep.json();
+  const j = await jsonBorne(rep);
   return nettoie(j.choices?.[0]?.message?.content);
 }
 
@@ -112,6 +156,7 @@ async function flux(o, surJeton, env = process.env) {
       signal,
     });
   } else {
+    prendreAppel();
     rep = await fetch(r.url + '/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + r.cle },
@@ -139,10 +184,14 @@ async function flux(o, surJeton, env = process.env) {
         t += reste.slice(0, d); dansPensee = true; reste = reste.slice(d + 7);
       }
     }
-    if (t) { tout += t; surJeton(t); }
+    if (t) {
+      if (tout.length + t.length > TEXTE_MAX) throw new Error('réponse du modèle démesurée');
+      tout += t; surJeton(t);
+    }
   };
   for await (const morceau of rep.body) {
     buf += dec.decode(morceau, { stream: true });
+    if (buf.length > REPONSE_MAX) throw new Error('ligne du flux démesurée');
     let i;
     while ((i = buf.indexOf('\n')) >= 0) {
       let ligne = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
@@ -164,4 +213,4 @@ async function flux(o, surJeton, env = process.env) {
   return tout;
 }
 
-module.exports = { genere, flux, etat, reglage, CONNUS };
+module.exports = { genere, flux, etat, reglage, plafonner, appelsDuJour, texteBorne, jsonBorne, CONNUS };

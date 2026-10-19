@@ -127,6 +127,15 @@
       "help": "Millisecondes entre deux passes de distillation des échanges en traits. 0 désactive. Un profil qui bouge à chaque phrase n'est pas un profil."
     },
     {
+      "key": "LLM_APPELS_JOUR",
+      "label": "Appels à l'IA distante par jour",
+      "type": "number",
+      "default": 500,
+      "min": 1,
+      "advanced": true,
+      "help": "Plafond des appels à une API payante (Kimi, OpenAI…) par jour : au-delà, SYNAPSE répond sans rédiger et l'inscrit au journal. Ollama, local, n'est pas compté."
+    },
+    {
       "key": "SOCLE_HTTP",
       "label": "Accès sans HTTPS",
       "type": "select",

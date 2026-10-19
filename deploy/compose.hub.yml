@@ -45,6 +45,7 @@ services:
       LLM_MODELE: "{{config.LLM_MODELE}}"
       LLM_URL: "{{config.LLM_URL}}"
       CONSOLIDATION_INTERVAL: "{{config.CONSOLIDATION_INTERVAL}}"
+      LLM_APPELS_JOUR: "{{config.LLM_APPELS_JOUR}}"
       CORS_ORIGIN: ""
 
       # Comptes : clé maîtresse gardée par le Hub (jamais sur le volume) ;

@@ -113,4 +113,4 @@ function public_(c) {
   };
 }
 
-module.exports = { lit, ecrit, public_, sceller, DEFAUTS };
+module.exports = { lit, ecrit, public_, sceller, DEFAUTS, TELEGRAM_JETON, TELEGRAM_CHAT };

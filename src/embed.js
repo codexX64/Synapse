@@ -15,6 +15,7 @@
 
 const crypto = require('node:crypto');
 const { vecToBlob } = require('./db.js');
+const { jsonBorne } = require('./llm.js');
 
 class Embedder {
   constructor(opts = {}) {
@@ -36,7 +37,7 @@ class Embedder {
       signal: ctl
     });
     if (!r.ok) throw new Error('ollama ' + r.status);
-    const j = await r.json();
+    const j = await jsonBorne(r, 4 * 1024 * 1024);
     if (!Array.isArray(j.embedding)) throw new Error('réponse sans embedding');
     this.ok = true; this.lastError = null;
     return j.embedding;
