@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   SYNAPSE — apprentissage.
+/* SYNAPSE — apprentissage.
 
    La mémoire répond « qu'est-ce qu'on sait déjà ». Ce module répond à
    une question différente : « qu'est-ce que j'ai appris de celui qui me
@@ -26,8 +25,7 @@
 
    Un trait qui n'est plus reconfirmé s'efface tout seul. Sans cela le
    profil accumulerait pour toujours une préférence énoncée une fois en
-   mars, et l'assistant s'y conformerait encore en décembre.
-   ============================================================ */
+   mars, et l'assistant s'y conformerait encore en décembre. */
 
 const crypto = require('node:crypto');
 
@@ -49,7 +47,7 @@ const LOT_CONSOLIDATION = 12; /* échanges relus par appel : tient dans 8 k jeto
 
 function migrate(db) {
   db.exec(`
-    /* ---------- traits appris ----------
+    /* traits appris
        La clé est le SUJET du trait ('langue', 'format_commandes'), pas
        sa valeur. Deux observations sur le même sujet se remplacent au
        lieu de s'empiler : c'est ce qui permet à un avis de changer. */
@@ -67,7 +65,7 @@ function migrate(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_profil_agent ON profil(agent, confiance DESC);
 
-    /* ---------- corrections ----------
+    /* corrections
        Ce qui a été dit de faux, et ce qu'il fallait dire. Indexé sur la
        question normalisée : la prochaine question qui lui ressemble
        ramène la correction avant que le modèle recommence. */
@@ -85,7 +83,7 @@ function migrate(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_corr_agent ON corrections(agent, dernier_le DESC);
 
-    /* ---------- avancement de la consolidation ----------
+    /* avancement de la consolidation
        Où en est la distillation pour chaque agent. Sans ce repère, la
        passe relirait chaque fois tout l'historique. */
     CREATE TABLE IF NOT EXISTS consolidation (
@@ -102,7 +100,7 @@ function migrate(db) {
   }
 }
 
-/* ---------- utilitaires ---------- */
+/* utilitaires */
 
 const maintenant = () => new Date().toISOString();
 
@@ -135,7 +133,7 @@ function confianceVive(row, now = Date.now()) {
   return row.origine === 'declare' ? row.confiance : row.confiance * usure;
 }
 
-/* ---------- profil ---------- */
+/* profil */
 
 /**
  * Les traits vivants d'un agent : le commun d'abord, le sien ensuite.
@@ -241,7 +239,7 @@ function elaguer(db, agent) {
     .run(agent, agent, n - MAX_TRAITS);
 }
 
-/* ---------- corrections ---------- */
+/* corrections */
 
 /**
  * Enregistre une réponse ratée et ce qu'il fallait dire.
@@ -302,7 +300,7 @@ function correctionsPour(db, agent, question, { limite = 4 } = {}) {
     .map(({ r, s }) => ({ question: r.question, faux: r.faux || undefined, correction: r.correction, n: r.n, proximite: Number(s.toFixed(2)) }));
 }
 
-/* ---------- briefing ---------- */
+/* briefing */
 
 /**
  * Tout ce qu'il faut savoir avant de répondre, en un seul appel.
@@ -393,7 +391,7 @@ function briefTexte(b) {
   return l.join('\n');
 }
 
-/* ---------- consolidation ----------
+/* consolidation
    C'est ici que l'historique devient un apprentissage. */
 
 const CONSIGNE = `Tu lis des échanges entre un utilisateur et un assistant technique qui gère son infrastructure.

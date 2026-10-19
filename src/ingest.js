@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Ingestion.
+/* Ingestion.
 
    L'ordre des opérations n'est pas négociable :
 
@@ -14,15 +13,14 @@
    La vectorisation est HORS du chemin d'écriture. Une entrée est
    cherchable en plein texte dès son écriture, et cherchable en
    vecteur quand le serveur de vecteurs a répondu. Bloquer l'écriture sur Ollama
-   ferait tomber toute l'ingestion à la première panne du modèle.
-   ============================================================ */
+   ferait tomber toute l'ingestion à la première panne du modèle. */
 
 const crypto = require('node:crypto');
 
 const LEVELS = new Set(['L0', 'L1', 'L2', 'L3']);
 const RELATIONS = new Set(['causes', 'fixes', 'supersedes', 'relates_to', 'part_of']);
 
-/* ---------- filtrage ----------
+/* filtrage
    Chaque règle correspond à une famille de bruit observée en vrai.
    Renvoie null si l'événement passe, sinon la raison du rejet. */
 function reject(evt) {
@@ -53,7 +51,7 @@ function reject(evt) {
   return null;
 }
 
-/* ---------- niveau par défaut ----------
+/* niveau par défaut
    Le niveau dit à quel point l'information est stabilisée. Un service
    qui pousse un événement produit du L0 ; une décision consignée par
    une IA ou par toi est du L3 dès l'écriture. */
@@ -66,7 +64,7 @@ function defaultLevel(evt) {
   return 'L0';
 }
 
-/* ---------- hash ----------
+/* hash
    Porte l'identité du FAIT, pas son horodatage : deux envois du même
    fait à deux secondes d'écart sont le même fait. C'est ce qui rend
    le rejeu d'une file locale sans danger. */
@@ -76,7 +74,7 @@ function hashOf(o) {
     .digest('hex');
 }
 
-/* ---------- découpage ----------
+/* découpage
    Un événement court reste entier : le découper produirait des
    fragments sans contexte. Un texte long est coupé aux frontières de
    paragraphe, avec le titre répété en tête de chaque morceau — sinon
@@ -131,7 +129,7 @@ function chunk(entry) {
   return out.map(t => ({ text: head + '\n' + t, embedded: 0 }));
 }
 
-/* ---------- normalisation ---------- */
+/* normalisation */
 /* La provenance est celle du jeton, jamais celle que l'envoi déclare : une
    source ne signe pas au nom d'une autre. Une origine annoncée (un
    collecteur qui relaie) reste lisible dans meta.origine. */
@@ -162,7 +160,7 @@ function safeDate(v) {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
-/* ---------- écriture ---------- */
+/* écriture */
 function insert(db, evt, sourceName) {
   const why = reject(evt);
   if (why) return { ok: false, filtered: true, reason: why };

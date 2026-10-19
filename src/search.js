@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Recherche hybride.
+/* Recherche hybride.
 
    Trois moteurs, fusionnés par RRF (Reciprocal Rank Fusion) :
 
@@ -19,8 +18,7 @@
    SORTIE ANTICIPÉE : si le lexical donne un premier résultat franc et
    nettement détaché, on ne calcule pas le vecteur de la requête. Sur
    du trafic d'infrastructure — noms de machines, de services, de tickets —
-   ça couvre la majorité des requêtes et les ramène à ~10 ms.
-   ============================================================ */
+   ça couvre la majorité des requêtes et les ramène à ~10 ms. */
 
 const { blobToVec } = require('./db.js');
 const VEC = require('./vecteurs.js');
@@ -56,7 +54,7 @@ function toks(s) {
   return norm(s).split(/[^a-z0-9._-]+/).filter(t => t.length > 1 && !STOP.has(t));
 }
 
-/* ---------- analyse de la requête ----------
+/* analyse de la requête
    Ce qui est reconnu comme filtre ne part pas au scoring : filtrer
    avant de scorer est toujours moins cher, et bien plus précis. */
 function parse(raw) {
@@ -87,7 +85,7 @@ function parse(raw) {
   return { filters: f, text, toks: t, intent, hasFilter, raw, redige };
 }
 
-/* ---------- SQL de filtrage, partagé par les trois moteurs ---------- */
+/* SQL de filtrage, partagé par les trois moteurs */
 function whereClause(p, ns) {
   const w = ['e.archived = 0', 'e.ns = ?'];
   const a = [ns];
@@ -104,7 +102,7 @@ function whereClause(p, ns) {
   return { sql: w.join(' AND '), args: a };
 }
 
-/* ---------- FTS5 ----------
+/* FTS5
    La requête est construite en OR de préfixes : une frappe partielle
    ou un pluriel ne doit pas faire chuter le rappel à zéro. */
 /* Le pluriel français : « alertes » doit trouver « alerte », « réseaux »
@@ -135,7 +133,7 @@ function lexical(db, p, ns, limit) {
   }
 }
 
-/* ---------- filtre seul, sans termes ---------- */
+/* filtre seul, sans termes */
 function filterOnly(db, p, ns, limit) {
   const { sql, args } = whereClause(p, ns);
   return db.prepare(`
@@ -144,7 +142,7 @@ function filterOnly(db, p, ns, limit) {
     .map((r, i) => ({ id: r.id, rank: i, raw: 1 }));
 }
 
-/* ---------- vecteurs ----------
+/* vecteurs
    Exhaustif, donc exact : aucun faux négatif, contrairement à un index
    approximatif. Mesuré à 12 ms sur 10 000 vecteurs de 768 dimensions,
    ce qui laisse une marge très large à l'échelle d'une petite infrastructure. */
@@ -195,7 +193,7 @@ function idsAutorises(db, p, ns) {
   return db.prepare(`SELECT e.id FROM entries e WHERE ${sql}`).all(...args).map(r => r.id);
 }
 
-/* ---------- graphe ----------
+/* graphe
    Les voisins directs des meilleurs résultats. C'est ce qui remonte le
    correctif quand on a trouvé l'incident : une recherche textuelle sur
    « oom » ne trouvera jamais « SIGKILL + garde /22 ». */
@@ -214,7 +212,7 @@ function graph(db, seeds, p, ns, limit) {
              .map((r, i) => ({ id: r.id, rank: i, raw: 1, relation: r.relation }));
 }
 
-/* ---------- fusion ---------- */
+/* fusion */
 function fuse(lists) {
   const acc = new Map();
   for (const { name, items, w } of lists) {
@@ -230,7 +228,7 @@ function fuse(lists) {
   return [...acc.values()];
 }
 
-/* ---------- décision ----------
+/* décision
    C'est la FORME du classement qui parle, pas le score du premier.
    Un top-1 à 0.90 suivi d'un 0.88 est ambigu, pas certain. */
 function decide(p, hits, gap) {
@@ -253,7 +251,7 @@ function decide(p, hits, gap) {
     reason: `Résultats étalés sur ${srcs.size} sources avec des écarts faibles : aucun ne s'impose.` };
 }
 
-/* ---------- entrée principale ---------- */
+/* entrée principale */
 async function search(db, opts) {
   const t0 = performance.now();
   const {

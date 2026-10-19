@@ -1,13 +1,11 @@
 'use strict';
-/* ============================================================
-   Ce que chaque route accepte, champ par champ : corps et paramètres
+/* Ce que chaque route accepte, champ par champ : corps et paramètres
    de requête. Tout champ non déclaré est refusé (400), les types et
    les longueurs sont contrôlés avant que la route ne lise quoi que ce
    soit. Le validateur est celui du socle (socle/src/schema.js).
 
    Un champ vide ("") vaut absent : le Hub remplit ses gabarits par des
-   chaînes, vides quand le paramètre n'a pas été donné.
-   ============================================================ */
+   chaînes, vides quand le paramètre n'a pas été donné. */
 
 const txt = (max, o = {}) => ({ type: 'chaine', max, ...o });
 const ent = (min, max, o = {}) => ({ type: 'entier', min, max, ...o });

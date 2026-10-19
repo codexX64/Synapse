@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Client SYNAPSE — zéro dépendance, Node 18+.
+/* Client SYNAPSE — zéro dépendance, Node 18+.
 
    À copier tel quel dans chaque service. Trois garanties :
 
@@ -20,8 +19,7 @@
 
    L'URL doit pointer sur le réseau Docker interne, PAS sur
    synapse.example.com. L'ingestion ne sort jamais du lab :
-   pas de Caddy, pas de Cloudflare, pas de TLS à négocier.
-   ============================================================ */
+   pas de Caddy, pas de Cloudflare, pas de TLS à négocier. */
 
 const fs = require('fs');
 const path = require('path');
@@ -39,7 +37,7 @@ const CFG = {
 const enabled = !!CFG.token;
 if (!enabled) console.warn('[synapse] SYNAPSE_TOKEN absent — envois désactivés');
 
-/* ---------- spool disque ---------- */
+/* spool disque */
 
 function spoolDir() {
   try { fs.mkdirSync(CFG.spool, { recursive: true }); return true; }
@@ -64,7 +62,7 @@ function spoolRead() {
   catch { return []; }
 }
 
-/* ---------- normalisation ---------- */
+/* normalisation */
 
 function build(evt) {
   const o = {
@@ -85,7 +83,7 @@ function build(evt) {
   return o;
 }
 
-/* ---------- transport ---------- */
+/* transport */
 
 async function post(pathname, payload) {
   const ctl = AbortSignal.timeout(CFG.timeout);
@@ -122,7 +120,7 @@ async function flush() {
   } catch { return 0; }
 }
 
-/* ---------- API publique ---------- */
+/* API publique */
 
 /**
  * Consigne un événement dans SYNAPSE.

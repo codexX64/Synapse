@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   L'activité réelle de SYNAPSE : ce qu'on lui a demandé, en combien
+/* L'activité réelle de SYNAPSE : ce qu'on lui a demandé, en combien
    de temps, et à quel étage de la cascade il a trouvé.
 
    L'interface affichait des chiffres écrits en dur — 47 requêtes par
@@ -15,8 +14,7 @@
      VIDE  rien au-dessus du seuil
 
    Trente jours de rétention : assez pour une moyenne, trop peu pour
-   devenir un historique de ce que chacun a cherché.
-   ============================================================ */
+   devenir un historique de ce que chacun a cherché. */
 
 const RETENTION_JOURS = 30;
 const ETAGES = ['L0', 'L1', 'L2', 'L3'];

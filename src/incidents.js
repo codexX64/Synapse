@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Mémoire opérationnelle — extension TRIAGE.
+/* Mémoire opérationnelle — extension TRIAGE.
 
    Ce module n'est pas un journal d'incidents. C'est un cache
    sémantique : son rôle est que TRIAGE appelle le LLM de moins en
@@ -23,8 +22,7 @@
    3. Le DERNIER résultat pèse plus que l'ancien. `success_rate`
       se calcule sur les N dernières occurrences, jamais sur tout
       l'historique : un fix qui marchait il y a un an mais échoue
-      depuis trois mois doit tomber vite.
-   ============================================================ */
+      depuis trois mois doit tomber vite. */
 
 const crypto = require('node:crypto');
 
@@ -40,7 +38,7 @@ const LIM = {
 const RATE_WINDOW_DEFAULT = 10;   /* N dernières occurrences pour success_rate */
 const L3_TIMEOUT_MS = 35;         /* budget dur du niveau textuel */
 
-/* ---------- migration ---------- */
+/* migration */
 function migrate(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS incidents (
@@ -104,7 +102,7 @@ function migrate(db) {
   `);
 }
 
-/* ---------- signature ----------
+/* signature
    Doit être STABLE dans le temps : deux incidents identiques à deux mois
    d'écart produisent le même hash. Tout ce qui varie d'une occurrence à
    l'autre est donc écarté — horodatages, identifiants de conteneur, ports
@@ -152,7 +150,7 @@ function signatureOf({ alert_key, service, host, symptom }) {
     .slice(0, 32);
 }
 
-/* ---------- validation ----------
+/* validation
    Le payload vient d'un service qui a lui-même parlé à un LLM : on ne
    fait confiance à aucune longueur ni à aucun type. */
 function validate(p) {
@@ -202,7 +200,7 @@ function validate(p) {
   };
 }
 
-/* ---------- écriture ---------- */
+/* écriture */
 function record(db, payload, opts = {}) {
   const v = validate(payload);
   if (v.error) return { ok: false, error: v.error };
@@ -247,7 +245,7 @@ function occurrencesOf(db, sig) {
   return r ? r.occurrences : 1;
 }
 
-/* ---------- agrégats d'une population d'incidents ----------
+/* agrégats d'une population d'incidents
    success_rate sur les N DERNIÈRES occurrences seulement : c'est ce qui
    fait chuter un fix qui se dégrade au lieu de le maintenir à flot avec
    ses réussites d'il y a un an. */
@@ -299,7 +297,7 @@ function summarize(rows, n = RATE_WINDOW_DEFAULT) {
   };
 }
 
-/* ---------- cascade ----------
+/* cascade
    Du moins cher au plus cher, arrêt au premier niveau exploitable. */
 function lookup(db, q, opts = {}) {
   const t0 = performance.now();
@@ -367,7 +365,7 @@ function lookup(db, q, opts = {}) {
   return r || vide('aucun incident comparable');
 }
 
-/* ---------- historique et statistiques ---------- */
+/* historique et statistiques */
 function history(db, service, limit = 50) {
   return db.prepare(`
     SELECT id,signature,alert_key,service,host,symptom,root_cause,resolution,
@@ -433,7 +431,7 @@ function stats(db, days = 30) {
   };
 }
 
-/* ---------- rétention ----------
+/* rétention
    12 mois en détail, puis synthèse par signature. Les incidents
    `generated` sont conservés indéfiniment : ce sont des commandes ad-hoc
    approuvées à la main, elles ont une valeur d'audit. */

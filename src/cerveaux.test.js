@@ -1,14 +1,12 @@
 'use strict';
-/* ============================================================
-   Tests de l'annuaire des cerveaux.
+/* Tests de l'annuaire des cerveaux.
 
    Ce que prouve cette suite : un jeton de cerveau ne vaut que pour son
    nom, une fiche ne dit que ce qu'on lui permet de dire, orienter
    retrouve le bon cerveau et reconnaît une action, et le brief ne
    renvoie jamais un cerveau vers lui-même.
 
-   node --test src/cerveaux.test.js
-   ============================================================ */
+   node --test src/cerveaux.test.js */
 
 const test = require('node:test');
 const assert = require('node:assert');

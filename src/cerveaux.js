@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   SYNAPSE — l'annuaire des cerveaux.
+/* SYNAPSE — l'annuaire des cerveaux.
 
    SYNAPSE est le cerveau de l'infrastructure. Chaque service qui a son IA (le
    Hub, MapMyLAN, et ceux qui viendront) y a un MINI-cerveau : sa fiche
@@ -22,8 +21,7 @@
    Les jetons. Chaque service installé par le Hub reçoit un jeton de
    cerveau DÉRIVÉ du jeton du Hub : cer_<nom>_<hmac>. SYNAPSE le vérifie
    sans rien stocker d'avance ; il ne vaut que pour ce nom, et changer le
-   jeton du Hub les révoque tous d'un coup.
-   ============================================================ */
+   jeton du Hub les révoque tous d'un coup. */
 
 const crypto = require('node:crypto');
 
@@ -46,7 +44,7 @@ function migrate(db) {
   `);
 }
 
-/* ---------- jetons de cerveau ---------- */
+/* jetons de cerveau */
 
 const signe = (cle, nom) => crypto.createHmac('sha256', String(cle)).update('cerveau:' + nom).digest('hex');
 
@@ -65,7 +63,7 @@ function verifieJeton(cle, brut) {
   return attendu.length === recu.length && crypto.timingSafeEqual(attendu, recu) ? m[1] : null;
 }
 
-/* ---------- fiches ---------- */
+/* fiches */
 
 const texte = (v, max) => String(v ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
 const liste = (v, max, n) => (Array.isArray(v) ? v : []).map(x => texte(x, max)).filter(Boolean).slice(0, n);
@@ -112,7 +110,7 @@ function tous(db) { return db.prepare(`SELECT * FROM cerveaux ORDER BY nom`).all
 function un(db, nom) { return lire(db.prepare(`SELECT * FROM cerveaux WHERE nom=?`).get(nom)); }
 function retirer(db, nom) { return db.prepare(`DELETE FROM cerveaux WHERE nom=?`).run(nom).changes > 0; }
 
-/* ---------- orienter ----------
+/* orienter
    Sans modèle : quelques millisecondes, et un résultat qu'on peut
    expliquer (« parce que tu as dit workflow »). Le nom d'un cerveau cité
    pèse le plus ; ses sujets ensuite ; les mots de son périmètre peu. */

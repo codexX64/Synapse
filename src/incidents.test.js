@@ -1,14 +1,12 @@
 'use strict';
-/* ============================================================
-   Banc de test de la mémoire opérationnelle.
+/* Banc de test de la mémoire opérationnelle.
 
    Le test qui décide de tout est le dernier : le lookup est appelé
    AVANT chaque décision de TRIAGE, sur le chemin critique d'une
    alerte en cours. Au-delà de 100 ms au p95, autant appeler le LLM
    directement — la mémoire coûterait plus qu'elle ne rapporte.
 
-   node src/incidents.test.js
-   ============================================================ */
+   node src/incidents.test.js */
 
 const fs = require('node:fs');
 const { open } = require('./db.js');
@@ -28,7 +26,7 @@ function t(nom, cond, detail) {
 const iso = d => new Date(Date.now() - d * 86400000).toISOString();
 const head = s => console.log('\n\x1b[1m' + s + '\x1b[0m');
 
-/* ---------- signature ---------- */
+/* signature */
 head('SIGNATURE — stable dans le temps, discriminante sur la panne');
 {
   const base = { alert_key: 'proxy_502', service: 'serveur-web', host: 'srv-app-01' };
@@ -45,7 +43,7 @@ head('SIGNATURE — stable dans le temps, discriminante sur la panne');
   t('hôte différent, signature différente', a !== e);
 }
 
-/* ---------- validation ---------- */
+/* validation */
 head('VALIDATION — le payload vient d\'un LLM, aucune confiance');
 {
   t('alert_key manquant refusé',  !!I.validate({ service: 'x', outcome: 'resolved' }).error);
@@ -65,7 +63,7 @@ head('VALIDATION — le payload vient d\'un LLM, aucune confiance');
   t('argv borné en nombre et en longueur', cmd.length <= 40 && cmd[0].length <= 500);
 }
 
-/* ---------- idempotence ---------- */
+/* idempotence */
 head('IDEMPOTENCE — le rejeu ne duplique pas');
 {
   const p = { alert_key: 'test_idem', service: 'svc', host: 'h1',
@@ -78,7 +76,7 @@ head('IDEMPOTENCE — le rejeu ne duplique pas');
   t('même signature, autre horodatage : nouvelle occurrence', c.id !== a.id);
 }
 
-/* ---------- cascade ---------- */
+/* cascade */
 head('CASCADE — chaque niveau rend le bon résultat');
 {
   for (const d of [30, 20, 10]) {
@@ -107,7 +105,7 @@ head('CASCADE — chaque niveau rend le bon résultat');
   t('cause connue restituée', l0.known_cause === 'conteneur arrêté après OOM');
 }
 
-/* ---------- failed_fixes et dépréciation ---------- */
+/* failed_fixes et dépréciation */
 head('DÉPRÉCIATION — le dernier résultat pèse plus que l\'ancien');
 {
   const base = { alert_key: 'degrad', service: 'svc_d', host: 'h1',
@@ -136,7 +134,7 @@ head('DÉPRÉCIATION — le dernier résultat pèse plus que l\'ancien');
     `fenêtre 3 = ${court.success_rate} · fenêtre 50 = ${long.success_rate}`);
 }
 
-/* ---------- renforcement ---------- */
+/* renforcement */
 head('RENFORCEMENT — une signature vue N fois est UN nœud fort');
 {
   const sig = I.signatureOf({ alert_key: 'degrad', service: 'svc_d', host: 'h1',
@@ -146,7 +144,7 @@ head('RENFORCEMENT — une signature vue N fois est UN nœud fort');
   t('la force reste bornée', row && row.strength >= 0.1 && row.strength <= 10, row && row.strength);
 }
 
-/* ---------- rétention ---------- */
+/* rétention */
 head('RÉTENTION — 12 mois en détail, generated conservé indéfiniment');
 {
   I.record(db, { alert_key: 'vieux', service: 'svc_v', host: 'h1', symptom: 'ancienne panne',
@@ -167,7 +165,7 @@ head('RÉTENTION — 12 mois en détail, generated conservé indéfiniment');
   t('synthèse écrite avant suppression', rollup > 0, rollup);
 }
 
-/* ---------- performance ---------- */
+/* performance */
 head('PERFORMANCE — chemin critique, budget 100 ms au p95');
 {
   const N = 10000;
@@ -224,7 +222,7 @@ head('PERFORMANCE — chemin critique, budget 100 ms au p95');
   t('le L3 respecte aussi le budget', p95_3 < 100, p95_3.toFixed(1) + ' ms');
 }
 
-/* ---------- statistiques ---------- */
+/* statistiques */
 head('STATISTIQUES');
 {
   const s = I.stats(db, 30);

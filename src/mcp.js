@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   MCP — le canal des agents.
+/* MCP — le canal des agents.
 
    Ce que renvoie SYNAPSE à une IA n'a rien à voir avec ce qu'il
    renvoie au hub. Deux différences qui comptent :
@@ -17,8 +16,7 @@
 
    memory_write est un appel EXPLICITE. Jamais automatique en fin de
    conversation : un modèle reformule, et en trois semaines la base
-   est pleine de paraphrases contradictoires.
-   ============================================================ */
+   est pleine de paraphrases contradictoires. */
 
 const { search } = require('./search.js');
 const ingest = require('./ingest.js');

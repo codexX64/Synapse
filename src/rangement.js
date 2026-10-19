@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Rangement de la memoire : detecter, proposer, appliquer.
+/* Rangement de la memoire : detecter, proposer, appliquer.
 
    Deux principes tiennent ce module.
 
@@ -15,13 +14,12 @@
       automatique qui se trompe detruit de l'information qu'aucune
       recherche ne retrouvera.
 
-   Une sauvegarde precede toute application.
-   ============================================================ */
+   Une sauvegarde precede toute application. */
 
 const fs = require('node:fs');
 const path = require('node:path');
 
-/* ---------- lecture des vecteurs ---------- */
+/* lecture des vecteurs */
 function vecteurs(db, ns) {
   /* Un vecteur par entree : celui de son premier morceau. Comparer
      morceau a morceau ferait remonter des paragraphes voisins dans
@@ -47,7 +45,7 @@ function cos(a, b) {
   return s;
 }
 
-/* ---------- doublons ---------- */
+/* doublons */
 function doublons(db, { ns = null, seuil = 0.94, max = 40 } = {}) {
   const E = vecteurs(db, ns);
   const paires = [];
@@ -81,7 +79,7 @@ function doublons(db, { ns = null, seuil = 0.94, max = 40 } = {}) {
   return { total: E.length, candidats: paires.length, actions: retenues };
 }
 
-/* ---------- titres faibles ----------
+/* titres faibles
    Un titre issu d'une section markdown decrit le CONTENANT
    (« Ce qui ne va pas », « Installation ») sans dire de quoi il
    parle. Une recherche sur ces titres ne remonte rien d'utile. */
@@ -99,7 +97,7 @@ function titresFaibles(db, { ns = null, max = 25 } = {}) {
   return r.filter(e => FAIBLES.some(re => re.test(e.title))).slice(0, max);
 }
 
-/* ---------- orphelins ----------
+/* orphelins
    Une entree sans vecteur n'est joignable que par le lexical : elle
    existe sans etre vraiment cherchable. */
 function orphelins(db) {
@@ -112,7 +110,7 @@ function orphelins(db) {
     ORDER BY e.id DESC LIMIT 30`).all();
 }
 
-/* ---------- sauvegarde ----------
+/* sauvegarde
    VACUUM INTO fait une copie coherente sans arreter le service, la
    ou un cp sur un fichier SQLite ouvert donnerait une base corrompue
    une fois sur dix. */
@@ -131,7 +129,7 @@ function sauvegarde(db, dossier = '/data/sauvegardes') {
   return { fichier: path.basename(nom), octets: fs.statSync(nom).size };
 }
 
-/* ---------- application ----------
+/* application
    Tout dans UNE transaction : un rangement a moitie applique laisse
    une memoire dans un etat que personne n'a decide. */
 function applique(db, plan) {

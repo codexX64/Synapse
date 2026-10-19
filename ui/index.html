@@ -395,7 +395,7 @@ const CSRF=(()=>{
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s);
 
-/* ============================== TYPES D'ENTRÉES ============================== */
+/* TYPES D'ENTRÉES */
 const TYPES = {
   machine:  {c:'#5aa7ff', l:'Machine'},
   service:  {c:'#46e3ff', l:'Service'},
@@ -416,8 +416,7 @@ const typeDe = t => TYPES[t] || {c:'#8fa0b8', l:String(t||'autre')};
 /* Tout ce qui vient de la mémoire est du TEXTE : une question posée à
    l'assistant peut contenir n'importe quoi, y compris du HTML. */
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-/* ============================================================
-   Les données : le vrai SYNAPSE, et rien d'autre.
+/* Les données : le vrai SYNAPSE, et rien d'autre.
 
    Chargement SYNCHRONE, volontairement : la scène se construit à la
    ligne qui suit, sur ce qui a été lu. Un fetch asynchrone rendrait la
@@ -427,8 +426,7 @@ const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp
 
    Il n'y a plus de corpus de démonstration. Une base vide affiche une
    scène vide et le dit ; un SYNAPSE injoignable le dit aussi. Montrer
-   des données inventées à la place faisait croire que tout marchait.
-   ============================================================ */
+   des données inventées à la place faisait croire que tout marchait. */
 const NS = (() => {
   const v = new URLSearchParams(location.search).get('ns');
   return v === 'savoir' ? 'savoir' : 'shared';
@@ -483,7 +481,7 @@ E.forEach(([a,b])=>{NEIGH[a].add(b);NEIGH[b].add(a);});
   }
 })();
 
-/* ============================== ARBRE DES THÈMES ============================== */
+/* ARBRE DES THÈMES */
 /* L'arbre se déduit des données affichées : une branche par type, une
    feuille par entrée. */
 function arbreParType(liste){
@@ -493,7 +491,7 @@ function arbreParType(liste){
 }
 let TREE=arbreParType(nodes);
 
-/* ============================== SCÈNE 3D — ARBRE RÉCURSIF ============================== */
+/* SCÈNE 3D — ARBRE RÉCURSIF */
 const canvas = $('#stage');
 const renderer = new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
@@ -896,7 +894,7 @@ function majEchelle(visibles){
 majEchelle(nodes);
 const SPRS=nodes.map(n=>n.spr); // cache raycast
 
-/* ===== VUES MULTIPLES : positions cibles galaxie + carte 2D ===== */
+/* VUES MULTIPLES : positions cibles galaxie + carte 2D */
 const VIEW={mode:'sphere',blend:{galaxy:0,card:0}}; // blend 0..1 vers chaque disposition alternative
 function calculeAlt(nodes){
   const types=[...new Set(nodes.map(n=>n.type))];
@@ -1079,7 +1077,7 @@ function spawnSignal(id,strong){
   signals.push({n,s,t:0,sp:(strong?.014:.009)+Math.random()*.005,strong});
 }
 
-/* ============================== CAMÉRA CINÉMATIQUE ============================== */
+/* CAMÉRA CINÉMATIQUE */
 const rig={th:.9,ph:1.12,r:62,tg:new THREE.Vector3(),thG:.9,phG:1.12,rG:62,tgG:new THREE.Vector3(),tw:null};
 const easeIOC=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
 const easeOutQ=t=>1-(1-t)*(1-t);
@@ -1161,7 +1159,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'){if(state.selected)clearSelec
 $('#btnHome').onclick=()=>{clearSelection(true);};
 $('#btnReset').onclick=()=>{state.selected?focusCard(byId[state.selected]):homeCam();};
 
-/* ============================== SÉLECTION ============================== */
+/* SÉLECTION */
 const state={selected:null,related:new Set(),tags:new Set(),lastSig:0,rot:reduced?0:.0004,rotCur:0,
   /* filtre : les identifiants des cartes trouvees par la derniere recherche.
      Tant qu il est actif, les autres cartes s estompent et ne repondent
@@ -1244,7 +1242,7 @@ function pick(cx,cy){
   return best.object.userData.id;
 }
 
-/* ============================== LABELS (pool + fondu + hystérésis) ============================== */
+/* LABELS (pool + fondu + hystérésis) */
 const labelsEl=$('#labels'),labelPool=new Map(),activeLabels=new Set();
 function lbl(key,txt,sub,cls){
   let el=labelPool.get(key);
@@ -1275,7 +1273,7 @@ function placeLabel(el,pos,now,halfH){
   el._last=now;
 }
 
-/* ============================== PULSATIONS ============================== */
+/* PULSATIONS */
 const pulses=new Map();
 function pulse(id,k,ms){
   if(!byId[id])return;
@@ -1284,7 +1282,7 @@ function pulse(id,k,ms){
 }
 function flashType(t){nodes.filter(n=>n.type===t).forEach(n=>pulse(n.id,.3,900));}
 
-/* ============================== HUD / INSPECTEUR ==============================
+/* HUD / INSPECTEUR
    Chaque chiffre vient de SYNAPSE : /v1/graph pour la scène, et
    /v1/stats?scope=activite pour l'activité et l'apprentissage. Rien
    n'est écrit à l'avance ; ce qui n'est pas encore mesuré affiche « — ». */
@@ -1400,7 +1398,7 @@ function bindInsp(){
 }
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2200);}
 
-/* ============================== MOTEUR DE PENSÉE ==============================
+/* MOTEUR DE PENSÉE
    La barre interroge SYNAPSE (/v1/answer). Un mot : la cascade rend les
    entrées. Une question : les meilleurs extraits partent à l'IA locale,
    qui répond uniquement d'après eux. Les puces L0…L3 montrent l'étage
@@ -1525,7 +1523,7 @@ majInstrumentation();
 setInterval(()=>{if(!document.hidden)majInstrumentation();},30000);
 $('#hudBtn').onclick=()=>$('#hud').classList.toggle('open');
 
-/* ============================== BOUCLE ============================== */
+/* BOUCLE */
 function resize(){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);}
 addEventListener('resize',resize);resize();
 let first=true;
@@ -1713,7 +1711,7 @@ function loop(){
   if(first){first=false;$('#veil').classList.add('off');}
 }
 
-/* ============================== FICHE ==============================
+/* FICHE
    Ce que SYNAPSE a compris de toi (les fiches, distillées de tes
    échanges et affinées à chaque passe) et ce que les données montrent
    (quand tu travailles, de quoi tu parles). Une fiche qui a bougé depuis

@@ -1,14 +1,12 @@
 'use strict';
-/* ============================================================
-   Reglages persistants, ranges dans la table `meta` qui existe deja.
+/* Reglages persistants, ranges dans la table `meta` qui existe deja.
    Une table de plus pour huit valeurs ne se justifie pas.
 
    Le jeton Telegram vit ici : c'est un secret, mais un secret que la
    page de parametres doit pouvoir poser sans qu'on edite un .env et
    qu'on redemarre le service. Il est scelle par le coffre du socle
    (SOCLE_CLE) et n'est jamais renvoye par l'API — seulement sa fin,
-   « …4f2c ».
-   ============================================================ */
+   « …4f2c ». */
 
 const DEFAUTS = {
   seuil_doublon: 0.94,

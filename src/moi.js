@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Ce que SYNAPSE sait de toi.
+/* Ce que SYNAPSE sait de toi.
 
    Deux choses que l'historique brut ne donnait pas.
 
@@ -15,8 +14,7 @@
       a compris de toi ; les habitudes sont ce que les horodatages et les
       sujets montrent, sans interprétation. Les heures sont renvoyées
       brutes : c'est le navigateur qui les place dans ton fuseau, le
-      serveur tourne souvent en UTC.
-   ============================================================ */
+      serveur tourne souvent en UTC. */
 
 const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();

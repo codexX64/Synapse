@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Base SQLite — node:sqlite, aucune dépendance externe.
+/* Base SQLite — node:sqlite, aucune dépendance externe.
 
    Trois choix structurants :
 
@@ -14,8 +13,7 @@
       mesuré. Pas d'index approximatif, donc pas de faux négatif.
 
    3. WAL activé. L'ingestion écrit pendant que la recherche lit,
-      sans se bloquer mutuellement.
-   ============================================================ */
+      sans se bloquer mutuellement. */
 
 const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
@@ -47,7 +45,7 @@ function migrate(db) {
   if (cur >= SCHEMA_VERSION) return;
 
   db.exec(`
-    /* ---------- sources : un jeton par service ---------- */
+    /* sources : un jeton par service */
     CREATE TABLE IF NOT EXISTS sources (
       name        TEXT PRIMARY KEY,
       token_hash  TEXT NOT NULL UNIQUE,
@@ -59,7 +57,7 @@ function migrate(db) {
       n_events    INTEGER NOT NULL DEFAULT 0
     );
 
-    /* ---------- espaces : shared, agent:x, prompts:x ---------- */
+    /* espaces : shared, agent:x, prompts:x */
     CREATE TABLE IF NOT EXISTS namespaces (
       name        TEXT PRIMARY KEY,
       kind        TEXT NOT NULL,                   -- shared | agent | prompts
@@ -67,7 +65,7 @@ function migrate(db) {
       created_at  TEXT NOT NULL
     );
 
-    /* ---------- entrées : le cœur ---------- */
+    /* entrées : le cœur */
     CREATE TABLE IF NOT EXISTS entries (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       ns          TEXT NOT NULL DEFAULT 'shared',
@@ -91,7 +89,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_entries_kind     ON entries(kind);
     CREATE INDEX IF NOT EXISTS idx_entries_ref      ON entries(ref);
 
-    /* ---------- morceaux : l'unité de recherche ----------
+    /* morceaux : l'unité de recherche
        Une entrée courte donne un seul morceau. Une décision longue
        en donne plusieurs. C'est le morceau qu'on vectorise, jamais
        l'entrée entière : mélanger deux sujets dans un vecteur le
@@ -109,7 +107,7 @@ function migrate(db) {
     CREATE INDEX IF NOT EXISTS idx_chunks_entry ON chunks(entry_id);
     CREATE INDEX IF NOT EXISTS idx_chunks_todo  ON chunks(embedded) WHERE embedded = 0;
 
-    /* ---------- plein texte : index externe, pas de duplication ---------- */
+    /* plein texte : index externe, pas de duplication */
     CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
       title, body, tags, kind, ref,
       content='entries', content_rowid='id',
@@ -130,7 +128,7 @@ function migrate(db) {
       VALUES (new.id,new.title,new.body,new.tags,new.kind,COALESCE(new.ref,''));
     END;
 
-    /* ---------- graphe : vocabulaire fermé ---------- */
+    /* graphe : vocabulaire fermé */
     CREATE TABLE IF NOT EXISTS links (
       from_id    INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
       to_id      INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
@@ -141,7 +139,7 @@ function migrate(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_links_to ON links(to_id);
 
-    /* ---------- file d'ingestion ---------- */
+    /* file d'ingestion */
     CREATE TABLE IF NOT EXISTS queue (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       payload    TEXT NOT NULL,
@@ -154,7 +152,7 @@ function migrate(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_queue_status ON queue(status, next_try);
 
-    /* ---------- apprentissage local : clics et requêtes mortes ---------- */
+    /* apprentissage local : clics et requêtes mortes */
     CREATE TABLE IF NOT EXISTS query_clicks (
       query_norm TEXT NOT NULL,
       entry_id   INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
@@ -167,7 +165,7 @@ function migrate(db) {
       last_at    TEXT NOT NULL
     );
 
-    /* ---------- prompts versionnés ---------- */
+    /* prompts versionnés */
     CREATE TABLE IF NOT EXISTS prompts (
       agent      TEXT NOT NULL,
       version    INTEGER NOT NULL,
@@ -187,7 +185,7 @@ function migrate(db) {
     .run(String(SCHEMA_VERSION));
 }
 
-/* ---------- vecteurs ----------
+/* vecteurs
    Normalisés à l'écriture : le cosinus devient un produit scalaire,
    ce qui divise le coût de la recherche par deux et supprime toute
    racine carrée dans la boucle chaude. */

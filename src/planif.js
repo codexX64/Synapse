@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Plages horaires et notification Telegram.
+/* Plages horaires et notification Telegram.
 
    Le planificateur se reveille chaque minute : sur huit plages au
    maximum, un timer par plage serait plus elegant et plus fragile —
@@ -9,8 +8,7 @@
 
    Une analyse declenchee par une plage PROPOSE un plan. Elle ne
    l'applique pas. Un rangement automatique de bout en bout finirait
-   par supprimer quelque chose une nuit ou personne ne regarde.
-   ============================================================ */
+   par supprimer quelque chose une nuit ou personne ne regarde. */
 
 const CFG = require('./config.js');
 const LLM = require('./llm.js');
@@ -32,7 +30,7 @@ function doitTourner(cfg, now = new Date()) {
   return false;
 }
 
-/* ---------- Telegram, facultatif ---------- */
+/* Telegram, facultatif */
 async function previens(cfg, texte, clavier) {
   if (!cfg.telegram_actif || !cfg.telegram_token || !cfg.telegram_chat) return null;
   try {
@@ -67,7 +65,7 @@ async function testeTelegram(token, chat) {
   } catch (e) { return { ok: false, erreur: String(e.message).slice(0, 120) }; }
 }
 
-/* ---------- boucle ---------- */
+/* boucle */
 function demarre(db, reecrit) {
   const tic = async () => {
     try {

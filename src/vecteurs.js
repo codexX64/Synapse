@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   SYNAPSE — index vectoriel en mémoire.
+/* SYNAPSE — index vectoriel en mémoire.
 
    Le niveau 2 de la cascade lisait tous les morceaux vectorisés de
    l'espace à chaque requête : une ligne SQLite par morceau, un Buffer
@@ -21,8 +20,7 @@
    Il n'y a pas de budget mémoire à surveiller de près : à 768
    dimensions, dix mille morceaux font trente mégaoctets. Au-delà du
    plafond, l'index se désactive et la recherche reprend le chemin SQL —
-   plus lente, jamais fausse.
-   ============================================================ */
+   plus lente, jamais fausse. */
 
 const { blobToVec } = require('./db.js');
 

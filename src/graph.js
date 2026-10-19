@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Le graphe, tel que l'interface 3D en a besoin.
+/* Le graphe, tel que l'interface 3D en a besoin.
 
    Deux différences avec /v1/search, qui expliquent pourquoi c'est
    une route à part :
@@ -12,8 +11,7 @@
    2. L'interface raisonne en TYPES (machine, service, incident…),
       SYNAPSE stocke des KINDS (`container.oom`, `ticket.closed`).
       La correspondance se fait ici, pas côté navigateur : le jour où
-      un service invente un nouveau kind, une seule ligne change.
-   ============================================================ */
+      un service invente un nouveau kind, une seule ligne change. */
 
 /* Correspondance kind → type d'affichage.
    L'ordre compte : la première règle qui matche gagne. */

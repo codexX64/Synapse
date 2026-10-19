@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Recherche dans les tickets du service de tickets.
+/* Recherche dans les tickets du service de tickets.
 
    L'agregateur ne remonte que les dix plus recents : sur 42 ouverts,
    une question sur un ticket precis tombait systematiquement a cote,
@@ -13,8 +12,7 @@
 
    Le schema du service de tickets n'est pas fige : on releve les colonnes au
    demarrage et on construit la requete avec celles qui existent.
-   Coder en dur `ref` ou `ticket_id` casserait au premier renommage.
-   ============================================================ */
+   Coder en dur `ref` ou `ticket_id` casserait au premier renommage. */
 
 const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
@@ -39,7 +37,7 @@ function colRef() {
   return 'id';
 }
 
-/* ---------- recherche ----------
+/* recherche
    LIKE plutot que FTS : la table du service de tickets n'a pas d'index plein texte,
    et sur quelques centaines de lignes la difference est invisible. */
 function cherche(q, limite = 8) {

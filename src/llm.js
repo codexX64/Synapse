@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Le modèle qui rédige : réponses, titres, fiche.
+/* Le modèle qui rédige : réponses, titres, fiche.
 
    Deux familles, parce que c'est tout ce qui existe vraiment :
      ollama      l'API d'Ollama (/api/generate), sur ta machine
@@ -18,8 +17,7 @@
      LLM_MODELE       modèle (défaut selon le fournisseur)
 
    Un fournisseur distant sans clé retombe sur Ollama, et le dit : un
-   réglage à moitié rempli ne doit pas éteindre les réponses.
-   ============================================================ */
+   réglage à moitié rempli ne doit pas éteindre les réponses. */
 
 const CONNUS = {
   kimi:   { url: 'https://api.moonshot.ai/v1', modele: 'kimi-k2-0905-preview', nom: 'Kimi' },
@@ -30,7 +28,7 @@ const CTX = Number(process.env.OLLAMA_NUM_CTX || 8192);
 const REPONSE_MAX = 1024 * 1024;     /* une réponse de modèle tient largement en 1 Mio */
 const TEXTE_MAX = 64 * 1024;         /* texte diffusé : au-delà, le flux est coupé */
 
-/* ---------- plafond de l'IA distante ----------
+/* plafond de l'IA distante
    Une API payante appelée à chaque question coûte à chaque question : les
    appels distants sont comptés par jour (UTC) dans la base, et refusés
    au-delà de LLM_APPELS_JOUR. Ollama, local, n'est pas compté. */

@@ -1,12 +1,10 @@
 'use strict';
-/* ============================================================
-   Tests du contrat public — les 9 points exigés, dans l'ordre.
+/* Tests du contrat public — les 9 points exigés, dans l'ordre.
 
    Aucun réseau. La couche sémantique est volontairement absente :
    le service doit fonctionner sans elle, c'est le test 8.
 
-   node src/neurons.test.js
-   ============================================================ */
+   node src/neurons.test.js */
 
 const fs = require('node:fs');
 const { open } = require('./db.js');
@@ -30,7 +28,6 @@ const ecrire = (src, neuron, synapses) => N.remember(db, { neuron, synapses }, s
 
 (async () => {
 
-/* ============================================================ */
 head('1 · L0 franchit le seuil, L3 jamais');
 {
   ecrire('triage', {
@@ -66,7 +63,6 @@ head('1 · L0 franchit le seuil, L3 jamais');
     r.results.every((x, i) => i === 0 || r.results[i-1].similarity >= x.similarity));
 }
 
-/* ============================================================ */
 head('2 · un échec ne franchit jamais le seuil');
 {
   ecrire('triage', {
@@ -85,7 +81,6 @@ head('2 · un échec ne franchit jamais le seuil');
   t('il remonte quand même, comme information', !!x);
 }
 
-/* ============================================================ */
 head('3 · idempotence sur 24 h : fusion, pas doublon');
 {
   const n = {
@@ -111,7 +106,6 @@ head('3 · idempotence sur 24 h : fusion, pas doublon');
     c.body.neuron_id !== a.body.neuron_id && c.body.merged_with === null);
 }
 
-/* ============================================================ */
 head('4 · vieillissement : un neurone de 6 mois est décoté');
 {
   ecrire('triage', {
@@ -138,7 +132,6 @@ head('4 · vieillissement : un neurone de 6 mois est décoté');
     recent.results[0].similarity >= N.DECISION_THRESHOLD, recent.results[0].similarity);
 }
 
-/* ============================================================ */
 head('5 · le retour du client fait baisser le rang');
 {
   const q = { query: 'cause identique', context: { signature: 'sig_recent' } };
@@ -158,7 +151,6 @@ head('5 · le retour du client fait baisser le rang');
     `${r3.fb_useful}/${r3.fb_total}`);
 }
 
-/* ============================================================ */
 head('6 · cloisonnement entre clients');
 {
   ecrire('oracle', {
@@ -184,7 +176,6 @@ head('6 · cloisonnement entre clients');
   t('chaque client voit les siens', chezLui.results.length > 0);
 }
 
-/* ============================================================ */
 head('7 · le contenu est une donnée, jamais une instruction');
 {
   const poison = "'; DROP TABLE neurons; -- {{template}} ${injection} <script>alert(1)</script>";
@@ -206,7 +197,6 @@ head('7 · le contenu est une donnée, jamais une instruction');
   t('il est cherchable sans être interprété', r.results.length > 0);
 }
 
-/* ============================================================ */
 head('8 · le service fonctionne sans couche sémantique');
 {
   /* ctx.embed vaut null partout dans ces tests : L2 est donc inactif. */
@@ -224,7 +214,6 @@ head('8 · le service fonctionne sans couche sémantique');
     !r.results.some(x => x.via === 'L2'));
 }
 
-/* ============================================================ */
 head('9 · latence : L0 sur 10 000 neurones sous 300 ms');
 {
   const services = ['serveur-web','supervision','tickets','collecteur','supervision','stockage'];
@@ -275,7 +264,6 @@ head('9 · latence : L0 sur 10 000 neurones sous 300 ms');
     mesures[mesures.length-1] < 3000, mesures[mesures.length-1].toFixed(1) + ' ms');
 }
 
-/* ============================================================ */
 head('export, import, purge');
 {
   const dump = N.exportAll(db);

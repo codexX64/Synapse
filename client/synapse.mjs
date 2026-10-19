@@ -1,5 +1,4 @@
-/* ============================================================
-   Client SYNAPSE — version module ES.
+/* Client SYNAPSE — version module ES.
 
    Identique à synapse.js (CommonJS) : mêmes garanties, même
    comportement. Seule la syntaxe d'import/export change.
@@ -13,8 +12,7 @@
      2. RIEN N'EST PERDU — un échec écrit l'événement dans un
         spool disque, rejoué au prochain envoi réussi.
      3. IDEMPOTENT — le hash porte l'identité du fait, pas son
-        horodatage : un rejeu n'écrit pas deux fois.
-   ============================================================ */
+        horodatage : un rejeu n'écrit pas deux fois. */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +30,7 @@ const CFG = {
 const enabled = !!CFG.token;
 if (!enabled) console.warn('[synapse] SYNAPSE_TOKEN absent — envois désactivés');
 
-/* ---------- spool disque ---------- */
+/* spool disque */
 function spoolDir() {
   try { fs.mkdirSync(CFG.spool, { recursive: true }); return true; }
   catch { return false; }
@@ -54,7 +52,7 @@ function spoolRead() {
   catch { return []; }
 }
 
-/* ---------- normalisation ---------- */
+/* normalisation */
 function build(evt) {
   const o = {
     source:      evt.source || CFG.source,
@@ -74,7 +72,7 @@ function build(evt) {
   return o;
 }
 
-/* ---------- transport ---------- */
+/* transport */
 async function post(pathname, payload) {
   const r = await fetch(CFG.url + pathname, {
     method: 'POST',

@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Contrat public SYNAPSE — /v1/recall et /v1/neurons.
+/* Contrat public SYNAPSE — /v1/recall et /v1/neurons.
 
    Figé par TRIAGE. Trois règles gouvernent tout ce fichier, dans
    cet ordre de priorité :
@@ -20,12 +19,11 @@
    La troisième règle explique toute la calibration ci-dessous :
    seul un L0 exact, `resolved` et récent peut franchir 0.85.
    Tout le reste est plafonné SOUS le seuil de décision, par
-   construction et pas par réglage.
-   ============================================================ */
+   construction et pas par réglage. */
 
 const crypto = require('node:crypto');
 
-/* ---------- calibration ----------
+/* calibration
    DECISION_THRESHOLD est le seuil auquel TRIAGE exécute. Les plafonds
    par niveau sont volontairement en dessous : un niveau ne peut pas
    déclencher une action s'il n'a pas identifié l'incident exactement. */
@@ -54,8 +52,8 @@ const NON_RESOLVED_CAP = 0.60;
 
    Une décote pure de demi-vie 90 j faisait tomber un L0 parfait sous le
    seuil de décision au bout de 30 jours — beaucoup trop tôt. Une
-   infrastructure ne se refait pas en un mois, et le prompt vise le
-   neurone de 8 mois, pas celui du mois dernier.
+   infrastructure ne se refait pas en un mois : le rappel doit retrouver
+   le neurone de 8 mois, pas seulement celui du mois dernier.
 
    Avec 45 j de grâce et 150 j de demi-vie : un correctif de moins de
    ~75 jours peut encore déclencher une exécution, au-delà il est proposé
@@ -76,7 +74,7 @@ const LIM = {
   neuron_bytes: 32000, synapses: 24
 };
 
-/* ---------- schéma ---------- */
+/* schéma */
 function migrate(db) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS neurons (
@@ -152,7 +150,7 @@ function migrate(db) {
   `);
 }
 
-/* ---------- utilitaires ---------- */
+/* utilitaires */
 const txt = (v, max) => String(v == null ? '' : v).slice(0, max).trim();
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -173,7 +171,7 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(x, y);
 }
 
-/* ---------- décote temporelle ----------
+/* décote temporelle
    Décroissance exponentielle de demi-vie HALF_LIFE_DAYS, appliquée en
    MULTIPLICATION sur la similarité. Un rappel ancien reste possible,
    mais ne peut plus déclencher d'exécution automatique. */
@@ -183,7 +181,7 @@ function ageFactor(occurredAt, now = Date.now()) {
   return Math.pow(0.5, (days - GRACE_DAYS) / HALF_LIFE_DAYS);
 }
 
-/* ---------- retour du client ---------- */
+/* retour du client */
 function feedbackFactor(row) {
   if (!row.fb_total) return 1;
   const useful = row.fb_useful / row.fb_total;
@@ -191,7 +189,7 @@ function feedbackFactor(row) {
   return 1 - FEEDBACK_PENALTY * (1 - useful) + FEEDBACK_BONUS * useful;
 }
 
-/* ---------- score final ----------
+/* score final
    Le plafond du niveau est appliqué EN DERNIER : aucun bonus, aucune
    fraîcheur, aucun retour positif ne peut faire franchir à un L1 le
    seuil de décision. C'est la garantie structurelle de la règle 3. */
@@ -202,7 +200,7 @@ function score(level, raw, row, now) {
   return +clamp(s, 0, cfg.cap).toFixed(4);
 }
 
-/* ---------- validation ---------- */
+/* validation */
 function validateNeuron(n, sourceName) {
   const e = [];
   if (!n || typeof n !== 'object') return { error: 'neuron absent' };
@@ -243,7 +241,7 @@ function validateNeuron(n, sourceName) {
   };
 }
 
-/* ---------- écriture ----------
+/* écriture
    Idempotence sur 24 h : même signature + même action_id + même outcome
    renforce au lieu de dupliquer. Sans ça, une alerte récurrente noie la
    base et fausse tous les classements. */
@@ -312,7 +310,7 @@ function remember(db, payload, sourceName) {
            body: { neuron_id: id, synapses: n, merged_with: merged } };
 }
 
-/* ---------- rappel ---------- */
+/* rappel */
 /* Les colonnes doivent être QUALIFIÉES : la table FTS expose elle aussi
    root_cause, resolution et action_id. Sans préfixe, SQLite lève
    « ambiguous column name » — et le try/catch autour de L1 transformait
@@ -499,7 +497,7 @@ async function recall(db, req, ctx) {
   return { results, took_ms: took, threshold: DECISION_THRESHOLD };
 }
 
-/* ---------- retour du client ---------- */
+/* retour du client */
 function feedback(db, neuronId, useful) {
   const r = db.prepare(`SELECT id FROM neurons WHERE id=? AND deleted=0`).get(neuronId);
   if (!r) return { ok: false, status: 404, error: 'neurone inconnu' };
@@ -511,7 +509,7 @@ function feedback(db, neuronId, useful) {
                    factor: +feedbackFactor(row).toFixed(3) } };
 }
 
-/* ---------- lecture, parcours, oubli ---------- */
+/* lecture, parcours, oubli */
 function getNeuron(db, id, self) {
   const n = db.prepare(`SELECT * FROM neurons WHERE id=? AND deleted=0`).get(id);
   if (!n) return null;
@@ -550,7 +548,7 @@ function forget(db, id) {
   return Number(r.changes || 0) > 0;
 }
 
-/* ---------- statistiques ---------- */
+/* statistiques */
 function stats(db, days = 30) {
   const since = new Date(Date.now() - days * 86400000).toISOString();
   const q = s => db.prepare(s);
@@ -587,7 +585,7 @@ function stats(db, days = 30) {
   };
 }
 
-/* ---------- export, import, purge ---------- */
+/* export, import, purge */
 function exportAll(db) {
   return {
     version: 1,

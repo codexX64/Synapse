@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   La tache d'analyse : une seule a la fois, interruptible.
+/* La tache d'analyse : une seule a la fois, interruptible.
 
    Pourquoi une tache et pas un appel synchrone : reecrire cinquante
    titres demande au modele local plusieurs minutes. Une requete HTTP
@@ -12,8 +11,7 @@
    etapes » compte : interrompre au milieu d'un appel au modele
    laisserait une reponse a moitie lue.
 
-   Elle ne MODIFIE rien. Elle produit un plan, que quelqu'un applique.
-   ============================================================ */
+   Elle ne MODIFIE rien. Elle produit un plan, que quelqu'un applique. */
 
 const RG = require('./rangement.js');
 
@@ -36,7 +34,7 @@ async function pointDArret() {
   return !arret;
 }
 
-/* ---------- lancement ---------- */
+/* lancement */
 async function lance(db, cfg, { reecrit, source = 'manuel' } = {}) {
   if (etat === 'analyse' || etat === 'pause') return { refus: 'une analyse tourne deja' };
   etat = 'analyse'; arret = false; pause = false; erreur = null; plan = null;
@@ -115,7 +113,7 @@ function fin(t0, source, actions = [], resume = []) {
   progression = { etape: '', fait: 0, total: 0 };
 }
 
-/* ---------- pilotage ---------- */
+/* pilotage */
 function metEnPause() { if (etat === 'analyse') { pause = true; return true; } return false; }
 function reprend() { if (etat === 'pause') { pause = false; etat = 'analyse'; return true; } return false; }
 function interrompt() { if (etat === 'analyse' || etat === 'pause') { arret = true; pause = false; return true; } return false; }

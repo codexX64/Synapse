@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Banc d'évaluation.
+/* Banc d'évaluation.
 
    Sans ce fichier, tout réglage du scoring se fait au ressenti : on
    change un poids, on tape trois requêtes, on trouve ça « mieux », et
@@ -16,8 +15,7 @@
 
    Usage :
      node src/eval.js                 (attend eval.json à la racine)
-     node src/eval.js mon-jeu.json
-   ============================================================ */
+     node src/eval.js mon-jeu.json */
 
 const fs = require('node:fs');
 const path = require('node:path');

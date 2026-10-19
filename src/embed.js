@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Vectorisation — le serveur de vecteurs (Ollama), hors du chemin d'écriture.
+/* Vectorisation — le serveur de vecteurs (Ollama), hors du chemin d'écriture.
 
    Deux règles :
 
@@ -10,8 +9,7 @@
 
    2. Le vecteur d'une requête est mis en cache. C'est le seul vrai
       goulot de la recherche : 200 à 400 ms là où tout le reste tient
-      en 35 ms. Une requête déjà vue doit coûter zéro.
-   ============================================================ */
+      en 35 ms. Une requête déjà vue doit coûter zéro. */
 
 const crypto = require('node:crypto');
 const { vecToBlob } = require('./db.js');
@@ -70,7 +68,7 @@ class Embedder {
   }
 }
 
-/* ---------- worker ----------
+/* worker
    Reprend les morceaux en attente par petits lots. Un échec ne
    consomme pas le morceau : il repassera. */
 function startWorker(db, embedder, opts = {}) {

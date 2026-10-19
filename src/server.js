@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   SYNAPSE — serveur HTTP, zéro dépendance.
+/* SYNAPSE — serveur HTTP, zéro dépendance.
 
    Séparation d'exposition, à tenir dès le premier jour :
 
@@ -10,8 +9,7 @@
 
    Contre-pression : quand la file dépasse le seuil, l'ingestion
    renvoie 429. Les clients ont un spool disque et rejouent. Sans
-   ce garde-fou, un collecteur emballé remplit le disque en silence.
-   ============================================================ */
+   ce garde-fou, un collecteur emballé remplit le disque en silence. */
 
 const http = require('node:http');
 const crypto = require('node:crypto');
@@ -82,7 +80,7 @@ Si l'extrait ne permet pas d'ecrire un titre precis, reponds exactement : RIEN`,
   if (t.toLowerCase() === String(entree.title).toLowerCase()) return null;
   return t.length > 120 ? t.slice(0, 117) + '…' : t;
 }
-/* ---------- amorçage des jetons de service ----------
+/* amorçage des jetons de service
    Une source ne se créait qu'en ligne de commande. Un installateur
    automatique — le Hub — ne peut pas exécuter une commande dans le
    conteneur avant le premier démarrage : il ne sait que poser des
@@ -93,7 +91,7 @@ Si l'extrait ne permet pas d'ecrire un titre precis, reponds exactement : RIEN`,
    la variable fait tourner le jeton ; la vider ne supprime pas la
    source, pour ne pas couper un service qui tourne à cause d'un
    fichier .env incomplet. */
-/* ---------- appel au modèle de synthèse ----------
+/* appel au modèle de synthèse
    La consolidation a besoin d'un modèle, mais ne doit pas savoir lequel
    ni où. Elle reçoit cette fonction ; si le modèle est absent, elle le
    signale et ne fait rien — une passe manquée n'est pas une panne. */
@@ -133,7 +131,7 @@ PLANIF.demarre(db, reecritTitre);
 const embedder = new Embedder();
 startWorker(db, embedder);
 
-/* ---------- apprentissage de fond ----------
+/* apprentissage de fond
    Titrer les échanges puis en distiller la fiche : deux appels au modèle,
    jamais pendant qu'on pose une question, et jamais deux passes à la fois
    — Ollama n'a qu'un GPU, deux passes simultanées se ralentissent l'une
@@ -215,16 +213,15 @@ if (CONSOLIDATION_MS > 0) setInterval(() => passeApprentissage('périodique'), C
 /* Au démarrage : rattraper les échanges arrivés titrés par leur question. */
 setTimeout(() => passeApprentissage('démarrage'), 30000).unref?.();
 
-/* ---------- jetons ----------
-   Seul le hash est stocké. Comparaison à temps constant : une
-   comparaison naïve fuit la longueur du préfixe correct. */
+/* jetons
+   Seule l'empreinte SHA-256 est stockée, et c'est elle qu'on cherche :
+   la recherche ne dit rien du jeton présenté. */
 function hashToken(t) { return crypto.createHash('sha256').update(t).digest('hex'); }
 
 function auth(req) {
-  /* Deux en-têtes acceptés. Le contrat TRIAGE impose X-Synapse-Key ;
-     le reste de SYNAPSE utilise Bearer. Refuser l'un des deux
-     obligerait à modifier un client déjà testé, ce que le prompt
-     interdit explicitement. */
+  /* Deux en-têtes acceptés : le contrat TRIAGE porte X-Synapse-Key,
+     le reste de SYNAPSE Bearer. Refuser l'un des deux casserait un
+     client déjà en service. */
   let brut = null;
   const xk = req.headers['x-synapse-key'];
   if (typeof xk === 'string' && xk.trim()) brut = xk.trim();
@@ -275,7 +272,7 @@ function canIncident(src, what) {
   return parts.includes(what);
 }
 
-/* ---------- utilitaires HTTP ---------- */
+/* utilitaires HTTP */
 function send(res, code, obj, extra) {
   const body = JSON.stringify(obj);
   const h = {
@@ -307,7 +304,7 @@ async function readBody(req) {
   return r.corps ? socle.S.valider(brut, r.corps) : brut;
 }
 
-/* ---------- limitation de débit ---------- */
+/* limitation de débit */
 const buckets = new Map();
 function rateLimit(key, max, windowMs) {
   const now = Date.now();
@@ -321,7 +318,7 @@ setInterval(() => {
   for (const [k, b] of buckets) if (now - b.t > 120000) buckets.delete(k);
 }, 60000).unref?.();
 
-/* ---------- routes ---------- */
+/* routes */
 const routes = {
 
   'GET /healthz': async (req, res) => {
@@ -508,7 +505,7 @@ const routes = {
     send(res, 201, { agent, version: v });
   },
 
-  /* ---------- rangement ----------
+  /* rangement
      Analyse et application separees : un rangement se lit avant de
      s'appliquer. La portee admin est exigee pour l'application, pas
      pour l'analyse — regarder ne casse rien. */
@@ -620,9 +617,9 @@ const routes = {
     send(res, 200, { ...fait, sauvegarde: sauve });
   },
 
-  /* ---------- contrat public : neurones et rappel ---------- */
+  /* contrat public : neurones et rappel */
 
-  /* ---------- apprentissage ----------
+  /* apprentissage
      Un agent pose sa question une fois et reçoit tout : ce qu'on sait de
      son utilisateur, ce qu'il a lui-même mal compris avant, et la
      mémoire. Trois allers-retours devenaient trois occasions de couper
@@ -697,11 +694,11 @@ const routes = {
     send(res, 202, r);
   },
 
-  /* ---------- ce que SYNAPSE sait de toi ----------
+  /* ce que SYNAPSE sait de toi
      La fiche (ce qu'un modèle a compris) et les habitudes (ce que les
      données montrent). Lecture pour toute session ; modifier la fiche
      est un geste humain. */
-  /* ---------- cerveaux ----------
+  /* cerveaux
      Chaque IA de service a sa fiche ici : ce qu'elle sait, ce qu'elle fait,
      ses règles, son état. Le nom vient toujours du jeton : un service ne
      peut écrire que SA fiche. */
@@ -894,7 +891,7 @@ const routes = {
     send(res, 200, neu.purge(db, b));
   },
 
-  /* ---------- mémoire opérationnelle (TRIAGE) ---------- */
+  /* mémoire opérationnelle (TRIAGE) */
 
   'POST /v1/incidents': async (req, res, ctx) => {
     if (!canIncident(ctx.src, 'write')) return send(res, 403, { error: 'portée incidents ou write requise' });
@@ -935,12 +932,12 @@ const routes = {
     send(res, 200, inc.retention(db, Number(b.months || 12)));
   },
 
-  /* ---------- réponse : recherche + synthèse par l'IA locale ----------
+  /* réponse : recherche + synthèse par l'IA locale
      Un mot → la cascade suffit, on rend les cartes. Une question → les
      meilleurs extraits partent au modèle qui rédige, qui répond UNIQUEMENT
      d'après eux. Le modèle ne voit jamais la question sans les extraits :
      c'est ce qui l'empêche d'inventer. */
-  /* ---------- état en direct, par l'agrégateur ----------
+  /* état en direct, par l'agrégateur
      Quand la mémoire ne suffit pas, on VÉRIFIE : l'agrégateur lit
      conteneurs, hôtes, tickets et VM en direct, sans rien exécuter.
      C'est le seul chemin de vérification : pas de shell, pas de liste
@@ -1081,7 +1078,7 @@ const routes = {
   }
 };
 
-/* ---------- réponse en langage naturel ---------- */
+/* réponse en langage naturel */
 
 /* Le modèle reste chargé une demi-heure : sans cela, Ollama le décharge
    après cinq minutes et la question suivante paie le rechargement. */
@@ -1192,7 +1189,7 @@ function nsAllowed(src, ns) {
   return false;
 }
 
-/* ---------- pages ----------
+/* pages
    L'interface est servie sous /v/<version>/ : une nouvelle version change
    l'adresse de chaque fichier, aucun cache ne garde l'ancien script face à
    la nouvelle page. Les pages de la mémoire exigent une session complète du
@@ -1218,7 +1215,7 @@ async function servirInterface(req, res, url, sctx, nonce) {
   return S.servirFichier(req, res, UI_DIR, chemin, { nonce, cache });
 }
 
-/* ---------- qui parle ----------
+/* qui parle
    Un service présente un jeton ; un humain, la session du socle. Un jeton
    présenté et refusé ne retombe jamais sur la session : c'est un essai, il
    est compté et journalisé. La session passe par portail.exiger, qui

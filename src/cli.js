@@ -1,12 +1,10 @@
 'use strict';
-/* ============================================================
-   CLI d'administration.
+/* CLI d'administration.
 
    Le jeton n'est affiché qu'UNE fois, à la création. Seul son hash
    est stocké : personne, pas même toi, ne peut le relire ensuite.
    C'est volontaire — un jeton relisible dans une base est un jeton
-   qui finit dans un journal.
-   ============================================================ */
+   qui finit dans un journal. */
 
 const crypto = require('node:crypto');
 const { open } = require('./db.js');

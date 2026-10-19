@@ -1,6 +1,5 @@
 'use strict';
-/* ============================================================
-   Ce que chaque service envoie à SYNAPSE, et le ménage des données
+/* Ce que chaque service envoie à SYNAPSE, et le ménage des données
    simulées.
 
    Le tableau par source sert au banc d'essai : qui écrit, combien, depuis
@@ -8,8 +7,7 @@
    contenu : il se lit avec un jeton de lecture.
 
    Une entrée étiquetée « simulation » est fausse par construction (le mode
-   simulation de MapMyLAN, par exemple) : la purger ne détruit aucun fait.
-   ============================================================ */
+   simulation de MapMyLAN, par exemple) : la purger ne détruit aucun fait. */
 
 const SIMULE = `(' ' || tags || ' ') LIKE '% simulation %'`;
 
