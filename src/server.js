@@ -1221,15 +1221,14 @@ async function servirInterface(req, res, url, sctx, nonce) {
    est compté et journalisé. La session passe par portail.exiger, qui
    contrôle le niveau (tous les facteurs exigés), l'origine et le jeton
    anti-CSRF de toute écriture. */
-const essaisJetons = new Map();
+/* Un jeton refusé compte pour l'adresse dans le limiteur persistant du
+   socle (paliers : dix échecs bloquent une minute, vingt un quart d'heure,
+   cinquante une heure) : un redémarrage ne remet pas le compteur à zéro. */
+const cleMachine = sctx => [`ip:machine:${sctx.ip}`];
 function jetonRefuse(sctx) {
-  const t = Date.now(), e = essaisJetons.get(sctx.ip);
-  const n = e && t - e.t < 60000 ? e.n + 1 : 1;
-  essaisJetons.set(sctx.ip, { t: e && t - e.t < 60000 ? e.t : t, n });
+  socle.limiteur.echec(cleMachine(sctx));
   socle.journal.rare(`jeton:${sctx.ip}`, { action: 'jeton.refuse', ip: sctx.ip, resultat: 'refus' });
 }
-const jetonsBloques = ip => { const e = essaisJetons.get(ip); return !!(e && Date.now() - e.t < 60000 && e.n >= 20); };
-setInterval(() => { const t = Date.now(); for (const [k, e] of essaisJetons) if (t - e.t > 60000) essaisJetons.delete(k); }, 60000).unref?.();
 
 function presenteJeton(req) {
   return !!(req.headers['x-synapse-key'] || /^Bearer\s/i.test(String(req.headers.authorization || '')));
@@ -1237,7 +1236,7 @@ function presenteJeton(req) {
 
 function identifier(req, sctx) {
   if (presenteJeton(req)) {
-    if (jetonsBloques(sctx.ip)) throw new socle.S.ErreurHttp(429, 'Trop de jetons refusés : réessaie dans une minute.');
+    socle.limiteur.controler(cleMachine(sctx));
     const src = auth(req);
     if (!src) { jetonRefuse(sctx); throw new socle.S.ErreurHttp(401, 'Jeton refusé.'); }
     return src;

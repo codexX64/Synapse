@@ -95,9 +95,13 @@ test('jetons de service : un jeton refusé ne retombe pas sur la session, il est
   // Même avec un cookie de session valide, un jeton présenté et faux est refusé.
   const cookie = [...admin.cookies].map(([k, v]) => `${k}=${v}`).join('; ');
   assert.equal((await faux.req('GET', '/v1/stats', undefined, { cookie })).status, 401);
-  let dernier = 0;
-  for (let i = 0; i < 25; i++) dernier = (await faux.get('/v1/stats')).status;
-  assert.equal(dernier, 429, 'trop de jetons refusés : coupé une minute');
+  let essais = 0, statut = 0;
+  while (statut !== 429 && essais < 30) { statut = (await faux.get('/v1/stats')).status; essais++; }
+  assert.equal(statut, 429, 'trop de jetons refusés : adresse bloquée');
+  assert.ok(essais <= 10, `bloquée au dixième échec (${essais + 2} essais)`);
+  const lu = new DatabaseSync(inst.db, { readOnly: true });
+  assert.ok(lu.prepare("SELECT bloque FROM socle_essais WHERE cle LIKE 'ip:machine:%'").get()?.bloque > Date.now(), 'compteur en base : un redémarrage ne le remet pas à zéro');
+  lu.close();
   const journal = (await admin.get('/api/compte/admin/journal')).json;
   assert.ok(journal.lignes.some(l => l.action === 'jeton.refuse'), 'refus au journal');
 });
