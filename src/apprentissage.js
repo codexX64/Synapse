@@ -28,6 +28,7 @@
    mars, et l'assistant s'y conformerait encore en décembre. */
 
 const crypto = require('node:crypto');
+const { objetJson } = require('./llm.js');
 
 const COMMUN = 'commun';
 
@@ -548,13 +549,6 @@ async function menage(db, { agent = COMMUN, demander } = {}) {
  * Refuser ces réponses reviendrait à ne consolider qu'avec les modèles
  * les plus obéissants ; on récupère donc le premier objet bien formé.
  */
-function objetJson(brut) {
-  const s = String(brut || '');
-  try { return JSON.parse(s.trim()); } catch { /* plus bas */ }
-  const i = s.indexOf('{'), j = s.lastIndexOf('}');
-  if (i >= 0 && j > i) { try { return JSON.parse(s.slice(i, j + 1)); } catch { /* */ } }
-  return null;
-}
 function extraireOublis(brut) {
   const o = objetJson(brut);
   return (Array.isArray(o?.oublier) ? o.oublier : []).slice(0, 10)
@@ -562,16 +556,8 @@ function extraireOublis(brut) {
 }
 
 function extraireTraits(brut) {
-  const s = String(brut || '');
-  let obj = null;
-  const direct = s.trim();
-  try { obj = JSON.parse(direct); } catch { /* on cherche plus bas */ }
-  if (!obj) {
-    const i = s.indexOf('{');
-    const j = s.lastIndexOf('}');
-    if (i >= 0 && j > i) { try { obj = JSON.parse(s.slice(i, j + 1)); } catch { obj = null; } }
-  }
-  const liste = Array.isArray(obj?.traits) ? obj.traits : [];
+  const o = objetJson(brut);
+  const liste = Array.isArray(o?.traits) ? o.traits : [];
   return liste.slice(0, 6).map(t => ({
     portee: t?.portee === 'agent' ? 'agent' : 'commun',
     evolution: ['affine', 'contredit'].includes(t?.evolution) ? t.evolution : 'nouveau',

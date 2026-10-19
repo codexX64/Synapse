@@ -20,6 +20,7 @@ const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g
   .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 const ingest = require('./ingest.js');
+const { objetJson } = require('./llm.js');
 
 const LOT_TITRES = 12;
 const ESSAIS_MAX = 3;
@@ -121,12 +122,8 @@ async function titrerEchanges(db, { demander, lot = LOT_TITRES } = {}) {
   try { brut = await demander(CONSIGNE_TITRES, texte); }
   catch (e) { return { titres: 0, restants: rows.length, raison: 'modèle indisponible : ' + e.message }; }
 
-  let obj = null;
-  try { obj = JSON.parse(brut); } catch {
-    const a = String(brut).indexOf('{'), b = String(brut).lastIndexOf('}');
-    if (a >= 0 && b > a) { try { obj = JSON.parse(String(brut).slice(a, b + 1)); } catch { obj = null; } }
-  }
-  const liste = Array.isArray(obj?.echanges) ? obj.echanges : [];
+  const o = objetJson(brut);
+  const liste = Array.isArray(o?.echanges) ? o.echanges : [];
   let n = 0;
   rows.forEach((r, i) => {
     const it = liste.find(x => Number(x?.n) === i + 1);
