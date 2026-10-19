@@ -1283,7 +1283,12 @@ async function traiter(req, res) {
 
   const key = req.method + ' ' + url.pathname;
   const fn = routes[key];
-  if (!fn) return send(res, 404, { error: 'route inconnue' });
+  if (!fn) {
+    /* Chemin connu, méthode non servie : 405 et les méthodes admises. */
+    const admises = Object.keys(routes).filter(k => k.slice(k.indexOf(' ') + 1) === url.pathname).map(k => k.slice(0, k.indexOf(' ')));
+    if (admises.length) return send(res, 405, { error: 'méthode non admise' }, { Allow: admises.join(', ') });
+    return send(res, 404, { error: 'route inconnue' });
+  }
   if (url.pathname === '/healthz') return fn(req, res, { url });
 
   const src = identifier(req, sctx);

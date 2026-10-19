@@ -219,3 +219,13 @@ test('corps : JSON exigé pour écrire, taille annoncée trop grande refusée en
   const doc = 'mot '.repeat(120_000);
   assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 'long document', body: doc })).status, 202, 'un document de 480 Kio entre par l\'ingestion');
 });
+
+test('méthodes : un chemin connu appelé par une autre méthode → 405 avec Allow ; un chemin inconnu → 404', async () => {
+  const r = await hub.req('PATCH', '/v1/neuron');
+  assert.equal(r.status, 405);
+  assert.equal(r.entetes.get('allow'), 'GET, DELETE');
+  const { request } = await import('node:http');
+  const trace = await new Promise((ok, ko) => request(inst.url('/v1/neuron'), { method: 'TRACE', headers: { authorization: `Bearer ${JETON_HUB}` } }, r => { r.resume(); ok(r.statusCode); }).on('error', ko).end());
+  assert.equal(trace, 405, 'TRACE ne renvoie rien de la requête');
+  assert.equal((await hub.get('/v1/debug')).status, 404);
+});
