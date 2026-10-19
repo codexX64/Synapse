@@ -71,6 +71,12 @@ test('refus d\'un jeton : au journal de sécurité, une ligne par appelant et pa
   db.close();
   assert.equal(l.length, 1, JSON.stringify(l));
   assert.equal(JSON.parse(l[0].details).source, 'vigie');
+  // Refus rendu par la route elle-même (portée, espace), pas levé : consigné de même.
+  await vigie.post('/v1/ingest', { ns: 'agent:mapmylan', kind: 'note', title: 'intrus', body: 'x' });
+  const d2 = new DatabaseSync(inst.db, { readOnly: true });
+  const l2 = d2.prepare("SELECT details FROM socle_journal WHERE action = 'acces.refuse' AND objet = 'POST /v1/ingest'").all();
+  d2.close();
+  assert.ok(l2.some(x => JSON.parse(x.details).source === 'vigie'), 'refus de la route au journal');
 });
 
 test('lecture d\'une entrée : celle d\'un autre espace est introuvable, et un lien n\'en montre pas le titre', async () => {
