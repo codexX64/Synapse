@@ -19,10 +19,13 @@ const NS = txt(100);
 const AGENT = txt(80);
 const ID = ent(1, Number.MAX_SAFE_INTEGER);
 
-/* Un événement de la mémoire : ce que ingest.normalize lit. */
+/* Un événement de la mémoire : ce que ingest.normalize lit. `hash` est
+   envoyé par le client fourni (client/) : admis, ignoré — le serveur
+   calcule le sien. */
 const EVT = {
   ns: NS, source: txt(64), kind: txt(80), ref: txt(200), level: txt(8),
   title: txt(2000), body: txt(1_000_000), tags: json, meta: json, occurred_at: txt(40),
+  hash: txt(128),
 };
 
 const NEURONE = {

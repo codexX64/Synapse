@@ -204,4 +204,7 @@ test('schémas : champ ou paramètre inconnu, type faux, paramètre répété �
   assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 't', body: 42 })).status, 400);
   assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 't', body: 'b', __proto__: { x: 1 }, meta: JSON.parse('{"__proto__":{"x":1}}') })).status, 400);
   assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 't', body: 'b' })).status, 202);
+  // Le client fourni (client/) envoie son empreinte : admise, le serveur calcule la sienne.
+  const evt = { source: 'hub', kind: 'note', ref: null, title: 'client fourni', body: 'b', tags: [], occurred_at: new Date().toISOString(), meta: {}, hash: 'a'.repeat(64) };
+  assert.equal((await hub.post('/v1/ingest/batch', { events: [evt] })).json.results[0].ok, true);
 });
