@@ -154,8 +154,14 @@ Telegram et gère les comptes. Une session humaine n'écrit jamais dans la
 mémoire : c'est l'affaire des services, par leur jeton.
 
 **Les services présentent un jeton.** Seule son empreinte est gardée ; un
-jeton refusé ne retombe jamais sur une session, il est compté (vingt par
-minute et par adresse, puis refus) et journalisé.
+jeton refusé ne retombe jamais sur une session, il est journalisé et compté
+pour l'adresse dans le limiteur persistant du socle (dix échecs la bloquent
+une minute, vingt un quart d'heure, cinquante une heure).
+
+**Chaque route a son schéma.** Corps et paramètres de requête sont validés
+avant usage (`src/schemas.js`) : champ inconnu, type ou longueur hors bornes,
+paramètre répété → 400. Le corps est borné avant lecture : 64 Kio par
+défaut, `MAX_BODY` (2 Mo) pour l'ingestion, l'import et MCP → 413 au-delà.
 
 **Les secrets ne sortent jamais.** Le jeton Telegram est scellé (AES-256-GCM
 sous `SOCLE_CLE`) et l'API n'en montre que la fin. Le QR code TOTP est
