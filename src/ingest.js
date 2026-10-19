@@ -132,10 +132,15 @@ function chunk(entry) {
 }
 
 /* ---------- normalisation ---------- */
+/* La provenance est celle du jeton, jamais celle que l'envoi déclare : une
+   source ne signe pas au nom d'une autre. Une origine annoncée (un
+   collecteur qui relaie) reste lisible dans meta.origine. */
 function normalize(evt, sourceName) {
+  const meta = evt.meta && typeof evt.meta === 'object' && !Array.isArray(evt.meta) ? { ...evt.meta } : {};
+  if (evt.source && sourceName && String(evt.source) !== String(sourceName)) meta.origine = String(evt.source).slice(0, 64);
   const o = {
     ns:     String(evt.ns || 'shared'),
-    source: String(evt.source || sourceName),
+    source: String(sourceName || evt.source),
     kind:   String(evt.kind),
     ref:    evt.ref ? String(evt.ref).slice(0, 120) : null,
     level:  defaultLevel(evt),
@@ -144,7 +149,7 @@ function normalize(evt, sourceName) {
     tags:   (Array.isArray(evt.tags) ? evt.tags : [])
               .map(t => String(t).toLowerCase().replace(/\s+/g, '-'))
               .filter(Boolean).slice(0, 24).join(' '),
-    meta:   JSON.stringify(evt.meta || {}),
+    meta:   JSON.stringify(meta),
     occurred_at: safeDate(evt.occurred_at)
   };
   o.hash = hashOf(o);

@@ -397,7 +397,9 @@ const routes = {
       return send(res, 429, { error: 'file saturée', pending }, { 'Retry-After': '30' });
 
     const body = await readBody(req);
-    const r = ingest.insert(db, body, ctx.src.name);
+    const ns = espaceEcrit(ctx.src, body.ns);
+    if (!ns) return send(res, 403, { error: 'espace interdit : ' + String(body.ns).slice(0, 80) });
+    const r = ingest.insert(db, { ...body, ns }, ctx.src.name);
     if (!r.ok && r.filtered) return send(res, 202, { filtered: true, reason: r.reason });
     if (!r.ok) return send(res, 400, { error: r.reason || 'refusé' });
     send(res, 202, r);
@@ -408,8 +410,16 @@ const routes = {
     const body = await readBody(req);
     const events = Array.isArray(body.events) ? body.events : [];
     if (events.length > 200) return send(res, 400, { error: 'lot > 200' });
+    if (!rateLimit('ing:' + ctx.src.name, 600, 60000))
+      return send(res, 429, { error: 'trop de requêtes' }, { 'Retry-After': '10' });
+    const pending = db.prepare(`SELECT count(*) n FROM chunks WHERE embedded=0`).get().n;
+    if (pending > QUEUE_MAX)
+      return send(res, 429, { error: 'file saturée', pending }, { 'Retry-After': '30' });
     const out = [];
-    for (const e of events) out.push(ingest.insert(db, e, ctx.src.name));
+    for (const e of events) {
+      const ns = espaceEcrit(ctx.src, e && e.ns);
+      out.push(ns ? ingest.insert(db, { ...e, ns }, ctx.src.name) : { ok: false, reason: 'espace interdit' });
+    }
     send(res, 202, {
       accepted: out.filter(o => o.ok && !o.duplicate).length,
       duplicates: out.filter(o => o.duplicate).length,
@@ -458,6 +468,7 @@ const routes = {
   'POST /v1/link': async (req, res, ctx) => {
     if (!can(ctx.src, 'write')) return send(res, 403, { error: 'portée write requise' });
     const b = await readBody(req);
+    if (!liables(ctx.src, Number(b.from_id), Number(b.to_id))) return send(res, 403, { error: 'espace interdit' });
     const r = ingest.link(db, Number(b.from_id), Number(b.to_id), String(b.relation), ctx.src.name);
     send(res, r.ok ? 201 : 400, r);
   },
@@ -468,6 +479,8 @@ const routes = {
     const q = String(b.q || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const id = Number(b.entry_id);
     if (!q || !id) return send(res, 400, { error: 'q et entry_id requis' });
+    const e = db.prepare(`SELECT ns FROM entries WHERE id=?`).get(id);
+    if (!e || !nsAllowed(ctx.src, e.ns)) return send(res, 404, { error: 'introuvable' });
     db.prepare(`INSERT INTO query_clicks(query_norm,entry_id,n) VALUES(?,?,1)
                 ON CONFLICT(query_norm,entry_id) DO UPDATE SET n=n+1`).run(q, id);
     send(res, 204, {});
@@ -475,7 +488,7 @@ const routes = {
 
   'GET /v1/prompts': async (req, res, ctx) => {
     if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
-    const agent = ctx.url.searchParams.get('agent');
+    const agent = agentDe(ctx.src, ctx.url.searchParams.get('agent'));
     if (!agent) return send(res, 400, { error: 'agent requis' });
     const row = db.prepare(
       `SELECT agent,version,body,created_at FROM prompts WHERE agent=?
@@ -569,6 +582,10 @@ const routes = {
   'GET /v1/rangement/analyse': async (req, res, ctx) => {
     if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
     const ns = ctx.url.searchParams.get('ns') || null;
+    /* Tous les espaces à la fois : une personne connectée ou un jeton admin ;
+       un service n'analyse que ceux qu'il lit. */
+    if (ns ? !nsAllowed(ctx.src, ns) : !(ctx.src.humain || ctx.src.scope === 'admin'))
+      return send(res, 403, { error: 'espace interdit' });
     const seuil = Math.min(0.99, Math.max(0.85, Number(ctx.url.searchParams.get('seuil') || 0.94)));
     const t0 = performance.now();
     const d = RG.doublons(db, { ns, seuil });
@@ -612,9 +629,12 @@ const routes = {
   'POST /v1/brief': async (req, res, ctx) => {
     if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
     const b = await readBody(req);
+    const agent = agentDe(ctx.src, b.agent);
+    const ns = b.ns || 'shared';
+    if (!nsAllowed(ctx.src, String(ns))) return send(res, 403, { error: 'espace interdit' });
     const tBrief = performance.now();
     const out = await APP.brief(db, {
-      agent: b.agent, q: b.q || b.query || '', ns: b.ns || 'shared',
+      agent, q: b.q || b.query || '', ns,
       limite: Math.min(20, Number(b.limit) || 6),
       budget: Math.min(5000, Number(b.budget) || 1200),
       signature: b.signature,
@@ -622,7 +642,7 @@ const routes = {
     });
     /* Les autres cerveaux concernés par la question, avec leur état : un
        service qui ne sait pas répondre sait au moins qui sait. */
-    out.cerveaux = CER.pourBrief(db, b.q || b.query || '', [b.agent, ctx.src.name]);
+    out.cerveaux = CER.pourBrief(db, b.q || b.query || '', [agent, ctx.src.name]);
     ACT.noter(db, { route: 'brief', source: ctx.src.name, compte: ctx.src.compte, q: b.q || b.query || '',
       ms: out.ms != null ? out.ms : performance.now() - tBrief, decision: null,
       arret: (out.memoire || []).length ? 'L1' : 'VIDE',
@@ -636,12 +656,13 @@ const routes = {
   'POST /v1/apprendre': async (req, res, ctx) => {
     if (!can(ctx.src, 'write')) return send(res, 403, { error: 'portée write requise' });
     const b = await readBody(req);
+    const agent = agentDe(ctx.src, b.agent);
     const out = {};
     if (b.correction) out.correction = APP.corriger(db, {
-      agent: b.agent, question: b.question || b.q || '', correction: b.correction, faux: b.faux,
+      agent, question: b.question || b.q || '', correction: b.correction, faux: b.faux,
     });
     if (b.trait && b.trait.valeur) out.trait = APP.poser(db, {
-      agent: b.trait.portee === 'agent' ? b.agent : APP.COMMUN,
+      agent: b.trait.portee === 'agent' ? agent : APP.COMMUN,
       cle: b.trait.cle, valeur: b.trait.valeur,
       confiance: b.trait.confiance, origine: 'declare',
     });
@@ -656,13 +677,15 @@ const routes = {
     if (!can(ctx.src, 'write')) return send(res, 403, { error: 'portée write requise' });
     const b = await readBody(req);
     if (!b.question) return send(res, 400, { error: 'question requise' });
-    const evt = APP.evenementEchange({ agent: b.agent, question: b.question, reponse: b.reponse, ns: b.ns || 'shared' });
+    const ns = espaceEcrit(ctx.src, b.ns);
+    if (!ns) return send(res, 403, { error: 'espace interdit' });
+    const evt = APP.evenementEchange({ agent: agentDe(ctx.src, b.agent), question: b.question, reponse: b.reponse, ns });
     /* Le Hub envoie l'échange deux fois : à la réponse (« rien n'est encore
        fait »), puis après exécution, avec le résultat réel. La seconde
        version remplace la première au lieu de s'y ajouter, et le titre est
        refait d'après ce qui s'est vraiment passé. */
-    const avant = db.prepare(`SELECT id, title FROM entries WHERE kind='echange' AND ref=? AND ns=? AND occurred_at >= ? ORDER BY id DESC LIMIT 1`)
-      .get(evt.ref, evt.ns, new Date(Date.now() - 86400000).toISOString());
+    const avant = db.prepare(`SELECT id, title FROM entries WHERE kind='echange' AND ref=? AND ns=? AND source=? AND occurred_at >= ? ORDER BY id DESC LIMIT 1`)
+      .get(evt.ref, evt.ns, ctx.src.name, new Date(Date.now() - 86400000).toISOString());
     if (avant) {
       MOI.remplaceCorps(db, avant.id, evt.body);
       apresEchange();
@@ -758,13 +781,13 @@ const routes = {
 
   'GET /v1/profil': async (req, res, ctx) => {
     if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
-    const agent = ctx.url.searchParams.get('agent') || 'inconnu';
+    const agent = agentDe(ctx.src, ctx.url.searchParams.get('agent')) || 'inconnu';
     send(res, 200, { ...APP.stats(db, agent), traits: APP.profil(db, agent) });
   },
 
   'DELETE /v1/profil': async (req, res, ctx) => {
     if (!can(ctx.src, 'write')) return send(res, 403, { error: 'portée write requise' });
-    const agent = ctx.url.searchParams.get('agent') || 'inconnu';
+    const agent = agentDe(ctx.src, ctx.url.searchParams.get('agent')) || 'inconnu';
     const cle = ctx.url.searchParams.get('cle');
     if (!cle) return send(res, 400, { error: 'cle requise' });
     send(res, 200, APP.oublier(db, agent, cle));
@@ -773,10 +796,12 @@ const routes = {
   'POST /v1/consolider': async (req, res, ctx) => {
     if (!can(ctx.src, 'write')) return send(res, 403, { error: 'portée write requise' });
     const b = await readBody(req);
-    // Sans agent nommé : tout le monde. Obliger à nommer une connexion IA
-    // qu'on ne connaît pas par cœur était une friction gratuite.
-    send(res, 200, b.agent
-      ? await APP.consolider(db, { agent: b.agent, ns: b.ns || null, demander: demanderAuModele })
+    // Sans agent nommé : tout le monde — pour le Hub ou un jeton admin ; un
+    // service ne fait relire que ses propres échanges.
+    const agent = agentDe(ctx.src, b.agent) || (relaiHub(ctx.src) ? null : ctx.src.name);
+    if (b.ns && !nsAllowed(ctx.src, String(b.ns))) return send(res, 403, { error: 'espace interdit' });
+    send(res, 200, agent
+      ? await APP.consolider(db, { agent, ns: b.ns || null, demander: demanderAuModele })
       : await APP.consoliderTous(db, { ns: b.ns || null, demander: demanderAuModele }));
   },
 
@@ -830,6 +855,9 @@ const routes = {
 
   'DELETE /v1/neuron': async (req, res, ctx) => {
     if (!canIncident(ctx.src, 'write')) return send(res, 403, { error: 'portée write requise' });
+    /* Un neurone s'oublie par la source qui l'a écrit, ou par un jeton admin. */
+    const n = db.prepare(`SELECT source FROM neurons WHERE id=? AND deleted=0`).get(Number(ctx.url.searchParams.get('id')));
+    if (n && n.source !== ctx.src.name && ctx.src.scope !== 'admin') return send(res, 403, { error: 'neurone d’une autre source' });
     const ok = neu.forget(db, Number(ctx.url.searchParams.get('id')));
     send(res, ok ? 200 : 404, ok ? { forgotten: true } : { error: 'neurone inconnu' });
   },
@@ -1273,6 +1301,30 @@ async function traiter(req, res) {
 
 let socle = null;
 let debit = null;
+/* Relier deux entrées : il faut pouvoir écrire dans les deux espaces. */
+function liables(src, a, b) {
+  const ns = id => (db.prepare(`SELECT ns FROM entries WHERE id=?`).get(id) || {}).ns;
+  return [a, b].every(id => { const n = ns(id); return n === undefined || nsAllowed(src, n); });
+}
+
+/* Écrire, c'est écrire là où l'on peut lire : un espace commun, ou le sien. */
+const ESPACE = /^[a-z][a-z0-9_-]{0,31}(:[A-Za-z0-9._-]{1,64})?$/;
+function espaceEcrit(src, ns) {
+  const n = ns === undefined || ns === null || ns === '' ? 'shared' : String(ns);
+  return ESPACE.test(n) && nsAllowed(src, n) ? n : null;
+}
+
+/* L'agent dont on parle : le sien. Seul le Hub, qui relaie ses connexions
+   d'IA sous leur nom, un jeton admin ou une personne connectée en
+   désignent un autre ; un service ne lit ni n'écrit le profil d'un autre. */
+function agentDe(src, demande) {
+  const a = demande === undefined || demande === null || demande === '' ? null : String(demande).slice(0, 80);
+  if (src.humain || src.scope === 'admin' || (src.name === 'hub' && src.channel === 'A')) return a;
+  if (a !== null && a !== src.name) throw new socle.S.ErreurHttp(403, 'Agent d’un autre service : un service ne parle que pour lui.');
+  return a;
+}
+const relaiHub = src => src.scope === 'admin' || (src.name === 'hub' && src.channel === 'A');
+
 const server = http.createServer((req, res) => {
   if (!socle) { res.writeHead(503, { 'Retry-After': '2' }); return res.end(); }
   return socle.envelopper(async () => {

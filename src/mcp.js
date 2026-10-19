@@ -241,9 +241,15 @@ async function toolCall(db, src, name, args, ctx) {
                note: r.duplicate ? 'Ce fait était déjà en mémoire, rien de nouveau écrit.' : undefined };
     }
 
-    case 'memory_link':
+    case 'memory_link': {
+      /* Relier, c'est écrire dans les deux entrées : la mémoire commune ou la sienne. */
+      for (const id of [args.from_id, args.to_id]) {
+        const e = db.prepare(`SELECT ns FROM entries WHERE id=?`).get(Number(id));
+        if (e && e.ns !== 'shared' && e.ns !== agentNs(src) && src.scope !== 'admin') return { error: 'espace interdit' };
+      }
       return ingest.link(db, Number(args.from_id), Number(args.to_id),
                          String(args.relation), src.name);
+    }
 
     case 'recall': {
       const r = await neu.recall(db, args, {
