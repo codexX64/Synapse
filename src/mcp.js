@@ -211,14 +211,17 @@ async function toolCall(db, src, name, args, ctx) {
 
     case 'memory_get': {
       const e = db.prepare(`SELECT * FROM entries WHERE id=?`).get(Number(args.id));
-      if (!e) return { error: 'introuvable' };
-      if (e.ns !== 'shared' && e.ns !== agentNs(src)) return { error: 'espace interdit' };
+      /* Une entrée d'un espace qu'on ne lit pas n'existe pas, et ses liens
+         ne montrent que des entrées lisibles. */
+      const lisible = ns => ns === 'shared' || ns === agentNs(src);
+      if (!e || !lisible(e.ns)) return { error: 'introuvable' };
       const links = db.prepare(`
-        SELECT l.relation, e2.id, e2.title,
+        SELECT l.relation, e2.id, e2.title, e2.ns,
                CASE WHEN l.from_id=? THEN 'out' ELSE 'in' END AS dir
         FROM links l JOIN entries e2
           ON e2.id = CASE WHEN l.from_id=? THEN l.to_id ELSE l.from_id END
-        WHERE l.from_id=? OR l.to_id=?`).all(e.id, e.id, e.id, e.id);
+        WHERE l.from_id=? OR l.to_id=?`).all(e.id, e.id, e.id, e.id)
+        .filter(l => lisible(l.ns)).map(({ ns, ...l }) => l);
       return {
         id: e.id, title: e.title, body: e.body, source: e.source,
         occurred_at: e.occurred_at, level: e.level, ns: e.ns,

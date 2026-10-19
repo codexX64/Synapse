@@ -72,3 +72,18 @@ test('refus d\'un jeton : au journal de sécurité, une ligne par appelant et pa
   assert.equal(l.length, 1, JSON.stringify(l));
   assert.equal(JSON.parse(l[0].details).source, 'vigie');
 });
+
+test('lecture d\'une entrée : celle d\'un autre espace est introuvable, et un lien n\'en montre pas le titre', async () => {
+  assert.equal((await vigie.get('/v1/entry?id=' + prive.id)).status, 404);
+  // Un lien d'un espace commun vers un espace privé (posé par la portée admin, ou hérité de la 1.x).
+  const db = new DatabaseSync(inst.db);
+  db.prepare("INSERT INTO links(from_id,to_id,relation,created_at) VALUES(?,?,'relates_to',?)").run(commune.id, prive.id, new Date().toISOString());
+  db.close();
+  const e = (await vigie.get('/v1/entry?id=' + commune.id)).json;
+  assert.ok(!JSON.stringify(e.links).includes('note privée'), JSON.stringify(e.links));
+  assert.equal((await mml.get('/v1/entry?id=' + commune.id)).json.links.length, 1, 'mapmylan, qui lit les deux, voit le lien');
+  const mcp = async (qui, id) => JSON.parse((await qui.post('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'memory_get', arguments: { id } } })).json.result.content[0].text);
+  assert.equal((await mcp(vigie, prive.id)).error, 'introuvable', 'MCP : l\'entrée privée d\'un autre');
+  assert.equal((await mcp(vigie, commune.id)).links.length, 0, 'MCP : le lien vers elle ne se voit pas');
+  assert.equal((await mcp(mml, commune.id)).links.length, 1);
+});

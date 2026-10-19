@@ -446,14 +446,16 @@ const routes = {
     if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
     const id = Number(ctx.url.searchParams.get('id'));
     const e = db.prepare(`SELECT * FROM entries WHERE id=?`).get(id);
-    if (!e) return send(res, 404, { error: 'introuvable' });
-    if (!nsAllowed(ctx.src, e.ns)) return send(res, 403, { error: 'espace interdit' });
+    /* L'entrée d'un espace qu'on ne lit pas n'existe pas pour l'appelant, et
+       ses liens ne montrent que des entrées qu'il lit. */
+    if (!e || !nsAllowed(ctx.src, e.ns)) return send(res, 404, { error: 'introuvable' });
     const links = db.prepare(`
-      SELECT l.relation, e2.id, e2.title, e2.level, e2.source,
+      SELECT l.relation, e2.id, e2.title, e2.level, e2.source, e2.ns,
              CASE WHEN l.from_id=? THEN 'out' ELSE 'in' END AS dir
       FROM links l JOIN entries e2
         ON e2.id = CASE WHEN l.from_id=? THEN l.to_id ELSE l.from_id END
-      WHERE l.from_id=? OR l.to_id=?`).all(id, id, id, id);
+      WHERE l.from_id=? OR l.to_id=?`).all(id, id, id, id)
+      .filter(l => nsAllowed(ctx.src, l.ns)).map(({ ns, ...l }) => l);
     send(res, 200, {
       id: e.id, ns: e.ns, source: e.source, kind: e.kind, ref: e.ref, level: e.level,
       title: e.title, body: e.body, tags: e.tags ? e.tags.split(' ') : [],
