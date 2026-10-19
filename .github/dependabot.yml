@@ -1,0 +1,13 @@
+# Mises à jour proposées, jamais appliquées seules : les actions épinglées par
+# commit et l'image de base épinglée par empreinte. SYNAPSE n'a aucune
+# dépendance npm. Chaque demande est relue.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
