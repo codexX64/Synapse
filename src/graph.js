@@ -46,7 +46,7 @@ function typeOf(kind, level, tags = '') {
      evenement device.*. Sans ca, tout finissait en « note ». */
   const t = ' ' + String(tags || '') + ' ';
   if (/ (switch|commutateur|controleur|passerelle|routeur|vlan|route|dns|tunnel|firewall|pare-feu) /.test(t)) return 'reseau';
-  if (/ (fiche|materiel|hote|serveur|proxmox|hyperviseur|srv-app-01|le serveur de vecteurs|kvm|bmc) /.test(t)) return 'machine';
+  if (/ (fiche|materiel|hote|serveur|hyperviseur|kvm|bmc) /.test(t)) return 'machine';
   if (/ (conteneur|docker|stack|service) /.test(t) && !/ (fiche) /.test(t)) return 'service';
   for (const [re, t2] of TYPE_RULES) if (re.test(kind)) return t2;
   /* Repli sur le niveau : une connaissance stable est une note,

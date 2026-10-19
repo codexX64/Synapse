@@ -48,7 +48,7 @@ const UI_DIR = process.env.UI_DIR || '/app/ui';
 const AGREG = (process.env.AGREG_URL || '').replace(/\/$/, '');
 /* Les tickets vivent dans le service de tickets. L'agregateur n'en remonte que les dix
    plus recents : sur 42 ouverts, une question sur un ticket precis
-   tombait a cote. SYNAPSE lit donc la base d'le service de tickets en lecture seule. */
+   tombait a cote. SYNAPSE lit donc la base du service de tickets en lecture seule. */
 const TK = require('./tickets.js');
 const RG = require('./rangement.js');
 const CFG = require('./config.js');
@@ -936,7 +936,7 @@ const routes = {
 
   /* ---------- réponse : recherche + synthèse par l'IA locale ----------
      Un mot → la cascade suffit, on rend les cartes. Une question → les
-     meilleurs extraits partent à qwen3 sur le serveur de vecteurs, qui répond UNIQUEMENT
+     meilleurs extraits partent au modèle qui rédige, qui répond UNIQUEMENT
      d'après eux. Le modèle ne voit jamais la question sans les extraits :
      c'est ce qui l'empêche d'inventer. */
   /* ---------- état en direct, par l'agrégateur ----------
@@ -991,7 +991,7 @@ const routes = {
            muettes[] en objets. On résume ce qui compte et on NOMME ce
            qui n'a pas pu être lu. */
         const app = (etat.reseau && etat.reseau.appareils) || [];
-        const h = app.filter(x => x.vlan === '30' || /srv-app-01|le serveur|hyperviseur|routeur|commutateur|switch/i.test(x.nom || ''))
+        const h = app.filter(x => /serveur|server|hyperviseur|hypervisor|routeur|router|passerelle|gateway|commutateur|switch/i.test(`${x.nom || ''} ${x.type || ''}`))
           .map(x => `${x.nom || x.ip}${x.ip ? ' ' + x.ip : ''}${x.vu === false ? ' (non vu)' : ''}`).slice(0, 10).join(', ');
         const cs = (etat.conteneurs && etat.conteneurs.conteneurs) || [];
         const enCours = cs.filter(x => x.etat === 'running').length;

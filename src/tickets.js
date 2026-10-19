@@ -1,17 +1,17 @@
 'use strict';
 /* ============================================================
-   Recherche dans les tickets d'le service de tickets.
+   Recherche dans les tickets du service de tickets.
 
    L'agregateur ne remonte que les dix plus recents : sur 42 ouverts,
    une question sur un ticket precis tombait systematiquement a cote,
    et le modele repondait « aucun des dix recents ne correspond » —
    exact, mais inutile.
 
-   SYNAPSE lit donc la base d'le service de tickets directement, en LECTURE SEULE,
+   SYNAPSE lit donc la base du service de tickets directement, en LECTURE SEULE,
    comme le fait deja l'agregateur. Aucune ecriture, aucun risque de
    verrou : SQLite en readOnly ne prend pas de lock d'ecriture.
 
-   Le schema d'le service de tickets n'est pas fige : on releve les colonnes au
+   Le schema du service de tickets n'est pas fige : on releve les colonnes au
    demarrage et on construit la requete avec celles qui existent.
    Coder en dur `ref` ou `ticket_id` casserait au premier renommage.
    ============================================================ */
@@ -40,7 +40,7 @@ function colRef() {
 }
 
 /* ---------- recherche ----------
-   LIKE plutot que FTS : la table d'le service de tickets n'a pas d'index plein texte,
+   LIKE plutot que FTS : la table du service de tickets n'a pas d'index plein texte,
    et sur quelques centaines de lignes la difference est invisible. */
 function cherche(q, limite = 8) {
   ouvre();

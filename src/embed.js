@@ -19,7 +19,7 @@ const { jsonBorne } = require('./llm.js');
 
 class Embedder {
   constructor(opts = {}) {
-    this.url    = opts.url   || process.env.OLLAMA_URL   || 'http://le serveur de vecteurs:11434';
+    this.url    = opts.url   || process.env.OLLAMA_URL   || 'http://ollama:11434';
     this.model  = opts.model || process.env.EMBED_MODEL  || 'nomic-embed-text';
     this.timeout = Number(opts.timeout || process.env.EMBED_TIMEOUT || 8000);
     this.cache  = new Map();
