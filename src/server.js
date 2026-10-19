@@ -875,6 +875,9 @@ const routes = {
 
   'GET /v1/export': async (req, res, ctx) => {
     if (ctx.src?.scope !== 'admin') return send(res, 403, { error: 'portée admin requise' });
+    /* La copie entière des neurones, pour une sauvegarde : la seule liste
+       sans page, réservée à la portée admin et à deux par minute. */
+    if (!rateLimit('export', 2, 60000)) return send(res, 429, { error: 'trop de requêtes' }, { 'Retry-After': '30' });
     send(res, 200, neu.exportAll(db));
   },
 

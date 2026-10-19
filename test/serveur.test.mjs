@@ -229,3 +229,16 @@ test('méthodes : un chemin connu appelé par une autre méthode → 405 avec Al
   assert.equal(trace, 405, 'TRACE ne renvoie rien de la requête');
   assert.equal((await hub.get('/v1/debug')).status, 404);
 });
+
+test('export entier : portée admin seule, deux par minute', async () => {
+  const inst = await demarrer();
+  const jeton = 'adm_' + crypto.randomBytes(24).toString('hex');
+  const db = new DatabaseSync(inst.db);
+  db.prepare("INSERT INTO sources(name,token_hash,scope,channel,created_at) VALUES ('sauvegarde',?,'admin','A',?)").run(crypto.createHash('sha256').update(jeton).digest('hex'), new Date().toISOString());
+  db.close();
+  assert.equal((await service(inst, JETON_HUB).get('/v1/export')).status, 403);
+  const adm = service(inst, jeton);
+  assert.equal((await adm.get('/v1/export')).status, 200);
+  assert.equal((await adm.get('/v1/export')).status, 200);
+  assert.equal((await adm.get('/v1/export')).status, 429);
+});
