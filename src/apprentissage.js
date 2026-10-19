@@ -333,7 +333,7 @@ async function brief(db, opts) {
     const echeance = new Promise(r => setTimeout(() => r('__delai__'), budget));
     const trouve = search(db, { q, ns, limit: limite, embed })
       .then(r => r.hits || r.results || [])
-      .catch(() => []);
+      .catch(() => []);              /* recherche en échec : le briefing part sans mémoire */
     const gagnant = await Promise.race([trouve, echeance]);
     if (gagnant === '__delai__') {
       tronque = true;

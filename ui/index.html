@@ -1212,7 +1212,7 @@ function renderInspector(n){
     const tags=(e.tags||[]).filter(Boolean);
     box.innerHTML=(e.body?'<h3>CONTENU</h3><div class="ans"><p style="white-space:pre-wrap">'+esc(String(e.body).slice(0,2400))+(String(e.body).length>2400?'…':'')+'</p></div>':'')+
       (tags.length?'<h3>ÉTIQUETTES</h3><p class="mu" style="font-size:10px">'+tags.map(esc).join(' · ')+'</p>':'');
-  }).catch(()=>{});
+  }).catch(()=>{const box=document.getElementById('inspCorps');if(box&&state.selected===n.id)box.innerHTML='<p class="mu" style="font-size:10px">Entrée injoignable.</p>';});
 }
 function openNode(id){selectNode(id);}   /* compat moteur/inspecteur */
 
@@ -1737,7 +1737,7 @@ async function apiMoi(chemin,corps,methode){
 function marqueVu(){
   if(!MOI.data)return;
   MOI.data.traits.forEach(t=>{MOI.vu[t.cle]=t.maj;});
-  try{localStorage.setItem('syn_fiche_vue',JSON.stringify(MOI.vu));}catch{}
+  try{localStorage.setItem('syn_fiche_vue',JSON.stringify(MOI.vu));}catch{/* stockage indisponible : la fiche se relira comme neuve */}
 }
 const estNeuve=t=>MOI.vu[t.cle]!==t.maj;
 function dessineRythme(h){

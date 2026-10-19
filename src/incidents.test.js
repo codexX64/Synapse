@@ -13,7 +13,7 @@ const { open } = require('./db.js');
 const I = require('./incidents.js');
 
 const FILE = '/tmp/incidents-test.db';
-try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync(FILE + s); } catch {}
+try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync(FILE + s); } catch { /* rien à effacer */ }
 
 const db = open(FILE);
 I.migrate(db);

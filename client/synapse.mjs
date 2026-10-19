@@ -43,9 +43,9 @@ function spoolWrite(evt) {
     const all = fs.readdirSync(CFG.spool).sort();
     if (all.length > CFG.maxSpool) {
       all.slice(0, all.length - CFG.maxSpool)
-         .forEach(n => { try { fs.unlinkSync(path.join(CFG.spool, n)); } catch {} });
+         .forEach(n => { try { fs.unlinkSync(path.join(CFG.spool, n)); } catch { /* déjà retiré */ } });
     }
-  } catch {}
+  } catch { /* spool injoignable : l'événement est perdu, jamais l'appelant */ }
 }
 function spoolRead() {
   try { return fs.readdirSync(CFG.spool).sort().slice(0, 100); }
@@ -96,12 +96,12 @@ export async function flush() {
   for (const n of files) {
     const p = path.join(CFG.spool, n);
     try { batch.push(JSON.parse(fs.readFileSync(p, 'utf8'))); keep.push(p); }
-    catch { try { fs.unlinkSync(p); } catch {} }
+    catch { try { fs.unlinkSync(p); } catch { /* déjà retiré */ } }
   }
   if (!batch.length) return 0;
   try {
     await post('/v1/ingest/batch', { events: batch });
-    keep.forEach(p => { try { fs.unlinkSync(p); } catch {} });
+    keep.forEach(p => { try { fs.unlinkSync(p); } catch { /* déjà retiré */ } });
     return batch.length;
   } catch { return 0; }
 }

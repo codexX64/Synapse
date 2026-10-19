@@ -123,7 +123,7 @@ function sauvegarde(db, dossier = '/data/sauvegardes') {
      se remplit sans que personne ne les relise jamais */
   const vieilles = fs.readdirSync(dossier)
     .filter(f => f.startsWith('avant-rangement-')).sort().slice(0, -5);
-  for (const f of vieilles) { try { fs.unlinkSync(path.join(dossier, f)); } catch {} }
+  for (const f of vieilles) { try { fs.unlinkSync(path.join(dossier, f)); } catch { /* déjà retirée */ } }
   /* Une copie entière de la base : lisible du seul service. */
   fs.chmodSync(nom, 0o600);
   return { fichier: path.basename(nom), octets: fs.statSync(nom).size };

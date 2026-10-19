@@ -15,7 +15,7 @@ const { open } = require('./db.js');
 const CER = require('./cerveaux.js');
 
 const FILE = '/tmp/cerveaux-test.db';
-try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync(FILE + s); } catch {}
+try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync(FILE + s); } catch { /* rien à effacer */ }
 const db = open(FILE);
 CER.migrate(db);
 

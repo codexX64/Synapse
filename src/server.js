@@ -159,7 +159,7 @@ function passeApprentissage(raison) {
      elle aurait reçu le résultat d'une passe lancée avant elle (et avant
      une éventuelle remise à zéro). Elle attend son tour. */
   if (passeEnCours && (raison === 'manuel' || raison === 'relecture'))
-    return passeEnCours.catch(() => {}).then(() => passeApprentissage(raison));
+    return passeEnCours.catch(() => { /* son échec est déjà consigné : la nouvelle passe part quand même */ }).then(() => passeApprentissage(raison));
   if (passeEnCours) return passeEnCours;
   passeEnCours = (async () => {
     const t0 = Date.now();

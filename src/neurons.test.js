@@ -11,7 +11,7 @@ const { open } = require('./db.js');
 const N = require('./neurons.js');
 
 const FILE = '/tmp/neurons-test.db';
-try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync(FILE + s); } catch {}
+try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync(FILE + s); } catch { /* rien à effacer */ }
 const db = open(FILE);
 N.migrate(db);
 
@@ -270,7 +270,7 @@ head('export, import, purge');
   t('export complet', dump.neurons.length > 0 && Array.isArray(dump.synapses));
 
   const db2 = (() => {
-    try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync('/tmp/neurons-imp.db' + s); } catch {}
+    try { for (const s of ['', '-wal', '-shm']) fs.unlinkSync('/tmp/neurons-imp.db' + s); } catch { /* rien à effacer */ }
     const d = open('/tmp/neurons-imp.db'); N.migrate(d); return d;
   })();
   const imp = N.importAll(db2, { version: 1, neurons: dump.neurons.slice(0, 50),
