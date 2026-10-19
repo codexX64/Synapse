@@ -100,7 +100,7 @@ Si l'extrait ne permet pas d'ecrire un titre precis, reponds exactement : RIEN`,
 async function demanderAuModele(consigne, texte) {
   /* Passe de fond : personne n'attend. Le délai couvre un chargement du
      modèle à froid, pas une réponse lente à une question. */
-  return LLM.genere({ prompt: `${consigne}\n\n---\n${texte}`, json: true, temperature: 0.1, maxTokens: 1000,
+  return LLM.genere({ prompt: `${consigne}\n\n${LLM.REGLE_DONNEES}\n\n${LLM.clore(texte)}`, json: true, temperature: 0.1, maxTokens: 1000,
     timeout: Number(process.env.APPRENTISSAGE_TIMEOUT || 180000) });
 }
 
@@ -1125,8 +1125,9 @@ function construirePrompt({ q, extraits, bloc, avecEtat, present, soi = '', redi
       : '',
     'RÉPONDS À LA QUESTION POSÉE. Si tu ne la comprends pas, demande une reformulation.',
     'Si les sources ne permettent pas de répondre, dis-le en une phrase, sans inventer.',
+    LLM.REGLE_DONNEES,
   ].filter(Boolean).join('\n');
-  return `${regles}\n\nMÉMOIRE :\n${extraits || '(rien de pertinent)'}${bloc}${soi ? `\n\n${soi}` : ''}\n\nQUESTION : ${q}`;
+  return `${regles}\n\n${LLM.clore(`MÉMOIRE :\n${extraits || '(rien de pertinent)'}${bloc}${soi ? `\n\n${soi}` : ''}\n\nQUESTION : ${q}`)}`;
 }
 
 const vueHits = r => r.hits.map(h => ({ id: h.id, title: h.title, snippet: h.snippet, source: h.source,
