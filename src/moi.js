@@ -26,7 +26,7 @@ const ingest = require('./ingest.js');
 const LOT_TITRES = 12;
 const ESSAIS_MAX = 3;
 
-const CONSIGNE_TITRES = `Tu ranges les échanges entre un utilisateur et l'assistant de son homelab.
+const CONSIGNE_TITRES = `Tu ranges les échanges entre un utilisateur et l'assistant de son infrastructure.
 Pour chaque échange, écris :
 - "titre" : 3 à 8 mots qui résument ce qui s'est RÉELLEMENT passé. Pas la question recopiée, pas de point d'interrogation, pas de guillemets.
   La ligne « Résultat » fait foi. « Je vais modifier… », un plan proposé ou une promesse ne sont PAS des faits :

@@ -15,7 +15,7 @@ test('« résume les alertes » : une demande de rédaction, pas une liste', () 
 });
 
 test('les autres tournures de rédaction, et ce qui n’en est pas', () => {
-  for (const q of ['peux-tu résumer les incidents de la semaine', 'explique l’incident de hier', 'fais le point sur le réseau', 'compare camera et nas', 'synthétise les échanges'])
+  for (const q of ['peux-tu résumer les incidents de la semaine', 'explique l’incident de hier', 'fais le point sur le réseau', 'compare camera et stockage', 'synthétise les échanges'])
     assert.equal(parse(q).redige, true, q);
   for (const q of ['alertes réseau', 'bilan du réseau', 'camera-213', 'liste les workflows'])
     assert.equal(parse(q).redige, false, q);
@@ -54,7 +54,7 @@ test('un résumé fait passer le grave devant : la CVE critique n’est pas noy�
   const db = openDb(path.join(dir, 't.db'));
   ingest.insert(db, { kind: 'incident.network', title: 'Vulnérabilité CVE-2019-0708 sur portable-40', body: 'Alerte MapMyLAN, gravité critique.', tags: ['mapmylan', 'alerte', 'critical'], occurred_at: new Date(Date.now() - 3 * 3600e3).toISOString() }, 'mapmylan');
   for (let i = 0; i < 20; i++)
-    ingest.insert(db, { kind: 'network.alert', title: `Alerte : nas-${i} ne répond plus`, body: `Alerte MapMyLAN, gravité faible, appareil nas-${i}. Alerte réseau.`, tags: ['mapmylan', 'alerte', 'low'] }, 'mapmylan');
+    ingest.insert(db, { kind: 'network.alert', title: `Alerte : baie-${i} ne répond plus`, body: `Alerte MapMyLAN, gravité faible, appareil baie-${i}. Alerte réseau.`, tags: ['mapmylan', 'alerte', 'low'] }, 'mapmylan');
   const r = await search(db, { q: 'Résume les alertes', ns: 'shared', limit: 12 });
   const rang = r.hits.findIndex(h => /CVE-2019-0708/.test(h.title));
   assert.ok(rang >= 0 && rang < 3, `rang de la CVE : ${rang}`);

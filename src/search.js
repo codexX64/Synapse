@@ -18,7 +18,7 @@
 
    SORTIE ANTICIPÉE : si le lexical donne un premier résultat franc et
    nettement détaché, on ne calcule pas le vecteur de la requête. Sur
-   du trafic de homelab — noms de machines, de services, de tickets —
+   du trafic d'infrastructure — noms de machines, de services, de tickets —
    ça couvre la majorité des requêtes et les ramène à ~10 ms.
    ============================================================ */
 
@@ -147,7 +147,7 @@ function filterOnly(db, p, ns, limit) {
 /* ---------- vecteurs ----------
    Exhaustif, donc exact : aucun faux négatif, contrairement à un index
    approximatif. Mesuré à 12 ms sur 10 000 vecteurs de 768 dimensions,
-   ce qui laisse une marge très large à l'échelle d'un homelab. */
+   ce qui laisse une marge très large à l'échelle d'une petite infrastructure. */
 function vector(db, qvec, p, ns, limit) {
   if (!qvec) return [];
 

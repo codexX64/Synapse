@@ -97,7 +97,7 @@ POST   /v1/cerveaux/orienter     « qui sait ça ? » — et, pour une action, q
 
 ## Les cerveaux
 
-SYNAPSE est le cerveau du homelab ; chaque service qui a son IA y a un
+SYNAPSE est le cerveau de l'infrastructure ; chaque service qui a son IA y a un
 mini-cerveau. Sa fiche dit ce qu'il sait et ce qu'il fait ; son état dit
 où il en est ; ses échanges et ses corrections, qui passaient déjà par
 `/v1/echange` et `/v1/apprendre`, font ses traits appris.

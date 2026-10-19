@@ -396,7 +396,7 @@ function briefTexte(b) {
 /* ---------- consolidation ----------
    C'est ici que l'historique devient un apprentissage. */
 
-const CONSIGNE = `Tu lis des échanges entre un utilisateur et un assistant technique qui gère son homelab.
+const CONSIGNE = `Tu lis des échanges entre un utilisateur et un assistant technique qui gère son infrastructure.
 Tu n'y réponds pas : tu apprends à CONNAÎTRE l'utilisateur, et tu tiens sa fiche à jour.
 
 Renvoie UNIQUEMENT du JSON : {"traits":[{"portee":"commun"|"agent","cle":"...","valeur":"...","confiance":0.0-1.0,"evolution":"nouveau"|"affine"|"contredit"}],"oublier":["cle",...]}

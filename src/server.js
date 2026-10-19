@@ -1107,8 +1107,8 @@ function etatDeSoi() {
 function construirePrompt({ q, extraits, bloc, avecEtat, present, soi = '', redige = false }) {
   const regles = [
     redige
-      ? 'Tu es la mémoire du homelab. On te demande un RÉSUMÉ : réponds en français, sans préambule, en 3 à 6 phrases. Le plus grave d\'abord (critique, puis élevé, puis le reste). Regroupe ce qui se ressemble en une phrase, avec tous ses numéros (« quatre appareils ne répondent plus [1][2][5][6] »). Termine par la période couverte par les extraits.'
-      : 'Tu es la mémoire du homelab. Réponds en français, en 2 ou 3 phrases, sans préambule.',
+      ? 'Tu es la mémoire de l\'infrastructure. On te demande un RÉSUMÉ : réponds en français, sans préambule, en 3 à 6 phrases. Le plus grave d\'abord (critique, puis élevé, puis le reste). Regroupe ce qui se ressemble en une phrase, avec tous ses numéros (« quatre appareils ne répondent plus [1][2][5][6] »). Termine par la période couverte par les extraits.'
+      : 'Tu es la mémoire de l\'infrastructure. Réponds en français, en 2 ou 3 phrases, sans préambule.',
     avecEtat
       ? 'Tu disposes de deux sources : la MÉMOIRE (extraits datés, peuvent être périmés) et l\'ÉTAT ACTUEL (vérifié à l\'instant). Pour le présent, l\'état actuel fait foi ; pour l\'historique et les décisions, la mémoire. Dis « vérifié à l\'instant » quand tu t\'appuies sur l\'état actuel.'
       : 'Tu ne disposes QUE de la MÉMOIRE : des extraits datés, qui peuvent être périmés. Tu n\'as AUCUN accès à l\'état en direct : n\'écris jamais « vérifié », « à l\'instant », « actuellement » ni « en ce moment ».',
@@ -1173,7 +1173,7 @@ async function repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie,
 
 /* Un agent ne lit jamais la mémoire privée d'un autre. */
 /* Deux espaces publics, deux natures :
-     shared  — le HOMELAB : ce qui existe, ce qui est tombé, comment c'est
+     shared  — l'INFRASTRUCTURE : ce qui existe, ce qui est tombé, comment c'est
                réparé. Des faits datés.
      savoir  — les STANDARDS : le manuel Codex64, les conventions de code,
                le design system. Des règles sans date.

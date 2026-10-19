@@ -2,7 +2,7 @@
 /* ============================================================
    SYNAPSE — l'annuaire des cerveaux.
 
-   SYNAPSE est le cerveau du homelab. Chaque service qui a son IA (le
+   SYNAPSE est le cerveau de l'infrastructure. Chaque service qui a son IA (le
    Hub, MapMyLAN, et ceux qui viendront) y a un MINI-cerveau : sa fiche
    (ce qu'il sait, ce qu'il fait, ses règles), son état du moment, et —
    par les échanges et le brief qui existaient déjà — ses traits appris.
@@ -169,7 +169,7 @@ function pourBrief(db, q, soi) {
 
 function texteBrief(cerveaux) {
   if (!cerveaux?.length) return '';
-  const l = ['Autres cerveaux du homelab concernés par la question (ce sont leurs informations, pas les tiennes — cite-les) :'];
+  const l = ['Autres cerveaux de l’infrastructure concernés par la question (ce sont leurs informations, pas les tiennes — cite-les) :'];
   for (const c of cerveaux) {
     l.push(`- ${c.titre} [${c.nom}]${c.etat ? ` — état ${c.etatLe ? `au ${c.etatLe.slice(0, 16).replace('T', ' ')}` : 'récent'} : ${c.etat.slice(0, 600)}` : ''}`);
     if (c.action) l.push(`  Action « ${c.action.nom} » : c'est lui qui la fait (${c.action.ou || c.titre}). Ne la fais pas : renvoie l'utilisateur vers lui.`);

@@ -30,22 +30,22 @@ const TOOLS = [
   {
     name: 'memory_search',
     description: "Cherche dans la mémoire. DEUX espaces, à ne pas confondre : " +
-      "scope 'homelab' = ce qui existe et ce qui est arrivé sur l'infrastructure — " +
+      "scope 'infra' = ce qui existe et ce qui est arrivé sur l'infrastructure — " +
       "machines, services, incidents, corrections, faits datés. À utiliser pour " +
       "diagnostiquer, vérifier un état, retrouver une panne. " +
       "scope 'savoir' = les standards de Codex64 — manuel de sécurité, conventions " +
       "de code, design system, règles d'architecture. À utiliser AVANT d'écrire du " +
       "code ou de proposer une conception. " +
       "Une question sur une panne ne va pas dans savoir ; une question de style " +
-      "ne va pas dans homelab.",
+      "ne va pas dans infra.",
     inputSchema: {
       type: 'object',
       properties: {
         query: { type: 'string', description: 'question ou mots-clés' },
         scope: { type: 'string',
-                 enum: ['homelab', 'savoir', 'agent', 'agent+shared', 'shared'],
-                 default: 'homelab',
-                 description: "'homelab' pour l'infrastructure, 'savoir' pour les standards" },
+                 enum: ['infra', 'savoir', 'agent', 'agent+shared', 'shared'],
+                 default: 'infra',
+                 description: "'infra' pour l'infrastructure, 'savoir' pour les standards" },
         limit: { type: 'integer', default: 6, maximum: 20 }
       },
       required: ['query']
@@ -170,10 +170,11 @@ async function toolCall(db, src, name, args, ctx) {
   switch (name) {
 
     case 'memory_search': {
-      const scope = args.scope || 'homelab';
+      /* « infra » (et toute portée inconnue, dont l'ancien nom d'avant la
+         2.0) : sa mémoire propre puis la mémoire commune. */
+      const scope = args.scope || 'infra';
       const spaces = scope === 'savoir'  ? ['savoir']
                    : scope === 'shared'  ? ['shared']
-                   : scope === 'homelab' ? [agentNs(src), 'shared']
                    : scope === 'agent'   ? [agentNs(src)]
                    : [agentNs(src), 'shared'];
       const limit = Math.min(20, args.limit || 6);

@@ -294,7 +294,7 @@ body.cherche #console{z-index:50}
   <div id="wordmark">SYNAPSE</div>
   <div id="demoTag">CHARGEMENT…</div>
   <select id="nsSel" title="Espace de mémoire affiché">
-    <option value="shared">HOMELAB</option>
+    <option value="shared">INFRASTRUCTURE</option>
     <option value="savoir">SAVOIR</option>
   </select>
   <div class="vsw">
@@ -353,7 +353,7 @@ body.cherche #console{z-index:50}
 <div id="console" class="glass">
   <div id="chipsRow"><span>QUESTION LIBRE — LE CERVEAU ROUTE, CHERCHE ET RÉPOND</span></div>
   <div id="inRow">
-    <input id="q" placeholder="Demande n'importe quoi sur le homelab…" autocomplete="off">
+    <input id="q" placeholder="Demande n'importe quoi sur l'infrastructure…" autocomplete="off">
     <button id="go">LANCER</button>
   </div>
   <div id="presets"></div>
@@ -1358,20 +1358,20 @@ async function majInstrumentation(){
   }
 }
 /* La legende pilote le filtre : un clic masque un type, un clic sur
-   « homelab » ne garde que ce qui decrit l'infrastructure. */
-const TYPES_HOMELAB=new Set(['machine','service','reseau','vlan','incident']);
+   « infra » ne garde que ce qui decrit l'infrastructure. */
+const TYPES_INFRA=new Set(['machine','service','reseau','vlan','incident']);
 function majLegende(){
   const compte={};nodes.forEach(n=>{compte[n.type]=(compte[n.type]||0)+1;});
   const vus=nodes.filter(visible).length;
   if(!nodes.length){$('#legend').innerHTML='<div class="vide-hud">Aucune entrée.</div>';return;}
   $('#legend').innerHTML=
-    '<div class="lgAct"><button id="lgHome">HOMELAB</button><button id="lgTout">TOUT</button></div>'+
+    '<div class="lgAct"><button id="lgHome">INFRA</button><button id="lgTout">TOUT</button></div>'+
     Object.keys(compte).sort().map(t=>{const v=typeDe(t);return '<div class="lg'+(TYPES_CACHES.has(t)?' off':'')+'" data-t="'+esc(t)+'">'+
         '<i style="background:'+v.c+'"></i>'+esc(v.l.toUpperCase())+'<b>'+compte[t]+'</b></div>';}).join('')+
     '<div class="lgTot">'+vus+' sur '+nodes.length+' affichées</div>';
   $('#lgHome').onclick=()=>{
     TYPES_CACHES.clear();
-    Object.keys(compte).forEach(t=>{if(!TYPES_HOMELAB.has(t))TYPES_CACHES.add(t);});
+    Object.keys(compte).forEach(t=>{if(!TYPES_INFRA.has(t))TYPES_CACHES.add(t);});
     if(nodes.every(n=>!visible(n)))TYPES_CACHES.clear();
     reconstruit();
   };
