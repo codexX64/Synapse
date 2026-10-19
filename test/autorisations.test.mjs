@@ -3,6 +3,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { DatabaseSync } from 'node:sqlite';
 import { lancer, service, JETON_HUB } from './instance.mjs';
 
 const require = createRequire(import.meta.url);
@@ -61,4 +62,13 @@ test('neurones : oubliés par la source qui les a écrits', async () => {
   const id = n.json.neuron_id ?? n.json.id;
   assert.equal((await vigie.del('/v1/neuron?id=' + id)).status, 403);
   assert.equal((await mml.del('/v1/neuron?id=' + id)).status, 200);
+});
+
+test('refus d\'un jeton : au journal de sécurité, une ligne par appelant et par route', async () => {
+  for (let i = 0; i < 3; i++) await vigie.get('/v1/profil?agent=mapmylan');
+  const db = new DatabaseSync(inst.db, { readOnly: true });
+  const l = db.prepare("SELECT objet, details FROM socle_journal WHERE action = 'acces.refuse' AND objet = 'GET /v1/profil'").all();
+  db.close();
+  assert.equal(l.length, 1, JSON.stringify(l));
+  assert.equal(JSON.parse(l[0].details).source, 'vigie');
 });

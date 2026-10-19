@@ -1257,6 +1257,14 @@ function exigerHumain(src, { role = 'membre', renfort = false } = {}) {
   return src;
 }
 
+/* Un geste refusé à un jeton (portée, espace d'un autre) ou à une session
+   (au-delà de ce que le socle consigne déjà) : au journal de sécurité, une
+   ligne par appelant, route et minute. */
+function refusJournalise(src, route, sctx) {
+  socle.journal.rare(`refus:${src.name}:${route}`, { acteur: src.humain ? src.compte : null, action: 'acces.refuse', objet: route, ip: sctx.ip,
+    resultat: 'refus', details: src.humain ? {} : { source: src.name } });
+}
+
 function journaliser(src, action, objet, details) {
   socle.journal.ecrire({ acteur: src?.humain ? src.compte : null, action, objet, ip: src?.sctx?.ip ?? null,
     details: { ...(src && !src.humain ? { source: src.name } : {}), ...(details || {}) } });
@@ -1307,11 +1315,15 @@ async function traiter(req, res) {
   routeDe.set(req, SCHEMAS[key]);
   try {
     await fn(req, res, { url, src });
+    if (res.statusCode === 403) refusJournalise(src, key, sctx);
   } catch (e) {
     /* Une entrée malformée (JSON, taille, schéma) arrive en ErreurHttp : la
        faute du client lui est dite telle quelle. Le reste est une panne :
        le détail va dans le journal, jamais dans la réponse. */
-    if (e instanceof S.ErreurHttp) throw e;
+    if (e instanceof S.ErreurHttp) {
+      if (e.status === 403 && !src.humain) refusJournalise(src, key, sctx);
+      throw e;
+    }
     console.error('[erreur]', key, e && e.stack || e);
     if (!res.headersSent) send(res, 500, { error: 'erreur interne' });
   }
