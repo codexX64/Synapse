@@ -72,10 +72,12 @@ test('session humaine : lecture permise, écriture sous jeton anti-CSRF et rôle
   const orf = await a2.post('/api/compte/renfort/options');
   const rf = await a2.post('/api/compte/renfort', { methode: 'cle', reponse: cleAdmin.signer(orf.json, a2.origine) });
   assert.equal(rf.status, 200, JSON.stringify(rf.json) + JSON.stringify(sansRenfort.json));
-  const ok = await a2.post('/v1/rangement/config', { telegram_token: jetonTg, telegram_chat: '-100123', inconnu: 'champ inventé' });
+  const inventé = await a2.post('/v1/rangement/config', { telegram_token: jetonTg, telegram_chat: '-100123', inconnu: 'champ inventé' });
+  assert.equal(inventé.status, 400, 'un champ inventé est refusé, rien n\'est écrit');
+  const ok = await a2.post('/v1/rangement/config', { telegram_token: jetonTg, telegram_chat: '-100123' });
   assert.equal(ok.status, 200, JSON.stringify(ok.json));
   assert.equal(ok.json.config.telegram_token, '…' + jetonTg.slice(-4));
-  assert.equal(ok.json.config.inconnu, undefined, 'un champ inventé n\'entre pas');
+  assert.equal(ok.json.config.inconnu, undefined);
   assert.equal((await a2.post('/v1/rangement/config', { telegram_token: 'pas-un-jeton' })).status, 400);
   const db = new DatabaseSync(inst.db, { readOnly: true });
   const brut = db.prepare("SELECT v FROM meta WHERE k = 'rangement'").get().v;
@@ -189,4 +191,17 @@ test('reprise des comptes de SYNAPSE 1.x : mot de passe, second facteur et clé 
   db.close();
   assert.match(ligne.mdp, /^\$argon2id\$/, 'empreinte passée en Argon2id à la connexion');
   assert.ok(!ligne.totp.includes(totpSecret), 'secret TOTP scellé');
+});
+
+test('schémas : champ ou paramètre inconnu, type faux, paramètre répété → 400 ; un inconnu n\'apprend rien des routes', async () => {
+  const inst = await demarrer(), hub = service(inst, JETON_HUB);
+  assert.equal((await fetch(inst.url('/v1/search?q=x&inventé=1'))).status, 401, 'pas authentifié : 401, pas 400');
+  assert.equal((await hub.get('/v1/search?q=x&inventé=1')).status, 400);
+  assert.equal((await hub.get('/v1/search?q=x&q=y')).status, 400);
+  assert.equal((await hub.get('/v1/search?q=x&limit=beaucoup')).status, 400);
+  assert.equal((await hub.get('/v1/search?q=x&limit=5')).status, 200);
+  assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 't', body: 'b', role: 'admin' })).status, 400);
+  assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 't', body: 42 })).status, 400);
+  assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 't', body: 'b', __proto__: { x: 1 }, meta: JSON.parse('{"__proto__":{"x":1}}') })).status, 400);
+  assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 't', body: 'b' })).status, 202);
 });

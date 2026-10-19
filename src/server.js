@@ -29,6 +29,7 @@ const CER = require('./cerveaux.js');
 const SRC = require('./sources.js');
 const LLM = require('./llm.js');
 const { migrerComptes } = require('./migration-socle.js');
+const { SCHEMAS } = require('./schemas.js');
 const ACT = require('./activite.js');
 const { blobToVec } = require('./db.js');
 const fsp = require('node:fs');
@@ -294,7 +295,15 @@ function send(res, code, obj, extra) {
   res.end(body);
 }
 
-function readBody(req) {
+/* Le corps lu est validé contre le schéma de la route (src/schemas.js) :
+   champ inconnu, type ou longueur hors bornes → 400. */
+const schemaCorps = new WeakMap();
+async function readBody(req) {
+  const brut = await lireJson(req);
+  const sch = schemaCorps.get(req);
+  return sch ? socle.S.valider(brut, sch) : brut;
+}
+function lireJson(req) {
   return new Promise((resolve, reject) => {
     let n = 0; const parts = [];
     req.on('data', c => {
@@ -1292,6 +1301,15 @@ async function traiter(req, res) {
 
   const src = identifier(req, sctx);
   if (!src) return send(res, 401, { error: 'authentification requise' });
+  /* Paramètres de requête : déclarés, une fois chacun, typés — après
+     l'authentification, pour ne rien dire des routes à un inconnu. */
+  const params = {};
+  for (const [k, v] of url.searchParams) {
+    if (Object.hasOwn(params, k)) throw new S.ErreurHttp(400, `Paramètre répété : « ${String(k).slice(0, 40)} ».`);
+    params[k] = v;
+  }
+  S.valider(params, SCHEMAS[key].requete || {});
+  schemaCorps.set(req, SCHEMAS[key].corps || {});
   try {
     await fn(req, res, { url, src });
   } catch (e) {
@@ -1309,6 +1327,9 @@ async function traiter(req, res) {
     if (!res.headersSent) send(res, 500, { error: 'erreur interne' });
   }
 }
+
+/* Toute route a son schéma : une route ajoutée sans lui empêche le démarrage. */
+for (const k of Object.keys(routes)) if (!SCHEMAS[k]) throw new Error(`schéma manquant pour ${k}`);
 
 let socle = null;
 let debit = null;
