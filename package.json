@@ -1,0 +1,12 @@
+{
+  "name": "synapse",
+  "version": "2.0.0",
+  "description": "Mémoire consultable pour agents et humains : recherche en cascade, mémoire opérationnelle, apprentissage — sous le Hub, sur le socle commun.",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=24.7" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test src/*.test.js test/*.test.mjs socle/test/*.test.js"
+  }
+}

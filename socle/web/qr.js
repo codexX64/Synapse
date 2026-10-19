@@ -41,7 +41,7 @@
     return out;
   }
 
-  /* ---------- Reed-Solomon sur GF(2^8), polynôme 0x11D ---------- */
+  /* Reed-Solomon sur GF(2^8), polynôme 0x11D. */
   function mul(x, y) {
     let z = 0;
     for (let i = 7; i >= 0; i--) {
@@ -73,7 +73,6 @@
     return r;
   }
 
-  /* ---------- encodage ---------- */
   function codewords(octets) {
     let v = 1;
     for (; v <= 40; v++) {
@@ -120,7 +119,6 @@
     return { v, out };
   }
 
-  /* ---------- placement ---------- */
   function construit(v, data, masque) {
     const n = v * 4 + 17;
     const m = Array.from({ length: n }, () => new Array(n).fill(false));
@@ -238,3 +236,5 @@
 
   globalThis.QR = { matrice, svg };
 })();
+
+export const { matrice, svg } = globalThis.QR;
