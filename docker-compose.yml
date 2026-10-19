@@ -7,6 +7,11 @@ services:
     environment:
       PORT: 8140
       DB_FILE: /data/synapse.db
+      # La clé maîtresse vient d'un fichier hors du volume de données : une copie
+      # du volume ne suffit pas à ouvrir ce qu'elle scelle (README, « Démarrage »).
+      SOCLE_CLE_FILE: /run/secrets/socle_cle
+      SOCLE_CLE_ANCIENNE_FILE: /run/secrets/socle_cle_ancienne
+    secrets: [socle_cle, socle_cle_ancienne]
     volumes:
       # Volume NOMMÉ, pas un bind mount. Un bind ./data:/data est créé par
       # Docker en root:root sur l'hôte, et le conteneur — qui tourne sans
@@ -41,6 +46,13 @@ services:
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
+
+secrets:
+  socle_cle:
+    file: ./secrets/socle_cle
+  # Vide, sauf pendant une rotation de la clé.
+  socle_cle_ancienne:
+    file: ./secrets/socle_cle_ancienne
 
 volumes:
   synapse-data:

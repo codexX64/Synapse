@@ -6,6 +6,7 @@ data/
 sauvegardes/
 
 # Secrets.
+/secrets/
 .env
 .env.local
 *.key

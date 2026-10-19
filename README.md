@@ -60,8 +60,20 @@ lui reste propre : ce qui rattrape l'un déroute l'autre.
 
 ```bash
 cp .env.example .env
+mkdir -p secrets && openssl rand -base64 32 > secrets/socle_cle && : > secrets/socle_cle_ancienne
+sudo chown 10001:10001 secrets/socle_cle secrets/socle_cle_ancienne && sudo chmod 400 secrets/socle_cle secrets/socle_cle_ancienne
 docker compose up -d --build
 ```
+
+La clé maîtresse (`secrets/socle_cle`) scelle les secrets TOTP et le jeton
+Telegram : elle vit hors du volume de données, et une copie hors ligne en est
+gardée à part des sauvegardes — sans elle, une sauvegarde de la base ne rouvre
+pas ce qu'elle scelle. Pour la tourner : l'actuelle dans
+`secrets/socle_cle_ancienne`, une neuve dans `secrets/socle_cle`, redémarrer,
+puis vider `secrets/socle_cle_ancienne` quand le journal le demande.
+Une installation seule plus ancienne a vu sa clé naître sur le volume : la
+reprendre au lieu d'en tirer une neuve (SYNAPSE la retire alors du volume) :
+`docker run --rm -v synapse-data:/data alpine cat /data/cles/socle.key > secrets/socle_cle`.
 
 Premier démarrage : aucun compte par défaut. Installé par le Hub, le
 premier compte se crée depuis le Hub (Comptes des services) ; seul, SYNAPSE
