@@ -246,3 +246,8 @@ test('export entier : portée admin seule, deux par minute', async () => {
   assert.equal((await adm.get('/v1/export')).status, 200);
   assert.equal((await adm.get('/v1/export')).status, 429);
 });
+
+test('base : dossier et fichiers lisibles du seul service', async () => {
+  const { statSync } = await import('node:fs');
+  for (const f of [inst.db, inst.db + '-wal']) assert.equal(statSync(f).mode & 0o777, 0o600, f);
+});

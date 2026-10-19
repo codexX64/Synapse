@@ -24,9 +24,11 @@ const path = require('node:path');
 const SCHEMA_VERSION = 1;
 
 function open(file) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+  /* Dossier en 0700, base et fichiers WAL en 0600 : seul le service les lit. */
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL');
+  for (const f of [file, file + '-wal', file + '-shm']) try { fs.chmodSync(f, 0o600); } catch { /* absent ou en lecture seule */ }
   db.exec('PRAGMA synchronous = NORMAL');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
