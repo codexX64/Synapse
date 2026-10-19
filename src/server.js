@@ -104,19 +104,19 @@ async function demanderAuModele(consigne, texte) {
 }
 
 function amorcerSourceHub(db) {
-  const paires = [
-    ['hub', process.env.HUB_TOKEN_SEED, 'read+write'],
-    ['hub-admin', process.env.HUB_ADMIN_TOKEN_SEED, 'admin'],
-  ];
-  const now = new Date().toISOString();
-  for (const [nom, jeton, portee] of paires) {
-    if (!jeton || String(jeton).length < 16) continue;
+  const jeton = process.env.HUB_TOKEN_SEED;
+  if (jeton && String(jeton).length >= 16) {
     const hash = crypto.createHash('sha256').update(String(jeton)).digest('hex');
     db.prepare(`INSERT INTO sources(name,token_hash,scope,channel,created_at)
-                VALUES (?,?,?,'A',?)
+                VALUES ('hub',?,'read+write','A',?)
                 ON CONFLICT(name) DO UPDATE SET token_hash=excluded.token_hash, scope=excluded.scope, enabled=1`)
-      .run(nom, hash, portee, now);
+      .run(hash, new Date().toISOString());
   }
+  /* La source « hub-admin » de la 1.x portait le jeton d'administration des
+     comptes avec la portée admin sur toute l'API. Ce jeton ne sert plus
+     qu'au socle (SOCLE_JETON_ADMIN_HUB) : la source est retirée. */
+  const r = db.prepare(`DELETE FROM sources WHERE name = 'hub-admin' AND channel = 'A'`).run();
+  if (Number(r.changes)) console.log('[synapse] source « hub-admin » de la 1.x retirée : les comptes se gèrent par le socle.');
 }
 
 const db = open(DB_FILE);

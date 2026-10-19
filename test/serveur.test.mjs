@@ -8,6 +8,8 @@ import { lancer, service, JETON_INSTALLATION, JETON_HUB, JETON_ADMIN_HUB } from 
 import { Client, connexion } from '../socle/essai/client.js';
 import { adminComplet, membreInvite, codeTotp, MDP_ESSAI } from '../socle/essai/inscription.js';
 import { Authentificateur } from '../socle/essai/authentificateur.js';
+import { createRequire } from 'node:module';
+const { open: ouvrirBase } = createRequire(import.meta.url)('../src/db.js');
 
 const instances = [];
 after(async () => { for (const i of instances) await i.arreter(); });
@@ -142,7 +144,12 @@ test('reprise des comptes de SYNAPSE 1.x : mot de passe, second facteur et clé 
   const totpSecret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP';
   const sel = crypto.randomBytes(16);
   const empreinte = sel.toString('hex') + ':' + crypto.scryptSync('ancien mot de passe d\'alice', sel, 32, { N: 32768, r: 8, p: 1, maxmem: 64 << 20 }).toString('hex');
+  const ancienJetonAdmin = 'ancien-jeton-admin-du-hub-' + 'w'.repeat(20);
   const ancienne = await demarrer({ preparer: f => {
+    const base = ouvrirBase(f);
+    base.prepare(`INSERT INTO sources(name,token_hash,scope,channel,created_at) VALUES('hub-admin',?,'admin','A','2026-01-01T00:00:00Z')`)
+      .run(crypto.createHash('sha256').update(ancienJetonAdmin).digest('hex'));
+    base.close();
     const db = new DatabaseSync(f);
     db.exec(`CREATE TABLE auth_users (name TEXT PRIMARY KEY, pass TEXT NOT NULL, totp TEXT, backup TEXT, active INTEGER NOT NULL DEFAULT 0,
                init INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, last_seen TEXT, mfa_a_poser INTEGER NOT NULL DEFAULT 0, mfa_depuis TEXT);
@@ -155,6 +162,7 @@ test('reprise des comptes de SYNAPSE 1.x : mot de passe, second facteur et clé 
       .run(auth.credId.toString('base64url'), 'alice', auth.publique.export({ type: 'spki', format: 'der' }).toString('base64'));
     db.close();
   } });
+  assert.equal((await service(ancienne, ancienJetonAdmin).get('/v1/export')).status, 401, 'la source admin « hub-admin » de la 1.x est retirée');
   const c = new Client(ancienne.port);
   assert.equal((await c.get('/api/compte/etat')).json.installe, true, 'le compte repris suffit : pas d\'installation');
   assert.notEqual((await connexion(c, 'admin', 'ancien mot de passe d\'alice')).status, 200, 'le compte temporaire n\'est pas repris');
