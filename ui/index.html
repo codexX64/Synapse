@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SYNAPSE — Prévisuel</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/v/__VERSION__/vendor/polices.css">
 <style>
 :root{
   --bg:#050505; --panel:rgba(13,13,14,.85); --panel-line:rgba(255,255,255,.09);
@@ -306,6 +305,7 @@ body.cherche #console{z-index:50}
   <div id="status"><i></i><span>VECTEURS · …</span></div>
   <button id="moiBtn" title="Ce que SYNAPSE sait de toi"><i></i>FICHE</button>
   <a href="/parametres" id="paramBtn" title="Paramètres et rangement">⚙</a>
+  <a href="/compte" id="compteBtn" title="Mon compte : connexion, sessions, données">◉</a>
   <button id="hudBtn">STATS</button>
 </header>
 
@@ -366,17 +366,32 @@ body.cherche #console{z-index:50}
 </div>
 <div id="hint">GLISSER · ORBITE — MOLETTE · ZOOM — CLIC · CARTE — ESC · FERMER</div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
+<script src="/v/__VERSION__/vendor/three.min.js" nonce="__NONCE__"></script>
+<script nonce="__NONCE__">
 'use strict';
-addEventListener('error',e=>{
+/* Un message d'erreur est du texte : jamais interprété comme balisage. */
+function voileErreur(texte,taille){
   const v=document.getElementById('veil');
-  if(v&&!v.classList.contains('off'))v.innerHTML='<span style="color:#ff5c7a;font-size:11px;letter-spacing:.08em;max-width:80vw;text-align:center">ERREUR SCRIPT — '+(e.message||'inconnue')+'</span>';
-});
+  if(!v||v.classList.contains('off'))return;
+  const s=document.createElement('span');
+  s.style.cssText='color:#ff5c7a;font-size:'+taille+'px;letter-spacing:.08em;max-width:80vw;text-align:center';
+  s.textContent=texte;v.replaceChildren(s);
+}
+addEventListener('error',e=>voileErreur('ERREUR SCRIPT — '+(e.message||'inconnue'),11));
 if(typeof THREE==='undefined'){
-  document.getElementById('veil').innerHTML='<span style="color:#ff5c7a;font-size:12px;letter-spacing:.08em">THREE.JS NON CHARGÉ — accès cdnjs.cloudflare.com requis</span>';
+  voileErreur('THREE.JS NON CHARGÉ',12);
   throw new Error('THREE absent');
 }
+/* La session vient du socle : la page n'est servie qu'à une session
+   complète, et toute écriture porte son jeton anti-CSRF. */
+const CSRF=(()=>{
+  try{
+    const x=new XMLHttpRequest();x.open('GET','/api/compte/etat',false);x.send(null);
+    const j=JSON.parse(x.responseText);
+    if(!j.session||j.session.niveau!=='complet'){location.replace('/connexion');return '';}
+    return j.session.csrf||'';
+  }catch{return '';}
+})();
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s);
 
@@ -426,7 +441,7 @@ let N = [], E = [];
     x.open('GET', '/v1/graph?ns=' + encodeURIComponent(NS) + '&limit=1400', false);
     x.withCredentials = true;
     x.send(null);
-    if (x.status === 401) { location.href = '/login'; return; }
+    if (x.status === 401) { location.href = '/connexion'; return; }
     if (x.status !== 200) throw new Error('HTTP ' + x.status);
     const g = JSON.parse(x.responseText);
     N = (g.nodes || []).map(n => [n.id, n.type, n.name, Object.assign({ level: n.level }, n.d || {})]);
@@ -1320,7 +1335,7 @@ async function majInstrumentation(){
   if(!ETAT.live){drawBars(null);drawTicker(null);return;}
   try{
     const r=await fetch('/v1/stats?scope=activite',{credentials:'same-origin'});
-    if(r.status===401){location.href='/login';return;}
+    if(r.status===401){location.href='/connexion';return;}
     if(!r.ok)throw new Error('HTTP '+r.status);
     const s=await r.json();
     const a=s.activite||{};
@@ -1458,7 +1473,7 @@ async function think(q){
   let dernierRendu=0;
   try{
     const r=await fetch('/v1/answer?stream=1&q='+encodeURIComponent(q)+'&ns='+encodeURIComponent(NS),{credentials:'same-origin',signal:AbortSignal.timeout(75000)});
-    if(r.status===401){location.href='/login';return;}
+    if(r.status===401){location.href='/connexion';return;}
     if(!r.ok||!r.body)throw new Error('HTTP '+r.status);
     const lect=r.body.getReader(),dec=new TextDecoder();let buf='';
     for(;;){
@@ -1714,8 +1729,9 @@ const joli=c=>{const s=String(c||'').replace(/_/g,' ').replace(/\bfacon\b/,'faç
 const ETATS={nouveau:['NOUVEAU','var(--mint)'],affine:['AFFINÉ','var(--cyan)'],confirme:['CONFIRMÉ','var(--violet)'],remplace:['CHANGÉ','var(--amber)']};
 const JOURS=['L','M','M','J','V','S','D'];
 async function apiMoi(chemin,corps,methode){
-  const r=await fetch(chemin,{method:methode||(corps?'POST':'GET'),credentials:'same-origin',headers:corps?{'Content-Type':'application/json'}:{},body:corps?JSON.stringify(corps):undefined});
-  if(r.status===401){location.href='/login';throw new Error('session');}
+  const m=methode||(corps?'POST':'GET');
+  const r=await fetch(chemin,{method:m,credentials:'same-origin',headers:{...(corps?{'Content-Type':'application/json'}:{}),...(m!=='GET'?{'X-CSRF':CSRF}:{})},body:corps?JSON.stringify(corps):undefined});
+  if(r.status===401){location.href='/connexion';throw new Error('session');}
   const j=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(j.error||'HTTP '+r.status);
   return j;

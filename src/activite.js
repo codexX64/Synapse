@@ -36,6 +36,17 @@ function migrate(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_requetes_ts ON requetes(ts);
   `);
+  /* Le compte humain qui a posé la question : de quoi rendre ses données
+     à qui les demande, et les effacer avec son compte. */
+  if (!db.prepare(`SELECT 1 FROM pragma_table_info('requetes') WHERE name='compte'`).get())
+    db.exec(`ALTER TABLE requetes ADD COLUMN compte TEXT`);
+}
+
+function duCompte(db, compte) {
+  return db.prepare(`SELECT ts, route, q, ms, arret, hits FROM requetes WHERE compte = ? ORDER BY ts`).all(String(compte));
+}
+function oublierCompte(db, compte) {
+  return Number(db.prepare(`DELETE FROM requetes WHERE compte = ?`).run(String(compte)).changes || 0);
 }
 
 /* L'étage auquel une recherche s'est arrêtée, d'après ce qu'elle a
@@ -50,11 +61,11 @@ function etageDe(r, { synthese = false } = {}) {
   return 'L1';
 }
 
-function noter(db, { route, source, q, ms, decision, arret, hits }) {
+function noter(db, { route, source, compte = null, q, ms, decision, arret, hits }) {
   try {
-    db.prepare(`INSERT INTO requetes(ts,route,source,q,ms,decision,arret,hits)
-                VALUES(?,?,?,?,?,?,?,?)`)
-      .run(new Date().toISOString(), String(route), source ? String(source).slice(0, 64) : null,
+    db.prepare(`INSERT INTO requetes(ts,route,source,compte,q,ms,decision,arret,hits)
+                VALUES(?,?,?,?,?,?,?,?,?)`)
+      .run(new Date().toISOString(), String(route), source ? String(source).slice(0, 64) : null, compte ? String(compte) : null,
            String(q || '').slice(0, 200), Number(ms) || 0, decision || null,
            String(arret || 'VIDE'), Number(hits) || 0);
   } catch (e) {
@@ -93,4 +104,4 @@ function resume(db, { jours = 7 } = {}) {
   };
 }
 
-module.exports = { migrate, noter, purge, resume, etageDe, ETAGES, RETENTION_JOURS };
+module.exports = { migrate, noter, purge, resume, etageDe, ETAGES, RETENTION_JOURS, duCompte, oublierCompte };

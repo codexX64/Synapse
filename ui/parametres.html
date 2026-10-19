@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SYNAPSE — paramètres</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/v/__VERSION__/vendor/polices.css">
 <style>
 :root{ --bg:#050505; --panel:rgba(13,13,14,.88); --line:rgba(255,255,255,.09);
        --txt:#f1f1f1; --mut:#9c9c9c; --dim:#575757; --mint:#3fe8a8; --coral:#ff5c7a;
@@ -76,11 +75,15 @@ button.s{padding:7px 12px;font-size:9.5px}
 .bilan:empty{display:none}
 .bilan-t{color:#fff;margin-bottom:4px}
 .bilan-err{color:#ff5c7a}
+#renfort{background:#0d1117;color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:18px 20px;max-width:360px}
+#renfort::backdrop{background:rgba(0,0,0,.6)}
+#renfort input{width:100%;margin:8px 0 4px}
+#renfort .err{color:#ff5c7a;min-height:1.2em;font-size:12px}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header><h1>SYNAPSE</h1><a href="/">← retour au cerveau</a></header>
+  <header><h1>SYNAPSE</h1><a href="/">← retour au cerveau</a> <a href="/compte">mon compte</a></header>
 
   <!-- ÉTAT ET PILOTAGE -->
   <section>
@@ -186,23 +189,74 @@ button.s{padding:7px 12px;font-size:9.5px}
     <button class="p" id="bSave">ENREGISTRER LES RÉGLAGES</button>
   </div>
   <div id="msg"></div>
+  <dialog id="renfort">
+    <form method="dialog">
+      <strong>Confirme ton identité</strong>
+      <p class="aide">Ce geste supprime ou touche un secret. La confirmation vaut cinq minutes.</p>
+      <label id="rfLabel" for="rfChamp"></label>
+      <input id="rfChamp" autocomplete="off">
+      <div class="err" id="rfErr"></div>
+      <button value="non" type="submit">Annuler</button> <button value="oui" type="submit" id="rfOk">Confirmer</button>
+    </form>
+  </dialog>
 </div>
 
-<script>
+<script nonce="__NONCE__">
 'use strict';
 const $ = s => document.querySelector(s);
+/* Session du socle : toute écriture porte son jeton anti-CSRF ; un geste
+   qui détruit ou touche un secret demande une confirmation récente
+   (renfort), proposée par la page du compte. */
+let CSRF = '';
 const msg = (t, ok) => { const m = $('#msg'); m.textContent = t || ''; m.className = t ? (ok ? 'ok' : 'no') : ''; };
 const esc = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
-async function api(chemin, corps, methode) {
+async function api(chemin, corps, methode, renfortFait = false) {
+  const m = methode || (corps ? 'POST' : 'GET');
+  if (m !== 'GET' && !CSRF) CSRF = ((await api('/api/compte/etat')).session || {}).csrf || '';
   const r = await fetch(chemin, {
-    method: methode || (corps ? 'POST' : 'GET'), credentials: 'same-origin',
-    headers: corps ? { 'Content-Type': 'application/json' } : {},
+    method: m, credentials: 'same-origin',
+    headers: { ...(corps ? { 'Content-Type': 'application/json' } : {}), ...(m !== 'GET' ? { 'X-CSRF': CSRF } : {}) },
     body: corps ? JSON.stringify(corps) : undefined
   });
   const j = await r.json().catch(() => ({}));
+  if (j && j.csrf) CSRF = j.csrf;
+  if (r.status === 401) { location.href = '/connexion'; throw new Error('session'); }
+  if (r.status === 403 && j.details && j.details.renfort && !renfortFait) {
+    if (await renforcer(j.details.methodes || [])) return api(chemin, corps, methode, true);
+    throw new Error('Geste annulé : identité non confirmée.');
+  }
   if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
   return j;
+}
+
+/* Renfort du socle : clé d'accès, code de l'application ou mot de passe,
+   selon ce que le compte détient (dans cet ordre). */
+const b64 = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0)).buffer;
+async function renforcer(methodes) {
+  const m = ['cle', 'totp', 'motdepasse'].find(x => methodes.includes(x)) || 'motdepasse';
+  if (m === 'cle' && window.PublicKeyCredential) {
+    try {
+      const o = await api('/api/compte/renfort/options', {});
+      const pk = PublicKeyCredential.parseRequestOptionsFromJSON ? PublicKeyCredential.parseRequestOptionsFromJSON(o)
+        : { ...o, challenge: b64(o.challenge), allowCredentials: (o.allowCredentials || []).map(c => ({ ...c, id: b64(c.id) })) };
+      const c = await navigator.credentials.get({ publicKey: pk });
+      await api('/api/compte/renfort', { methode: 'cle', reponse: c.toJSON() });
+      return true;
+    } catch (e) { msg(e.message || 'clé d’accès refusée'); return false; }
+  }
+  const d = $('#renfort'), champ = $('#rfChamp'), err = $('#rfErr');
+  $('#rfLabel').textContent = m === 'totp' ? 'Code de ton application (6 chiffres)' : 'Mot de passe';
+  champ.type = m === 'totp' ? 'text' : 'password'; champ.inputMode = m === 'totp' ? 'numeric' : 'text'; champ.value = ''; err.textContent = '';
+  for (;;) {
+    d.showModal(); champ.focus();
+    const choix = await new Promise(r => d.addEventListener('close', () => r(d.returnValue), { once: true }));
+    if (choix !== 'oui') return false;
+    try {
+      await api('/api/compte/renfort', m === 'totp' ? { methode: 'totp', code: champ.value.trim() } : { methode: 'motdepasse', motDePasse: champ.value });
+      return true;
+    } catch (e) { err.textContent = e.message; champ.value = ''; }
+  }
 }
 
 /* ---- plages ---- */
@@ -405,7 +459,7 @@ function appliqueConfig(c) {
     const s = await api('/v1/rangement/etat');
     appliqueConfig(s.config);
   } catch (e) {
-    if (/401|authentification/i.test(e.message)) { location.href = '/login'; return; }
+    if (/401|authentification/i.test(e.message)) { location.href = '/connexion'; return; }
     msg(e.message);
   }
   rafraichit();

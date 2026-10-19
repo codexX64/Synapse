@@ -1,0 +1,10 @@
+Code et polices de tiers servis par SYNAPSE, figés ici (aucun CDN).
+
+three.min.js      three@0.128.0 (npm), build/three.min.js — licence MIT (LICENSE-three.txt)
+                  paquet : sha512-i0ap/E+OaSfzw7bD1TtYnPo3VEplkl70WX5fZqZnfZsE3k3aSFudqrrC9ldFZfYFkn1zwDmBcdGfiIm/hnbyZA==
+                  fichier : empreintes SHA-256 de chaque fichier dans EMPREINTES, vérifiées par les essais
+polices/          @fontsource/space-grotesk@5.2.8 (500, 600) et @fontsource/jetbrains-mono@5.2.8
+                  (400, 500, 700), sous-ensemble latin — licence SIL OFL 1.1 (OFL-*.txt)
+                  paquets : sha512-8rlIzpX+lo36y0g77OlwjeBj2DPo9XOwrzqKRLHYZcWcsj73SlkVI6UdXxDCZGLO7oQti1q9QPXzMBYbzSz60w==
+                            sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ==
+Avis connus au 2026-10-19 (npm audit) : aucun.

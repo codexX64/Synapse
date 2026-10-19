@@ -84,7 +84,7 @@ function demarre(db, reecrit) {
         await previens(cfg,
           `<b>Rangement propose</b> · ${s.plan.actions} actions\n` +
           `${s.plan.supprimer} doublons, ${s.plan.renommer} titres\n\n` +
-          `A valider sur <a href="${process.env.AUTH_ORIGIN || ''}/parametres">la page de parametres</a>.`);
+          `A valider sur <a href="${process.env.SOCLE_URL_PUBLIQUE || ''}/parametres">la page de parametres</a>.`);
       }, 5000);
     } catch (e) { console.error('[planif]', e.message); }
   };

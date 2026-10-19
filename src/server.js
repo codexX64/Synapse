@@ -28,12 +28,16 @@ const MOI = require('./moi.js');
 const CER = require('./cerveaux.js');
 const SRC = require('./sources.js');
 const LLM = require('./llm.js');
-const A = require('./auth.js');
-const C = require('./comptes.js');
+const { migrerComptes } = require('./migration-socle.js');
 const ACT = require('./activite.js');
 const { blobToVec } = require('./db.js');
 const fsp = require('node:fs');
 const pathm = require('node:path');
+
+const RACINE = pathm.resolve(__dirname, '..');
+const VERSION = require('../package.json').version;
+/* Signalement privé d'une faille, sur le dépôt : lu par le mainteneur. */
+const CONTACT_SECURITE = 'https://github.com/CodexX64/synapse/security/advisories/new';
 
 const PORT     = Number(process.env.PORT || 8140);
 const DB_FILE  = process.env.DB_FILE || '/data/synapse.db';
@@ -41,35 +45,12 @@ const MAX_BODY = Number(process.env.MAX_BODY || 2_000_000);
 const QUEUE_MAX = Number(process.env.QUEUE_MAX || 5000);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '';
 const UI_DIR = process.env.UI_DIR || '/app/ui';
-/* Jeton de LECTURE injecté dans la page servie. L'interface tourne dans
-   un navigateur : elle ne peut pas poser d'en-tête Authorization sur son
-   propre chargement. Sans ça, /v1/graph répond 401 et la scène retombe
-   sur son corpus de démonstration.
-   Portée read uniquement — quiconque ouvre la page peut lire la mémoire,
-   personne ne peut y écrire. C'est pourquoi la page ne doit sortir que
-   derrière Cloudflare Access. */
-/* UI_TOKEN n'est plus injecte dans la page.
-   Il l'etait pour que l'interface puisse appeler /v1/graph : resultat,
-   quiconque ouvrait l'URL repartait avec une cle de lecture sur toute
-   la memoire. Une session nominative le remplace — le navigateur porte
-   un cookie, pas un secret partage. */
-/* CORS_ORIGIN est l'origine du HUB, autorisee a appeler l'API. L'origine
-   WebAuthn est celle de la page de SYNAPSE elle-meme : les deux ne sont
-   pas les memes. Les confondre faisait refuser toute cle d'acces avec
-   « origine refusee ». */
-const ORIGINE = process.env.AUTH_ORIGIN || '';
 const AGREG = (process.env.AGREG_URL || '').replace(/\/$/, '');
 /* Les tickets vivent dans le service de tickets. L'agregateur n'en remonte que les dix
    plus recents : sur 42 ouverts, une question sur un ticket precis
    tombait a cote. SYNAPSE lit donc la base d'le service de tickets en lecture seule. */
 const TK = require('./tickets.js');
 const RG = require('./rangement.js');
-/* Le rangement est une decision humaine, pas une ecriture de service.
-   La session porte la portee `read` — voulue, pour qu'un humain ne
-   puisse pas ingerer par l'API — mais quelqu'un qui s'est authentifie
-   par mot de passe ET second facteur est plus legitime qu'un jeton de
-   service pour decider de supprimer un doublon. */
-const pilote = src => !!(src && (src.humain || src.scope === 'admin'));
 const CFG = require('./config.js');
 const TACHE = require('./tache.js');
 const PLANIF = require('./planif.js');
@@ -100,42 +81,6 @@ Si l'extrait ne permet pas d'ecrire un titre precis, reponds exactement : RIEN`,
   if (t.toLowerCase() === String(entree.title).toLowerCase()) return null;
   return t.length > 120 ? t.slice(0, 117) + '…' : t;
 }
-const COOKIE = 'syn_sid';
-
-function litCookie(req, nom) {
-  const b = req.headers.cookie || '';
-  for (const part of b.split(';')) {
-    const [k, ...v] = part.trim().split('=');
-    if (k === nom) return decodeURIComponent(v.join('='));
-  }
-  return null;
-}
-
-/* Secure seulement quand la connexion est chiffrée. Un navigateur jette
-   un cookie Secure reçu en HTTP clair : avec lui, la connexion en
-   adresse:port — ce que le Hub publie par défaut — ne pouvait pas
-   aboutir, on revenait sur /login à chaque essai. Le drapeau n'ajoute
-   rien sur une connexion déjà en clair ; derrière un proxy HTTPS, il est
-   posé. Un X-Forwarded-Proto forgé ne peut que l'ajouter, jamais l'ôter. */
-function chiffre(req) {
-  if (!req) return true;
-  if (req.socket && req.socket.encrypted) return true;
-  return String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() === 'https';
-}
-function attributsCookie(req) {
-  return 'Path=/; HttpOnly; SameSite=Lax' + (chiffre(req) ? '; Secure' : '');
-}
-function poseCookie(res, sid, maxAgeMs) {
-  /* HttpOnly : illisible en JavaScript, donc pas exfiltrable par une
-      injection. SameSite=Lax : pas envoye depuis un autre site. */
-  res.setHeader('Set-Cookie',
-    `${COOKIE}=${encodeURIComponent(sid)}; ${attributsCookie(res.req)}`
-    + `; Max-Age=${Math.floor(maxAgeMs / 1000)}`);
-}
-function videCookie(res) {
-  res.setHeader('Set-Cookie', `${COOKIE}=; ${attributsCookie(res.req)}; Max-Age=0`);
-}
-
 /* ---------- amorçage des jetons de service ----------
    Une source ne se créait qu'en ligne de commande. Un installateur
    automatique — le Hub — ne peut pas exécuter une commande dans le
@@ -178,15 +123,11 @@ const db = open(DB_FILE);
 inc.migrate(db);
 neu.migrate(db);
 APP.migrate(db);
-A.migrate(db);
-C.migrate(db);
 ACT.migrate(db);
 MOI.migrer(db);
 CER.migrate(db);
 amorcerSourceHub(db);
-if (A.assureInitial(db))
-  console.log('[synapse] aucun compte : admin / Temp1234 cree, a remplacer a la premiere connexion');
-setInterval(() => { A.purge(db); ACT.purge(db); }, 600000).unref?.();
+setInterval(() => ACT.purge(db), 600000).unref?.();
 PLANIF.demarre(db, reecritTitre);
 const embedder = new Embedder();
 startWorker(db, embedder);
@@ -489,7 +430,7 @@ const routes = {
       embed: t => embedder.query(t),
       forVector: u.searchParams.get('vector') !== '0'
     });
-    ACT.noter(db, { route: 'search', source: ctx.src.name, q: u.searchParams.get('q') || '',
+    ACT.noter(db, { route: 'search', source: ctx.src.name, compte: ctx.src.compte, q: u.searchParams.get('q') || '',
       ms: r.took_ms, decision: r.decision, arret: ACT.etageDe(r), hits: r.hits.length });
     send(res, 200, r);
   },
@@ -566,16 +507,19 @@ const routes = {
   },
 
   'POST /v1/rangement/config': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src, { role: 'admin', renfort: true });
     const b = await readBody(req);
     /* Un jeton vide n'efface pas celui qui est en place : la page
        n'affiche qu'une empreinte, elle ne peut pas le renvoyer. */
     if (b.telegram_token === '' || b.telegram_token === undefined) delete b.telegram_token;
-    send(res, 200, { ok: true, config: CFG.public_(CFG.ecrit(db, b)) });
+    let c;
+    try { c = CFG.ecrit(db, b); } catch (e) { if (e.status === 400) return send(res, 400, { error: e.message }); throw e; }
+    journaliser(ctx.src, 'reglages.rangement', 'rangement', { jetonTelegram: b.telegram_token !== undefined });
+    send(res, 200, { ok: true, config: CFG.public_(c) });
   },
 
   'POST /v1/rangement/telegram/test': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src, { role: 'admin' });
     const b = await readBody(req);
     const c = CFG.lit(db);
     const r = await PLANIF.testeTelegram(b.token || c.telegram_token, b.chat || c.telegram_chat);
@@ -583,30 +527,30 @@ const routes = {
   },
 
   'POST /v1/rangement/lancer': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src);
     const cfg = CFG.lit(db);
     const r = await TACHE.lance(db, cfg, { reecrit: reecritTitre, source: 'manuel' });
     send(res, r.refus ? 409 : 202, r.refus ? { error: r.refus } : { ok: true });
   },
 
   'POST /v1/rangement/pause': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src);
     send(res, 200, { ok: TACHE.metEnPause(), etat: TACHE.statut().etat });
   },
 
   'POST /v1/rangement/reprendre': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src);
     send(res, 200, { ok: TACHE.reprend(), etat: TACHE.statut().etat });
   },
 
   'POST /v1/rangement/arreter': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src);
     TACHE.interrompt(); TACHE.jettePlan();
     send(res, 200, { ok: true });
   },
 
   'POST /v1/rangement/valider': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src, { renfort: true });
     const b = await readBody(req);
     const p = TACHE.prendPlan();
     if (!p) return send(res, 409, { error: 'aucun plan, ou plan expiré' });
@@ -642,7 +586,7 @@ const routes = {
   },
 
   'POST /v1/rangement/appliquer': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session connectée ou à un jeton admin' });
+    exigerHumain(ctx.src, { renfort: true });
     const b = await readBody(req);
     const plan = Array.isArray(b.plan) ? b.plan : [];
     if (!plan.length) return send(res, 400, { error: 'plan vide' });
@@ -656,170 +600,6 @@ const routes = {
     try { sauve = RG.sauvegarde(db); } catch (e) { return send(res, 500, { error: 'sauvegarde impossible : ' + e.message }); }
     const fait = RG.applique(db, plan);
     send(res, 200, { ...fait, sauvegarde: sauve });
-  },
-
-  /* ---------- authentification humaine ---------- */
-
-  'GET /v1/auth/session': async (req, res, ctx) => {
-    send(res, 200, {
-      installe: A.installe(db),
-      user: ctx.src && ctx.src.humain ? ctx.src.name : null,
-      attente: ctx.src && ctx.src.humain ? C.enAttente(db, ctx.src.name) : null,
-      stepup: ctx.src && ctx.src.sid ? A.aStepUp(db, ctx.src.sid) : false
-    });
-  },
-
-  'POST /v1/auth/login': async (req, res) => {
-    const b = await readBody(req);
-    const nom = String(b.user || '').trim();
-    const ip = req.socket.remoteAddress || '';
-    /* La limitation porte sur le compte ET sur l'adresse : sans le
-       second, un attaquant essaie un mot de passe sur mille comptes. */
-    if (A.trop(db, 'u:' + nom) || A.trop(db, 'ip:' + ip))
-      return send(res, 429, { error: 'trop de tentatives, réessaie dans 15 minutes' });
-
-    const u = db.prepare(`SELECT * FROM auth_users WHERE name=? AND active=1`).get(nom);
-    /* Message identique que le compte existe ou non : sinon on donne
-       la liste des comptes valides à qui essaie. */
-    if (!u || !A.verifiePass(String(b.pass || ''), u.pass)) {
-      A.rate(db, 'u:' + nom); A.rate(db, 'ip:' + ip);
-      return send(res, 401, { error: 'identifiants refusés' });
-    }
-    /* Compte temporaire : pas encore de second facteur. On ouvre une
-       session marquee « init », qui ne donne acces qu'a la page
-       d'initialisation. */
-    if (u.init) {
-      A.oublie(db, 'u:' + nom); A.oublie(db, 'ip:' + ip);
-      const sid = A.ouvre(db, nom, ip, req.headers['user-agent']);
-      poseCookie(res, sid, 15 * 60 * 1000);       /* 15 min pour finir */
-      return send(res, 200, { init: true, redirect: '/setup' });
-    }
-    /* Compte créé par un administrateur : le second facteur reste à
-       poser. Le mot de passe ouvre /setup, et seulement /setup, le temps
-       de le faire — dans la limite de l'invitation. */
-    if (u.mfa_a_poser) {
-      if (C.invitationExpiree(u))
-        return send(res, 403, { error: 'invitation expirée : demande un nouveau mot de passe à l’administrateur' });
-      A.oublie(db, 'u:' + nom); A.oublie(db, 'ip:' + ip);
-      const sid = A.ouvre(db, nom, ip, req.headers['user-agent']);
-      poseCookie(res, sid, 15 * 60 * 1000);
-      return send(res, 200, { init: true, redirect: '/setup' });
-    }
-    /* Le mot de passe seul n'ouvre rien : il donne droit à présenter
-       le second facteur, pas à entrer. */
-    send(res, 200, { second_facteur: true, methodes: {
-      totp: !!u.totp,
-      passkey: db.prepare(`SELECT count(*) n FROM auth_passkeys WHERE user=?`).get(nom).n > 0
-    }});
-  },
-
-  'POST /v1/auth/totp': async (req, res) => {
-    const b = await readBody(req);
-    const nom = String(b.user || '').trim();
-    const ip = req.socket.remoteAddress || '';
-    if (A.trop(db, 'u:' + nom) || A.trop(db, 'ip:' + ip))
-      return send(res, 429, { error: 'trop de tentatives' });
-
-    const u = db.prepare(`SELECT * FROM auth_users WHERE name=? AND active=1`).get(nom);
-    if (!u || !A.verifiePass(String(b.pass || ''), u.pass)) {
-      A.rate(db, 'u:' + nom); A.rate(db, 'ip:' + ip);
-      return send(res, 401, { error: 'identifiants refusés' });
-    }
-    const code = String(b.code || '').trim();
-    const bon = A.verifieTotp(u.totp, code) || A.verifieBackup(db, nom, code);
-    if (!bon) { A.rate(db, 'u:' + nom); return send(res, 401, { error: 'code refusé' }); }
-
-    A.oublie(db, 'u:' + nom); A.oublie(db, 'ip:' + ip);
-    const sid = A.ouvre(db, nom, ip, req.headers['user-agent']);
-    poseCookie(res, sid, A.SESSION_MS);
-    send(res, 200, { ok: true, user: nom });
-  },
-
-  'POST /v1/auth/passkey/options': async (req, res) => {
-    const b = await readBody(req);
-    send(res, 200, A.debutConnexionPasskey(db, String(b.user || '').trim()));
-  },
-
-  'POST /v1/auth/passkey/verify': async (req, res) => {
-    const b = await readBody(req);
-    const r = A.finConnexionPasskey(db, b, ORIGINE || null);
-    if (!r.ok) return send(res, 401, { error: r.error });
-    const sid = A.ouvre(db, r.user, req.socket.remoteAddress, req.headers['user-agent']);
-    poseCookie(res, sid, A.SESSION_MS);
-    send(res, 200, { ok: true, user: r.user });
-  },
-
-  'POST /v1/auth/passkey/enroll/options': async (req, res, ctx) => {
-    if (!ctx.src || !ctx.src.humain) return send(res, 403, { error: 'session requise' });
-    send(res, 200, A.debutInscriptionPasskey(db, ctx.src.name));
-  },
-
-  'POST /v1/auth/passkey/enroll': async (req, res, ctx) => {
-    if (!ctx.src || !ctx.src.humain) return send(res, 403, { error: 'session requise' });
-    const r = A.finInscriptionPasskey(db, ctx.src.name, await readBody(req), ORIGINE || null);
-    send(res, r.ok ? 201 : 400, r.ok ? { ok: true, id: r.id } : { error: r.error });
-  },
-
-  'GET /v1/auth/setup/totp': async (req, res, ctx) => {
-    const attente = ctx.src && ctx.src.humain ? C.enAttente(db, ctx.src.name) : null;
-    if (!attente) return send(res, 403, { error: 'rien à initialiser pour ce compte' });
-    /* Le secret est genere ici et renvoye au navigateur pour le QR ;
-       il ne sera enregistre qu'une fois un code valide presente. */
-    const secret = A.secretTotp();
-    const nom = attente === 'mfa' ? ctx.src.name : String(req.headers['x-nouveau-nom'] || 'moi').slice(0, 32);
-    send(res, 200, { secret, otpauth: A.urlOtpauth(nom, secret) });
-  },
-
-  'POST /v1/auth/setup': async (req, res, ctx) => {
-    const attente = ctx.src && ctx.src.humain ? C.enAttente(db, ctx.src.name) : null;
-    if (!attente) return send(res, 403, { error: 'rien à initialiser pour ce compte' });
-    const b = await readBody(req);
-    const r = attente === 'mfa'
-      ? C.poseMfa(db, ctx.src.name, String(b.totp_secret || ''), String(b.totp_code || ''))
-      : A.finaliseInitial(db, {
-          nouveauNom: String(b.user || '').trim(),
-          nouveauPass: String(b.pass || ''),
-          totpSecret: String(b.totp_secret || ''),
-          totpCode: String(b.totp_code || '')
-        });
-    if (!r.ok) return send(res, 400, { error: r.error });
-    /* La session temporaire meurt avec le compte : on en ouvre une vraie. */
-    A.ferme(db, ctx.src.sid);
-    const sid = A.ouvre(db, r.name, req.socket.remoteAddress, req.headers['user-agent']);
-    poseCookie(res, sid, A.SESSION_MS);
-    send(res, 200, { ok: true, user: r.name, codes: r.codes });
-  },
-
-  /* ---------- comptes, administrés à distance ----------
-     Réservé à un jeton de portée admin — celui que le Hub reçoit à
-     l'installation. Une session humaine n'y a pas accès : elle est en
-     lecture, et gérer les comptes depuis la page qu'on protège ferait
-     d'une session volée un compte de plus. */
-  'GET /v1/admin/users': async (req, res, ctx) => {
-    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
-    send(res, 200, { comptes: C.liste(db) });
-  },
-  'POST /v1/admin/users': async (req, res, ctx) => {
-    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
-    const r = C.cree(db, await readBody(req));
-    send(res, r.ok ? 201 : 400, r.ok ? r : { error: r.error });
-  },
-  'POST /v1/admin/users/:nom/password': async (req, res, ctx) => {
-    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
-    const b = await readBody(req);
-    const r = C.motDePasse(db, ctx.params.nom, b.password);
-    send(res, r.ok ? 200 : r.status || 400, r.ok ? r : { error: r.error });
-  },
-  'DELETE /v1/admin/users/:nom': async (req, res, ctx) => {
-    if (!adminDistant(ctx.src)) return send(res, 403, { error: 'portée admin requise' });
-    const r = C.supprime(db, ctx.params.nom);
-    send(res, r.ok ? 200 : r.status || 400, r.ok ? r : { error: r.error });
-  },
-
-  'POST /v1/auth/logout': async (req, res, ctx) => {
-    if (ctx.src && ctx.src.sid) A.ferme(db, ctx.src.sid);
-    videCookie(res);
-    send(res, 200, { ok: true });
   },
 
   /* ---------- contrat public : neurones et rappel ---------- */
@@ -843,7 +623,7 @@ const routes = {
     /* Les autres cerveaux concernés par la question, avec leur état : un
        service qui ne sait pas répondre sait au moins qui sait. */
     out.cerveaux = CER.pourBrief(db, b.q || b.query || '', [b.agent, ctx.src.name]);
-    ACT.noter(db, { route: 'brief', source: ctx.src.name, q: b.q || b.query || '',
+    ACT.noter(db, { route: 'brief', source: ctx.src.name, compte: ctx.src.compte, q: b.q || b.query || '',
       ms: out.ms != null ? out.ms : performance.now() - tBrief, decision: null,
       arret: (out.memoire || []).length ? 'L1' : 'VIDE',
       hits: (out.memoire || []).length });
@@ -925,12 +705,12 @@ const routes = {
     const b = await readBody(req);
     const t0 = performance.now();
     const r = CER.orienter(db, String(b.q || '').slice(0, 2000), { depuis: ctx.src.name, limite: Math.min(5, Number(b.limite) || 3) });
-    ACT.noter(db, { route: 'orienter', source: ctx.src.name, q: String(b.q || ''), ms: performance.now() - t0, decision: null, arret: r.cerveaux.length ? 'L0' : 'VIDE', hits: r.cerveaux.length });
+    ACT.noter(db, { route: 'orienter', source: ctx.src.name, compte: ctx.src.compte, q: String(b.q || ''), ms: performance.now() - t0, decision: null, arret: r.cerveaux.length ? 'L0' : 'VIDE', hits: r.cerveaux.length });
     send(res, 200, r);
   },
 
   'GET /v1/moi': async (req, res, ctx) => {
-    if (!can(ctx.src, 'read') && !pilote(ctx.src)) return send(res, 403, { error: 'portée read requise' });
+    if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
     const traits = APP.profil(db, APP.COMMUN, { seuil: 0.1 }).filter(t => t.portee === 'commun');
     const agents = db.prepare(
       `SELECT agent, count(*) n, max(maj) maj FROM profil WHERE agent <> ? GROUP BY agent ORDER BY maj DESC`).all(APP.COMMUN);
@@ -949,7 +729,7 @@ const routes = {
   },
 
   'POST /v1/moi/analyser': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session humaine' });
+    exigerHumain(ctx.src);
     const b = await readBody(req).catch(() => ({}));
     /* Tout relire : utile quand la consigne a changé, ou pour repartir
        d'une fiche mal partie. La fiche n'est pas vidée — elle est
@@ -961,7 +741,7 @@ const routes = {
   /* Corriger une fiche : ce que tu écris devient « déclaré », et aucune
      distillation ne l'écrasera ensuite. */
   'PUT /v1/moi/trait': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session humaine' });
+    exigerHumain(ctx.src);
     const b = await readBody(req);
     const valeur = String(b.valeur || '').trim();
     if (!b.cle || valeur.length < 3) return send(res, 400, { error: 'clé et valeur requises' });
@@ -970,7 +750,7 @@ const routes = {
   },
 
   'DELETE /v1/moi/trait': async (req, res, ctx) => {
-    if (!pilote(ctx.src)) return send(res, 403, { error: 'réservé à une session humaine' });
+    exigerHumain(ctx.src);
     const cle = ctx.url.searchParams.get('cle');
     if (!cle) return send(res, 400, { error: 'cle requise' });
     send(res, 200, APP.oublier(db, APP.COMMUN, cle));
@@ -1230,7 +1010,7 @@ const routes = {
     }
     if (veutFlux) return repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie, etat });
     const tookAnswer = +(performance.now() - t0).toFixed(1);
-    ACT.noter(db, { route: 'answer', source: ctx.src.name, q, ms: tookAnswer, decision: r.decision,
+    ACT.noter(db, { route: 'answer', source: ctx.src.name, compte: ctx.src.compte, q, ms: tookAnswer, decision: r.decision,
       arret: ACT.etageDe(r, { synthese: !!answer }), hits: r.hits.length });
     send(res, 200, {
       q, intent: r.intent, decision: r.decision, reason: r.reason,
@@ -1347,7 +1127,7 @@ async function repondreEnFlux(req, res, ctx, { q, r, t0, prompt, model, verifie,
   const answer = texte.trim() || null;
   const took = +(performance.now() - t0).toFixed(1);
   const arret = ACT.etageDe(r, { synthese: !!answer });
-  ACT.noter(db, { route: 'answer', source: ctx.src.name, q, ms: took, decision: r.decision, arret, hits: r.hits.length });
+  ACT.noter(db, { route: 'answer', source: ctx.src.name, compte: ctx.src.compte, q, ms: took, decision: r.decision, arret, hits: r.hits.length });
   ev('fin', { took_ms: took, arret, answer, model: answer ? model : null, ia_erreur: erreurIA });
   res.end();
 }
@@ -1371,111 +1151,112 @@ function nsAllowed(src, ns) {
   return false;
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
+/* ---------- pages ----------
+   L'interface est servie sous /v/<version>/ : une nouvelle version change
+   l'adresse de chaque fichier, aucun cache ne garde l'ancien script face à
+   la nouvelle page. Les pages de la mémoire exigent une session complète du
+   socle ; la porte (connexion, installation, facteurs) et la page du compte
+   sont celles du socle, communes à tous les services. */
+const PAGES = { '/': 'index.html', '/parametres': 'parametres.html' };
+const PAGES_LIBRES = { '/connexion': 'connexion.html', '/compte': 'compte.html' };
+
+async function servirInterface(req, res, url, sctx, nonce) {
+  if (!['GET', 'HEAD'].includes(req.method)) return false;
+  const S = socle.S;
+  const p = url.pathname;
+  const page = PAGES[p] || (/^\/e\/\d{1,12}$/.test(p) ? 'index.html' : null);
+  if (page) {
+    if (sctx.session?.niveau !== 'complet') { res.writeHead(302, { Location: '/connexion', 'Cache-Control': 'no-store' }); res.end(); return true; }
+    return S.servirFichier(req, res, UI_DIR, '/' + page, { nonce, gamme: socle.cfg.gamme, version: VERSION });
+  }
+  if (PAGES_LIBRES[p]) return S.servirFichier(req, res, UI_DIR, '/' + PAGES_LIBRES[p], { nonce, gamme: socle.cfg.gamme, version: VERSION });
+  const { chemin, durable } = S.cheminVersionne(p, VERSION);
+  const cache = durable ? 'public, max-age=31536000, immutable' : 'no-cache';
+  if (chemin.startsWith('/socle/')) return S.servirFichier(req, res, pathm.join(RACINE, 'socle', 'web'), chemin.slice(6), { nonce, cache });
+  if (/\.html$/i.test(chemin)) return false;
+  return S.servirFichier(req, res, UI_DIR, chemin, { nonce, cache });
+}
+
+/* ---------- qui parle ----------
+   Un service présente un jeton ; un humain, la session du socle. Un jeton
+   présenté et refusé ne retombe jamais sur la session : c'est un essai, il
+   est compté et journalisé. La session passe par portail.exiger, qui
+   contrôle le niveau (tous les facteurs exigés), l'origine et le jeton
+   anti-CSRF de toute écriture. */
+const essaisJetons = new Map();
+function jetonRefuse(sctx) {
+  const t = Date.now(), e = essaisJetons.get(sctx.ip);
+  const n = e && t - e.t < 60000 ? e.n + 1 : 1;
+  essaisJetons.set(sctx.ip, { t: e && t - e.t < 60000 ? e.t : t, n });
+  socle.journal.rare(`jeton:${sctx.ip}`, { action: 'jeton.refuse', ip: sctx.ip, resultat: 'refus' });
+}
+const jetonsBloques = ip => { const e = essaisJetons.get(ip); return !!(e && Date.now() - e.t < 60000 && e.n >= 20); };
+setInterval(() => { const t = Date.now(); for (const [k, e] of essaisJetons) if (t - e.t > 60000) essaisJetons.delete(k); }, 60000).unref?.();
+
+function presenteJeton(req) {
+  return !!(req.headers['x-synapse-key'] || /^Bearer\s/i.test(String(req.headers.authorization || '')));
+}
+
+function identifier(req, sctx) {
+  if (presenteJeton(req)) {
+    if (jetonsBloques(sctx.ip)) throw new socle.S.ErreurHttp(429, 'Trop de jetons refusés : réessaie dans une minute.');
+    const src = auth(req);
+    if (!src) { jetonRefuse(sctx); throw new socle.S.ErreurHttp(401, 'Jeton refusé.'); }
+    return src;
+  }
+  if (!sctx.session) return null;
+  const s = socle.portail.exiger(sctx, { role: 'lecture' });
+  return { name: s.compteLigne.identifiant, compte: s.compte, scope: 'read', channel: 'H', humain: true, role: s.compteLigne.role, sctx };
+}
+
+/* Un geste humain qui demande plus que la lecture : le rôle, et pour ce qui
+   détruit ou touche un secret, une authentification de moins de cinq
+   minutes (renfort). Un jeton admin de service passe. */
+function exigerHumain(src, { role = 'membre', renfort = false } = {}) {
+  if (src && !src.humain && src.scope === 'admin') return src;
+  if (!src || !src.humain) throw new socle.S.ErreurHttp(403, 'Réservé à une session connectée ou à un jeton admin.');
+  socle.portail.exiger(src.sctx, { role, renfort });
+  return src;
+}
+
+function journaliser(src, action, objet, details) {
+  socle.journal.ecrire({ acteur: src?.humain ? src.compte : null, action, objet, ip: src?.sctx?.ip ?? null,
+    details: { ...(src && !src.humain ? { source: src.name } : {}), ...(details || {}) } });
+}
+
+async function traiter(req, res) {
+  const S = socle.S;
+  const url = new URL(req.url, 'http://synapse');
+  const sctx = socle.portail.contexte(req, res);
+  if (!debit.prendre(sctx.ip)) {
+    socle.journal.rare(`debit:${sctx.ip}`, { action: 'limite.atteinte', objet: 'requetes', ip: sctx.ip, resultat: 'refus' });
+    throw new S.ErreurHttp(429, 'Trop de requêtes.');
+  }
+  const nonce = S.nonceCsp();
+  S.entetesSecurite(res, { secure: sctx.securise, hote: req.headers.host,
+    csp: S.politiqueContenu({ nonce, secure: sctx.securise, stylesEnLigne: true }) });
 
   if (req.method === 'OPTIONS' && CORS_ORIGIN) {
     return send(res, 204, {}, {
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization,Content-Type',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': 'Authorization,Content-Type,X-Synapse-Key',
       'Access-Control-Max-Age': '600'
     });
   }
+  if (await socle.portail.traiter(req, res, url, sctx)) return;
+  if (await servirInterface(req, res, url, sctx, nonce)) return;
 
-  /* --- interface 3D, servie avant l'authentification ---
-     Le HTML n'expose rien : ce sont ses appels /v1/graph et /v1/search
-     qui portent le jeton. Exiger un en-tête Authorization sur la page
-     elle-même la rendrait impossible à ouvrir dans un navigateur. */
-  if (req.method === 'GET') {
-    const p = url.pathname;
-    /* login.html reste ouvert : sans lui, impossible de se connecter.
-       Tout le reste de l'interface exige une session. */
-    const ouvert = p === '/login' || p === '/login.html';
-    const sess = A.session(db, litCookie(req, COOKIE));
-    if (!ouvert && (p === '/' || p === '/parametres' || /^\/e\/\d+$/.test(p))) {
-      if (!sess) { res.writeHead(302, { Location: '/login' }); return res.end(); }
-      /* Compte temporaire ou second facteur à poser : rien d'autre que /setup. */
-      if (C.enAttente(db, sess.user)) { res.writeHead(302, { Location: '/setup' }); return res.end(); }
-    }
-    if (p === '/setup' && !(sess && C.enAttente(db, sess.user))) {
-      res.writeHead(302, { Location: sess ? '/' : '/login' }); return res.end();
-    }
-    const file = p === '/login' ? 'login.html'
-               : p === '/setup' ? 'setup.html'
-               : p === '/parametres' ? 'parametres.html'
-               : p === '/' ? 'index.html'
-               : /^\/[a-z0-9._-]+\.(html|css|js|svg|png|webp|ico)$/i.test(p) ? p.slice(1)
-               : null;
-    if (file) {
-      const full = pathm.join(UI_DIR, file);
-      if (full.startsWith(UI_DIR) && fsp.existsSync(full)) {
-        const ext = pathm.extname(full).slice(1).toLowerCase();
-        const mime = { html:'text/html; charset=utf-8', css:'text/css', js:'text/javascript',
-                       svg:'image/svg+xml', png:'image/png', webp:'image/webp',
-                       ico:'image/x-icon' }[ext] || 'application/octet-stream';
-        let body = fsp.readFileSync(full);
-        /* Plus aucun secret dans la page : l'interface s'authentifie par
-           le cookie de session, envoye automatiquement par le navigateur. */
-        res.writeHead(200, { 'Content-Type': mime, 'Content-Length': body.length,
-                             'Cache-Control': 'no-cache',
-                             'X-Content-Type-Options': 'nosniff' });
-        return res.end(body);
-      }
-    }
-    /* /e/123 : l'interface gère l'affichage, on lui sert la page d'accueil */
-    if (/^\/e\/\d+$/.test(p)) {
-      const full = pathm.join(UI_DIR, 'index.html');
-      if (fsp.existsSync(full)) {
-        let body = fsp.readFileSync(full);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8',
-                             'Content-Length': body.length });
-        return res.end(body);
-      }
-    }
-  }
-
-  /* Les routes à paramètre : /v1/admin/users/<nom>[/password]. Le nom
-     suit la même règle qu'à la création, rien d'autre ne passe. */
-  let key = req.method + ' ' + url.pathname;
-  const params = {};
-  const mu = /^\/v1\/admin\/users\/([a-z0-9._-]{3,32})(\/password)?$/i.exec(url.pathname);
-  if (mu) { params.nom = mu[1]; key = req.method + ' /v1/admin/users/:nom' + (mu[2] || ''); }
+  const key = req.method + ' ' + url.pathname;
   const fn = routes[key];
   if (!fn) return send(res, 404, { error: 'route inconnue' });
-
   if (url.pathname === '/healthz') return fn(req, res, { url });
 
-  /* Deux publics, deux preuves : un service presente un jeton, un humain
-     presente une session. Les routes de lecture acceptent les deux ;
-     l'ecriture reste reservee aux jetons de service. */
-  /* Les routes de connexion sont forcement ouvertes : exiger une session
-     pour se connecter rendrait la connexion impossible. */
-  const LIBRES = new Set(['/v1/auth/login', '/v1/auth/totp',
-    '/v1/auth/passkey/options', '/v1/auth/passkey/verify']);
-
-  let src = auth(req);
-  if (!src) {
-    const sess = A.session(db, litCookie(req, COOKIE));
-    if (sess) src = { name: sess.user, scope: 'read', channel: 'H', humain: true, sid: sess.sid };
-  }
-  if (!src && LIBRES.has(url.pathname)) {
-    try { return await fn(req, res, { url, src: null }); }
-    catch (e) {
-      const m = String(e && e.message || e);
-      if (/JSON invalide|corps trop grand/.test(m)) return send(res, 400, { error: m });
-      console.error('[erreur]', key, e && e.stack || e);
-      return send(res, 500, { error: 'erreur interne' });
-    }
-  }
-  if (!src && url.pathname === '/v1/auth/session')
-    return send(res, 200, { installe: A.installe(db), user: null, stepup: false });
+  const src = identifier(req, sctx);
   if (!src) return send(res, 401, { error: 'authentification requise' });
-  if (src.humain && C.enAttente(db, src.name) && !/^\/v1\/auth\/(setup|logout|session)/.test(url.pathname))
-    return send(res, 403, { error: 'termine d abord l initialisation sur /setup' });
-
   try {
-    await fn(req, res, { url, src, params });
+    await fn(req, res, { url, src });
   } catch (e) {
+    if (e instanceof S.ErreurHttp) throw e;
     const m = String(e && e.message || e);
     /* Une entrée malformée est une faute du client, pas du serveur :
        renvoyer 500 ferait croire à une panne et déclencherait les
@@ -1488,22 +1269,65 @@ const server = http.createServer(async (req, res) => {
     console.error('[erreur]', key, e && e.stack || e);
     if (!res.headersSent) send(res, 500, { error: 'erreur interne' });
   }
-});
-
-server.listen(PORT, () => {
-  console.log(`[synapse] écoute sur :${PORT}`);
-  console.log(`[synapse] base ${DB_FILE}`);
-  console.log(`[synapse] le serveur de vecteurs ${embedder.url} · ${embedder.model}`);
-  embedder.health().then(ok =>
-    console.log('[synapse] le serveur de vecteurs ' + (ok ? 'joignable' : 'INJOIGNABLE — le plein texte fonctionne, pas le vecteur')));
-});
-
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    console.log('\n[synapse] arrêt');
-    server.close(() => { try { db.close(); } catch {} process.exit(0); });
-    setTimeout(() => process.exit(0), 3000).unref();
-  });
 }
 
-module.exports = { server, db };
+let socle = null;
+let debit = null;
+const server = http.createServer((req, res) => {
+  if (!socle) { res.writeHead(503, { 'Retry-After': '2' }); return res.end(); }
+  return socle.envelopper(async () => {
+    try { await traiter(req, res); }
+    catch (e) { socle.S.repondreErreur(res, e, { journal: CONSOLE }); }
+  })(req, res);
+});
+
+const CONSOLE = { info: (...a) => console.log(...a), warn: (...a) => console.warn(...a), error: (...a) => console.error(...a) };
+
+async function demarrer(env = process.env) {
+  const S = await import('../socle/src/index.js');
+  const s = await S.demarrerSocle({
+    service: { id: 'synapse', nom: 'SYNAPSE', contactSecurite: CONTACT_SECURITE },
+    db, dossier: pathm.dirname(DB_FILE), env, log: CONSOLE,
+    migrer: ({ comptes, coffre }) => migrerComptes({ db, comptes, coffre, log: CONSOLE }),
+  });
+  socle = { ...s, S, envelopper: S.envelopper };
+  /* Données d'un compte : ses questions (trente jours au plus), rendues à
+     sa demande et effacées avec lui. */
+  s.portail.exporteur = compte => ({ requetes: ACT.duCompte(db, compte) });
+  s.comptes.apresSuppression.push(compte => ACT.oublierCompte(db, compte));
+  debit = new S.Debit({ max: 1200 });
+  const b = CFG.sceller(db, s.coffre);
+  if (b.retires) {
+    console.warn('[coffre] jeton Telegram illisible sous SOCLE_CLE comme sous SOCLE_CLE_ANCIENNE, retiré : à reposer dans les paramètres.');
+    s.journal.ecrire({ acteur: 'système', action: 'coffre.secrets_retires', resultat: 'erreur', details: { n: b.retires } });
+  }
+  server.headersTimeout = 20000;
+  server.requestTimeout = 120000;
+  server.keepAliveTimeout = 5000;
+  await new Promise(r => server.listen(PORT, env.HOTE || '0.0.0.0', r));
+  console.log(`[synapse] ${VERSION} écoute sur :${server.address().port}`);
+  console.log(`[synapse] base ${DB_FILE}`);
+  console.log(`[synapse] vecteurs ${embedder.url ? 'configurés' : 'non configurés'} · ${embedder.model}`);
+  embedder.health().then(ok =>
+    console.log('[synapse] vecteurs ' + (ok ? 'joignables' : 'INJOIGNABLES — le plein texte fonctionne, pas le vecteur')));
+  return server;
+}
+
+const arreter = () => new Promise(r => {
+  socle?.arreter();
+  server.close(() => { try { db.close(); } catch { /* déjà fermée */ } r(); });
+  server.closeAllConnections?.();
+});
+
+if (require.main === module) {
+  demarrer().catch(e => { console.error(e.message); process.exit(1); });
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      console.log('\n[synapse] arrêt');
+      arreter().then(() => process.exit(0));
+      setTimeout(() => process.exit(0), 3000).unref();
+    });
+  }
+}
+
+module.exports = { server, db, demarrer, arreter };
