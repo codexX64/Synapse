@@ -9,52 +9,61 @@ services:
     networks: [hub]
     ports:
       - "{{hostport.http}}:8140"
+    volumes:
+      - {{volume.data}}:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
     environment:
       PORT: "8140"
       DB_FILE: /data/synapse.db
+      UI_DIR: /app/ui
 
       # Le Hub crée ce jeton et le garde dans son coffre. SYNAPSE le
-      # reconnaît au démarrage et s'en sert pour la source « hub » :
-      # aucune commande à taper dans le conteneur après l'installation.
-      HUB_TOKEN_SEED: {{config.HUB_TOKEN}}
-
-      # Jeton distinct, de portée admin : il ne sert qu'à gérer les comptes
-      # humains depuis la page Utilisateurs du Hub.
-      HUB_ADMIN_TOKEN_SEED: {{config.ADMIN_TOKEN}}
+      # reconnaît au démarrage et s'en sert pour la source « hub » ; il
+      # signe aussi les jetons de cerveau des services (cer_<nom>_…).
+      HUB_TOKEN_SEED: "{{config.HUB_TOKEN}}"
 
       # Rien à saisir : le Hub sait quel service fournit llm.embed, où il
-      # est et comment il est réglé. Une adresse recopiée à la main finit
-      # toujours par diverger du service réel.
-      OLLAMA_URL: {{provider.llm.embed.url}}
-      EMBED_MODEL: {{provider.llm.embed.config.EMBED_MODEL}}
-      ANSWER_MODEL: {{provider.llm.embed.config.DEFAULT_MODEL}}
+      # est et comment il est réglé.
+      OLLAMA_URL: "{{provider.llm.embed.url}}"
+      EMBED_MODEL: "{{provider.llm.embed.config.EMBED_MODEL}}"
+      ANSWER_MODEL: "{{provider.llm.embed.config.DEFAULT_MODEL}}"
       # L'IA qui rédige (réponses, titres, fiche). Ollama par défaut ; Kimi
       # ou une autre API compatible OpenAI si on la choisit dans les réglages
       # du service. Les vecteurs restent sur Ollama ci-dessus.
-      LLM_FOURNISSEUR: {{config.LLM_FOURNISSEUR}}
-      LLM_CLE: {{config.LLM_CLE}}
-      LLM_MODELE: {{config.LLM_MODELE}}
-      LLM_URL: {{config.LLM_URL}}
-      CONSOLIDATION_INTERVAL: {{config.CONSOLIDATION_INTERVAL}}
-      AUTH_ORIGIN: {{config.AUTH_ORIGIN}}
-
-      # L'interface est servie par le conteneur ; le Hub l'atteint par le
-      # réseau partagé, et l'humain par le port publié ci-dessus.
-      UI_DIR: /app/ui
+      LLM_FOURNISSEUR: "{{config.LLM_FOURNISSEUR}}"
+      LLM_CLE: "{{config.LLM_CLE}}"
+      LLM_MODELE: "{{config.LLM_MODELE}}"
+      LLM_URL: "{{config.LLM_URL}}"
+      CONSOLIDATION_INTERVAL: "{{config.CONSOLIDATION_INTERVAL}}"
       CORS_ORIGIN: ""
-    volumes:
-      - {{volume.data}}:/data
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    healthcheck:
-      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8140/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+
+      # Comptes : clé maîtresse gardée par le Hub (jamais sur le volume) ;
+      # administration des comptes déléguée au Hub par un jeton à lui seul.
+      SOCLE_CLE: "{{config.SOCLE_CLE}}"
+      SOCLE_CLE_ANCIENNE: "{{config.SOCLE_CLE_ANCIENNE}}"
+      SOCLE_HTTP: "{{config.SOCLE_HTTP}}"
+      SOCLE_JETON_INSTALLATION: "{{config.SOCLE_JETON_INSTALLATION}}"
+      SOCLE_JETON_ADMIN_HUB: "{{config.ADMIN_TOKEN}}"
+      SOCLE_PROXYS: "{{config.SOCLE_PROXYS}}"
+      SOCLE_ORIGINES: "{{config.SOCLE_ORIGINES}}"
+      SOCLE_URL_PUBLIQUE: "{{config.SOCLE_URL_PUBLIQUE}}"
+      SOCLE_THEME: "{{hub.theme}}"
+      SOCLE_SMTP_HOTE: "{{config.SOCLE_SMTP_HOTE}}"
+      SOCLE_SMTP_PORT: "{{config.SOCLE_SMTP_PORT}}"
+      SOCLE_SMTP_SECURITE: "{{config.SOCLE_SMTP_SECURITE}}"
+      SOCLE_SMTP_UTILISATEUR: "{{config.SOCLE_SMTP_UTILISATEUR}}"
+      SOCLE_SMTP_MOTDEPASSE: "{{config.SOCLE_SMTP_MOTDEPASSE}}"
+      SOCLE_SMTP_DE: "{{config.SOCLE_SMTP_DE}}"
 
 networks:
   hub:

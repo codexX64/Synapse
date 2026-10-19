@@ -3,12 +3,12 @@
   "manifestVersion": 1,
   "id": "synapse",
   "name": "SYNAPSE",
-  "version": "1.9.5",
+  "version": "2.0.0",
   "description": "La mémoire et l'apprentissage de l'assistant : ce qui a été dit, ce qui a été corrigé, et ce qu'il a compris de son utilisateur.",
   "icon": "brain",
-  "repository": "https://github.com/codexX64/synapse",
+  "repository": "https://github.com/CodexX64/synapse",
   "license": "MIT",
-  "minHubVersion": "0.4.0",
+  "minHubVersion": "0.9.0",
   "install": {
     "type": "compose",
     "compose": "deploy/compose.hub.yml",
@@ -17,7 +17,7 @@
       "label": "Adresse de SYNAPSE",
       "placeholder": "http://192.0.2.30:8140",
       "defaultPort": 8140,
-      "setupHelp": "Pour une mémoire déjà en service ailleurs : créer un jeton avec `docker compose exec synapse node src/cli.js source add hub --scope read+write`, puis le coller ici."
+      "setupHelp": "Pour une mémoire déjà en service ailleurs : poser HUB_TOKEN_SEED dans son environnement (16 caractères au moins), redémarrer, puis coller ce jeton ici."
     },
     "healthcheck": {
       "type": "http",
@@ -54,9 +54,9 @@
       "key": "IMAGE_TAG",
       "label": "Version de l'image",
       "type": "string",
-      "default": "latest",
+      "default": "2.0.0",
       "advanced": true,
-      "help": "Étiquette de l'image publiée sur ghcr.io."
+      "help": "Étiquette de l'image synapse publiée sur ghcr.io : une version précise, jamais « latest »."
     },
     {
       "key": "HUB_TOKEN",
@@ -70,7 +70,7 @@
       "label": "Jeton d'administration des comptes",
       "type": "secret",
       "generate": "random:32",
-      "help": "Créé par le Hub. Lui seul gère les comptes de SYNAPSE (page Utilisateurs), séparément du jeton de service."
+      "help": "Créé par le Hub, distinct du jeton de service : il ne sert qu'à gérer les comptes de SYNAPSE depuis Comptes des services."
     },
     {
       "key": "LLM_FOURNISSEUR",
@@ -127,12 +127,121 @@
       "help": "Millisecondes entre deux passes de distillation des échanges en traits. 0 désactive. Un profil qui bouge à chaque phrase n'est pas un profil."
     },
     {
-      "key": "AUTH_ORIGIN",
-      "label": "Origine de l'interface",
+      "key": "SOCLE_HTTP",
+      "label": "Accès sans HTTPS",
+      "type": "select",
+      "default": "0",
+      "required": true,
+      "options": [
+        {
+          "value": "0",
+          "label": "Non — l'interface de SYNAPSE est servie en HTTPS (par Relay)"
+        },
+        {
+          "value": "1",
+          "label": "Oui — réseau de confiance, mode dégradé"
+        }
+      ],
+      "help": "Les clés d'accès n'existent qu'en HTTPS. En mode dégradé, l'administrateur se connecte avec mot de passe et application d'authentification, et SYNAPSE l'affiche partout.",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_CLE",
+      "label": "Clé maîtresse",
+      "type": "secret",
+      "generate": "random:32",
+      "help": "Scelle les secrets TOTP des comptes et le jeton Telegram. Créée par le Hub, gardée dans son coffre, jamais sur le volume de SYNAPSE."
+    },
+    {
+      "key": "SOCLE_CLE_ANCIENNE",
+      "label": "Clé maîtresse remplacée",
+      "type": "secret",
+      "advanced": true,
+      "help": "Pendant une rotation seulement : la clé actuelle ici, une neuve dans « Clé maîtresse », redéployer, puis vider ce champ."
+    },
+    {
+      "key": "SOCLE_JETON_INSTALLATION",
+      "label": "Jeton d'installation",
+      "type": "secret",
+      "advanced": true,
+      "help": "Vide : SYNAPSE en tire un au premier démarrage et l'écrit dans ses journaux. Il ne sert qu'à créer le premier compte."
+    },
+    {
+      "key": "SOCLE_PROXYS",
+      "label": "Relais de confiance",
       "type": "string",
       "default": "",
       "advanced": true,
-      "help": "Adresse exacte tapée dans le navigateur pour ouvrir SYNAPSE. Nécessaire uniquement pour les clés d'accès WebAuthn."
+      "help": "Plages (CIDR) des relais inverses autorisés à transmettre l'adresse du client. Vide : l'adresse vue est celle de la connexion."
+    },
+    {
+      "key": "SOCLE_ORIGINES",
+      "label": "Origines supplémentaires",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Adresses complètes acceptées en plus de celle de la page, quand un relais réécrit l'hôte."
+    },
+    {
+      "key": "SOCLE_URL_PUBLIQUE",
+      "label": "Adresse publique (courriels)",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Ex. https://synapse.exemple. Les liens des courriels et des notifications Telegram en partent."
+    },
+    {
+      "key": "SOCLE_SMTP_HOTE",
+      "label": "Relais SMTP",
+      "type": "string",
+      "default": "",
+      "advanced": true,
+      "help": "Vide : les alertes de sécurité des comptes restent visibles dans SYNAPSE, sans courriel."
+    },
+    {
+      "key": "SOCLE_SMTP_PORT",
+      "label": "Port SMTP",
+      "type": "number",
+      "min": 1,
+      "advanced": true,
+      "help": "Vide : 465 en TLS, 587 en STARTTLS."
+    },
+    {
+      "key": "SOCLE_SMTP_SECURITE",
+      "label": "Chiffrement SMTP",
+      "type": "select",
+      "default": "tls",
+      "advanced": true,
+      "options": [
+        {
+          "value": "tls",
+          "label": "TLS dès la connexion (465)"
+        },
+        {
+          "value": "starttls",
+          "label": "STARTTLS exigé (587)"
+        }
+      ]
+    },
+    {
+      "key": "SOCLE_SMTP_UTILISATEUR",
+      "label": "Identifiant SMTP",
+      "type": "string",
+      "default": "",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_SMTP_MOTDEPASSE",
+      "label": "Mot de passe SMTP",
+      "type": "secret",
+      "advanced": true
+    },
+    {
+      "key": "SOCLE_SMTP_DE",
+      "label": "Adresse d'expédition",
+      "type": "string",
+      "default": "",
+      "advanced": true
     }
   ],
   "api": {
@@ -760,7 +869,7 @@
         "method": "GET",
         "path": "/v1/stats"
       },
-      "value": "$.pending",
+      "value": "$.chunks.pending",
       "thresholds": {
         "warn": 2000,
         "crit": 5000
@@ -802,39 +911,48 @@
   ],
   "accounts": {
     "tokenKey": "ADMIN_TOKEN",
+    "roles": [
+      "admin",
+      "membre",
+      "lecture"
+    ],
     "adminRole": "admin",
+    "invitation": true,
     "fields": {
       "id": "$.id",
-      "name": "$.username",
+      "name": "$.identifiant",
       "role": "$.role",
-      "mfa": "$.totpEnabled",
-      "created": "$.createdAt",
-      "lastSeen": "$.lastLogin",
-      "protected": "$.fondateur"
+      "mfa": "$.a2f",
+      "created": "$.cree",
+      "lastSeen": "$.derniere"
     },
     "list": {
       "method": "GET",
-      "path": "/v1/admin/users",
-      "select": "$.comptes"
+      "path": "/api/compte/hub/comptes"
     },
     "create": {
       "method": "POST",
-      "path": "/v1/admin/users",
+      "path": "/api/compte/hub/comptes",
       "body": {
-        "username": "{{params.username}}",
-        "password": "{{params.password}}"
+        "identifiant": "{{params.username}}",
+        "role": "{{params.role}}"
       }
     },
-    "password": {
-      "method": "POST",
-      "path": "/v1/admin/users/{{params.id}}/password",
+    "update": {
+      "method": "PATCH",
+      "path": "/api/compte/hub/comptes/{{params.id}}",
       "body": {
-        "password": "{{params.password}}"
+        "role": "{{params.role}}"
       }
+    },
+    "reset": {
+      "method": "POST",
+      "path": "/api/compte/hub/comptes/{{params.id}}/reinit",
+      "body": {}
     },
     "remove": {
       "method": "DELETE",
-      "path": "/v1/admin/users/{{params.id}}"
+      "path": "/api/compte/hub/comptes/{{params.id}}"
     }
   }
 }

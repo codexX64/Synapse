@@ -4,3 +4,6 @@ data/
 *.db-shm
 .env
 node_modules/
+.git
+.github
+test/

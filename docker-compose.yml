@@ -23,6 +23,14 @@ services:
       # - tickets-data:/tickets:ro
 
     networks: [ synapse-net ]
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
 
     # Le port n'est publié que sur la boucle locale. Pour l'exposer,
     # passe par un reverse proxy qui porte TLS et l'authentification —

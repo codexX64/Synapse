@@ -63,8 +63,10 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Premier démarrage : l'interface propose un compte temporaire à
-remplacer immédiatement par le tien, avec un second facteur.
+Premier démarrage : aucun compte par défaut. Installé par le Hub, le
+premier compte se crée depuis le Hub (Comptes des services) ; seul, SYNAPSE
+écrit un jeton d'installation dans ses journaux, à coller sur `/connexion`
+(ou `SOCLE_JETON_INSTALLATION` dans `.env`).
 
 ## Interfaces
 
@@ -72,7 +74,8 @@ remplacer immédiatement par le tien, avec un second facteur.
 |---|---|
 | `/` | vue 3D de la mémoire, questions, activité mesurée et apprentissage |
 | `/parametres` | rangement, plages horaires, notifications |
-| `/setup` | premier démarrage, ou second facteur d'un compte créé depuis le Hub |
+| `/connexion` | la porte du socle commun : installation, connexion, facteurs à inscrire |
+| `/compte` | moyens de connexion, sessions, alertes, export et suppression de ses données ; comptes, politique et journal pour un administrateur |
 
 ## API
 
@@ -122,7 +125,10 @@ conteneur après coup.
 
 **Aucune dépendance.** Pas de `node_modules`, pas de chaîne de
 construction, pas de dépendance transitive à auditer. Le module `sqlite`
-natif de Node 22 et rien d'autre.
+natif de Node 24 et le socle commun des services Codex64, embarqué avec
+ses essais et vérifié par ses empreintes. Le code de tiers servi à
+l'interface (three.js r128, deux polices OFL) est figé dans `ui/vendor`,
+avec sa provenance et ses empreintes : aucun CDN, rien ne sort du réseau.
 
 **Les vecteurs tiennent dans un tableau contigu.** Le niveau 2 lisait
 une ligne SQLite et allouait un `Float32Array` par morceau à chaque
@@ -133,14 +139,40 @@ quatre fois plus rapide sur vingt mille morceaux, au même classement
 près — le test le vérifie contre l'ancienne boucle.
 
 **Un fichier par interface.** HTML, CSS et JavaScript ensemble. Pas
-d'empaquetage : ce qu'on lit est ce qui s'exécute.
+d'empaquetage : ce qu'on lit est ce qui s'exécute. Chaque script porte le
+nonce de la politique de contenu, renouvelé à chaque page.
 
-**Authentification dès le premier écran.** Mot de passe scrypt, TOTP,
-clés d'accès WebAuthn. Pas de mode « on verra plus tard ».
+**Les comptes humains passent par le socle commun.** Quatre facteurs
+cumulables (mot de passe Argon2id, application TOTP, clés d'accès, codes de
+secours), politique par facteur, sessions listées et révocables, renfort
+pour ce qui détruit ou touche un secret, jeton anti-CSRF sur toute
+écriture, alertes de sécurité, journal chaîné. Les comptes de la 1.x sont
+repris au premier démarrage (mot de passe, application, clés d'accès) ;
+leurs codes de secours sont à régénérer. Rôles : `lecture` lit la
+mémoire ; `membre` corrige la fiche et lance le rangement ; `admin` règle
+Telegram et gère les comptes. Une session humaine n'écrit jamais dans la
+mémoire : c'est l'affaire des services, par leur jeton.
 
-**Les secrets ne sortent jamais.** Le QR code TOTP n'est pas généré par
-un service distant — l'URL `otpauth://` contient le secret, l'envoyer
-ailleurs reviendrait à le confier à un tiers.
+**Les services présentent un jeton.** Seule son empreinte est gardée ; un
+jeton refusé ne retombe jamais sur une session, il est compté (vingt par
+minute et par adresse, puis refus) et journalisé.
+
+**Les secrets ne sortent jamais.** Le jeton Telegram est scellé (AES-256-GCM
+sous `SOCLE_CLE`) et l'API n'en montre que la fin. Le QR code TOTP est
+fabriqué dans le navigateur, jamais par un service distant.
+
+## Sauvegarde et incident
+
+```bash
+# sauvegarde chiffrée pour une clé publique dont la clé privée vit ailleurs
+docker exec -i synapse node src/cli.js sauvegarde < sauvegarde.pub > synapse.sauv
+# restauration, sur la machine qui garde la clé privée
+node src/cli.js restaurer prive.pem synapse.db < synapse.sauv
+# runbook : oublier le jeton Telegram (le révoquer aussi chez @BotFather)
+docker exec synapse node src/cli.js secrets retirer
+```
+
+Chaque geste en ligne de commande est inscrit au journal de sécurité.
 
 ## Configuration
 
@@ -150,8 +182,9 @@ Tout est dans `.env.example`. Les valeurs qui comptent :
 OLLAMA_URL       hôte des embeddings et de la synthèse
 EMBED_MODEL      modèle de vectorisation
 ANSWER_MODEL     modèle de synthèse
-AUTH_ORIGIN      origine attendue pour WebAuthn
-CORS_ORIGIN      origines autorisées
+SOCLE_CLE        clé maîtresse du coffre (secrets TOTP, jeton Telegram)
+SOCLE_URL_PUBLIQUE  adresse https:// de SYNAPSE (liens des courriels et de Telegram)
+CORS_ORIGIN      origine autorisée à appeler l'API avec un jeton (vide : aucune)
 ```
 
 ## Licence
