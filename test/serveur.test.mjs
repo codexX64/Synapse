@@ -208,3 +208,14 @@ test('schémas : champ ou paramètre inconnu, type faux, paramètre répété �
   const evt = { source: 'hub', kind: 'note', ref: null, title: 'client fourni', body: 'b', tags: [], occurred_at: new Date().toISOString(), meta: {}, hash: 'a'.repeat(64) };
   assert.equal((await hub.post('/v1/ingest/batch', { events: [evt] })).json.results[0].ok, true);
 });
+
+test('corps : JSON exigé pour écrire, taille annoncée trop grande refusée en 413 avant lecture, limite par route', async () => {
+  const inst = await demarrer(), hub = service(inst, JETON_HUB);
+  const brut = (chemin, corps, entetes) => fetch(inst.url(chemin), { method: 'POST', headers: { authorization: `Bearer ${JETON_HUB}`, ...entetes }, body: corps });
+  assert.equal((await brut('/v1/link', '{"from_id":1,"to_id":2,"relation":"x"}', { 'content-type': 'text/plain' })).status, 415);
+  assert.equal((await brut('/v1/link', '{', { 'content-type': 'application/json' })).status, 400);
+  const gros = JSON.stringify({ q: 'x'.repeat(70 * 1024) });
+  assert.equal((await brut('/v1/click', gros, { 'content-type': 'application/json' })).status, 413, '64 Kio par défaut');
+  const doc = 'mot '.repeat(120_000);
+  assert.equal((await hub.post('/v1/ingest', { ns: 'shared', kind: 'note', title: 'long document', body: doc })).status, 202, 'un document de 480 Kio entre par l\'ingestion');
+});

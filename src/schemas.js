@@ -42,19 +42,22 @@ const INCIDENT = {
 };
 
 const AUCUN = {};
+/* Taille du corps : 64 Kio par défaut (src/server.js) ; `grand` = MAX_BODY
+   (2 Mo par défaut) pour ce qui porte des documents ; sinon `limite`. */
+const KIO = 1024;
 
 const SCHEMAS = {
   'GET /healthz': {},
   'GET /v1/stats': { requete: { scope: txt(20, { parmi: ['sources', 'neurons', 'activite'] }), days: ent(1, 3650) } },
   'GET /v1/sources': {},
-  'POST /v1/ingest': { corps: EVT },
-  'POST /v1/ingest/batch': { corps: { events: { type: 'liste', max: 200, de: { type: 'objet', champs: EVT } } } },
+  'POST /v1/ingest': { grand: true, corps: EVT },
+  'POST /v1/ingest/batch': { grand: true, corps: { events: { type: 'liste', max: 200, de: { type: 'objet', champs: EVT } } } },
   'GET /v1/search': { requete: { q: txt(4000), ns: NS, scope: NS, limit: ent(1, 1000), vector: txt(1, { parmi: ['0', '1'] }) } },
   'GET /v1/entry': { requete: { id: ID } },
   'POST /v1/link': { corps: { from_id: { ...ID, requis: true }, to_id: { ...ID, requis: true }, relation: txt(40, { requis: true }) } },
   'POST /v1/click': { corps: { q: txt(4000), entry_id: ID } },
   'GET /v1/prompts': { requete: { agent: AGENT } },
-  'POST /v1/prompts': { corps: { agent: AGENT, body: txt(100_000) } },
+  'POST /v1/prompts': { limite: 512 * KIO, corps: { agent: AGENT, body: txt(100_000) } },
   'GET /v1/rangement/etat': {},
   'POST /v1/rangement/config': { corps: {
     seuil_doublon: nb(0, 1), espace: txt(20), reecrire_titres: bool, telegram_actif: bool,
@@ -68,15 +71,15 @@ const SCHEMAS = {
   'POST /v1/rangement/arreter': { corps: AUCUN },
   'POST /v1/rangement/valider': { corps: { ids: { type: 'liste', max: 200, de: ID } } },
   'GET /v1/rangement/analyse': { requete: { ns: NS, seuil: nb(0, 1) } },
-  'POST /v1/rangement/appliquer': { corps: { plan: { type: 'liste', max: 200, de: { type: 'objet', champs: { type: txt(20), id: ID, titre: txt(300), similarite: nb(0, 1), garde: txt(300), avant: txt(300), apres: txt(300) } } } } },
+  'POST /v1/rangement/appliquer': { limite: 512 * KIO, corps: { plan: { type: 'liste', max: 200, de: { type: 'objet', champs: { type: txt(20), id: ID, titre: txt(300), similarite: nb(0, 1), garde: txt(300), avant: txt(300), apres: txt(300) } } } } },
   'POST /v1/brief': { corps: { agent: AGENT, q: txt(4000), query: txt(4000), ns: NS, limit: ent(1, 1000), budget: nb(0, 1e6), signature: txt(400) } },
-  'POST /v1/apprendre': { corps: {
+  'POST /v1/apprendre': { limite: 128 * KIO, corps: {
     agent: AGENT, question: txt(4000), q: txt(4000), correction: txt(4000), faux: txt(4000),
     trait: { type: 'objet', champs: { cle: txt(80), valeur: txt(1000), portee: txt(10, { parmi: ['agent', 'commun'] }), confiance: nb(0, 1) } },
   } },
-  'POST /v1/echange': { corps: { agent: AGENT, question: txt(4000), reponse: txt(20_000), ns: NS } },
+  'POST /v1/echange': { limite: 256 * KIO, corps: { agent: AGENT, question: txt(4000), reponse: txt(20_000), ns: NS } },
   'GET /v1/cerveaux': {},
-  'PUT /v1/cerveaux/moi': { corps: {
+  'PUT /v1/cerveaux/moi': { limite: 128 * KIO, corps: {
     titre: txt(200), perimetre: txt(2000), sait: { type: 'liste', max: 60, de: txt(100) }, regles: txt(3000), ui: txt(300),
     actions: { type: 'liste', max: 20, de: { type: 'objet', champs: { nom: txt(200), ou: txt(300) } } },
   } },
@@ -94,22 +97,22 @@ const SCHEMAS = {
     query: txt(4000), context: json, limit: ent(1, 1000), min_similarity: nb(0, 1),
     sources: { type: 'liste', max: 50, de: txt(64) }, levels: { type: 'liste', max: 10, de: txt(20) },
   } },
-  'POST /v1/neurons': { corps: { neuron: { type: 'objet', champs: NEURONE }, synapses: { type: 'liste', max: 100, de: { type: 'objet', champs: { to_type: txt(40), to_key: txt(400), weight: nb(0, 1000) } } } } },
+  'POST /v1/neurons': { limite: 512 * KIO, corps: { neuron: { type: 'objet', champs: NEURONE }, synapses: { type: 'liste', max: 100, de: { type: 'objet', champs: { to_type: txt(40), to_key: txt(400), weight: nb(0, 1000) } } } } },
   'GET /v1/neurons': { requete: { type: txt(80), source: txt(64), limit: ent(1, 1000), offset: ent(0, 1e9) } },
   'GET /v1/neuron': { requete: { id: ID } },
   'DELETE /v1/neuron': { requete: { id: ID } },
   'POST /v1/feedback': { corps: { neuron_id: ID, useful: bool } },
   'GET /v1/export': {},
-  'POST /v1/import': { corps: { version: ent(0, 100), exported_at: txt(40), neurons: { type: 'liste', max: 100_000, de: json }, synapses: { type: 'liste', max: 1_000_000, de: json } } },
+  'POST /v1/import': { grand: true, corps: { version: ent(0, 100), exported_at: txt(40), neurons: { type: 'liste', max: 100_000, de: json }, synapses: { type: 'liste', max: 1_000_000, de: json } } },
   'POST /v1/purge': { corps: { months: ent(1, 1200), keep_types: { type: 'liste', max: 50, de: txt(80) } } },
-  'POST /v1/incidents': { corps: INCIDENT },
+  'POST /v1/incidents': { limite: 512 * KIO, corps: INCIDENT },
   'POST /v1/incidents/lookup': { corps: { alert_key: txt(200), service: txt(200), host: txt(200), symptom: txt(4000), window: ent(1, 1e6) } },
   'GET /v1/incidents/service': { requete: { service: txt(200), limit: ent(1, 1000) } },
   'GET /v1/incidents/stats': { requete: { days: ent(1, 3650) } },
   'POST /v1/incidents/retention': { corps: { months: ent(1, 1200) } },
   'GET /v1/answer': { requete: { q: txt(4000), ns: NS, stream: txt(1, { parmi: ['0', '1'] }) } },
   'GET /v1/graph': { requete: { ns: NS, limit: ent(1, 100_000), days: ent(1, 36500) } },
-  'POST /mcp': { corps: { jsonrpc: txt(10), id: json, method: txt(100), params: json } },
+  'POST /mcp': { grand: true, corps: { jsonrpc: txt(10), id: json, method: txt(100), params: json } },
 };
 
 module.exports = { SCHEMAS };

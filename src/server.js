@@ -295,29 +295,16 @@ function send(res, code, obj, extra) {
   res.end(body);
 }
 
-/* Le corps lu est validé contre le schéma de la route (src/schemas.js) :
-   champ inconnu, type ou longueur hors bornes → 400. */
-const schemaCorps = new WeakMap();
+/* Le corps est lu par le socle — JSON exigé pour une écriture, taille
+   annoncée refusée en 413 avant toute lecture, puis bornée en lisant — à la
+   limite de la route (64 Kio par défaut, MAX_BODY pour ce qui porte des
+   documents), puis validé contre son schéma (src/schemas.js) : champ
+   inconnu, type ou longueur hors bornes → 400. */
+const routeDe = new WeakMap();
 async function readBody(req) {
-  const brut = await lireJson(req);
-  const sch = schemaCorps.get(req);
-  return sch ? socle.S.valider(brut, sch) : brut;
-}
-function lireJson(req) {
-  return new Promise((resolve, reject) => {
-    let n = 0; const parts = [];
-    req.on('data', c => {
-      n += c.length;
-      if (n > MAX_BODY) { reject(new Error('corps trop grand')); req.destroy(); return; }
-      parts.push(c);
-    });
-    req.on('end', () => {
-      const s = Buffer.concat(parts).toString('utf8');
-      if (!s) return resolve({});
-      try { resolve(JSON.parse(s)); } catch { reject(new Error('JSON invalide')); }
-    });
-    req.on('error', reject);
-  });
+  const r = routeDe.get(req) || {};
+  const brut = await socle.S.lireCorps(req, { limite: r.grand ? MAX_BODY : r.limite || 64 * 1024 });
+  return r.corps ? socle.S.valider(brut, r.corps) : brut;
 }
 
 /* ---------- limitation de débit ---------- */
@@ -767,7 +754,7 @@ const routes = {
     exigerHumain(ctx.src);
     if (!rateLimit('consolider:' + appelant(ctx.src), 4, 60000))
       return send(res, 429, { error: 'une relecture à la fois : attends une minute' }, { 'Retry-After': '30' });
-    const b = await readBody(req).catch(() => ({}));
+    const b = await readBody(req);
     /* Tout relire : utile quand la consigne a changé, ou pour repartir
        d'une fiche mal partie. La fiche n'est pas vidée — elle est
        relue, corrigée et élaguée par le modèle. */
@@ -1309,20 +1296,14 @@ async function traiter(req, res) {
     params[k] = v;
   }
   S.valider(params, SCHEMAS[key].requete || {});
-  schemaCorps.set(req, SCHEMAS[key].corps || {});
+  routeDe.set(req, SCHEMAS[key]);
   try {
     await fn(req, res, { url, src });
   } catch (e) {
+    /* Une entrée malformée (JSON, taille, schéma) arrive en ErreurHttp : la
+       faute du client lui est dite telle quelle. Le reste est une panne :
+       le détail va dans le journal, jamais dans la réponse. */
     if (e instanceof S.ErreurHttp) throw e;
-    const m = String(e && e.message || e);
-    /* Une entrée malformée est une faute du client, pas du serveur :
-       renvoyer 500 ferait croire à une panne et déclencherait les
-       rejeux du client au lieu de lui signaler de corriger son envoi. */
-    if (/JSON invalide|corps trop grand/.test(m)) {
-      if (!res.headersSent) send(res, 400, { error: m });
-      return;
-    }
-    /* le détail va dans le journal, jamais dans la réponse */
     console.error('[erreur]', key, e && e.stack || e);
     if (!res.headersSent) send(res, 500, { error: 'erreur interne' });
   }
