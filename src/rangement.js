@@ -117,7 +117,7 @@ function orphelins(db) {
    ou un cp sur un fichier SQLite ouvert donnerait une base corrompue
    une fois sur dix. */
 function sauvegarde(db, dossier = '/data/sauvegardes') {
-  fs.mkdirSync(dossier, { recursive: true });
+  fs.mkdirSync(dossier, { recursive: true, mode: 0o700 });
   const nom = path.join(dossier,
     'avant-rangement-' + new Date().toISOString().replace(/[:.]/g, '-') + '.db');
   db.exec(`VACUUM INTO '${nom.replace(/'/g, "''")}'`);
@@ -126,7 +126,9 @@ function sauvegarde(db, dossier = '/data/sauvegardes') {
   const vieilles = fs.readdirSync(dossier)
     .filter(f => f.startsWith('avant-rangement-')).sort().slice(0, -5);
   for (const f of vieilles) { try { fs.unlinkSync(path.join(dossier, f)); } catch {} }
-  return { fichier: nom, octets: fs.statSync(nom).size };
+  /* Une copie entière de la base : lisible du seul service. */
+  fs.chmodSync(nom, 0o600);
+  return { fichier: path.basename(nom), octets: fs.statSync(nom).size };
 }
 
 /* ---------- application ----------

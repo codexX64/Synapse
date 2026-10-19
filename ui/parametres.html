@@ -209,7 +209,7 @@ const $ = s => document.querySelector(s);
    (renfort), proposée par la page du compte. */
 let CSRF = '';
 const msg = (t, ok) => { const m = $('#msg'); m.textContent = t || ''; m.className = t ? (ok ? 'ok' : 'no') : ''; };
-const esc = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+const esc = s => String(s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
 async function api(chemin, corps, methode, renfortFait = false) {
   const m = methode || (corps ? 'POST' : 'GET');

@@ -284,9 +284,10 @@ function send(res, code, obj, extra) {
     'X-Content-Type-Options': 'nosniff',
     ...(extra || {})
   };
+  /* Une origine déclarée appelle l'API avec un jeton, jamais avec les
+     cookies de session : pas d'Allow-Credentials. */
   if (CORS_ORIGIN) {
     h['Access-Control-Allow-Origin'] = CORS_ORIGIN;
-    h['Access-Control-Allow-Credentials'] = 'true';
     h['Vary'] = 'Origin';
   }
   res.writeHead(code, h);
@@ -576,7 +577,7 @@ const routes = {
     if (!plan.length) return send(res, 400, { error: 'plan vide après filtrage' });
     let sauve = null;
     try { sauve = RG.sauvegarde(db); }
-    catch (e) { return send(res, 500, { error: 'sauvegarde impossible : ' + e.message }); }
+    catch (e) { console.error('[rangement] sauvegarde impossible :', e.message); return send(res, 500, { error: 'sauvegarde impossible : rien n’a été appliqué' }); }
     const fait = RG.applique(db, plan);
     send(res, 200, { ...fait, sauvegarde: sauve });
   },
@@ -616,7 +617,7 @@ const routes = {
       if (a.type === 'renommer' && (!a.titre || a.titre.length < 10)) return send(res, 400, { error: 'titre trop court' });
     }
     let sauve = null;
-    try { sauve = RG.sauvegarde(db); } catch (e) { return send(res, 500, { error: 'sauvegarde impossible : ' + e.message }); }
+    try { sauve = RG.sauvegarde(db); } catch (e) { console.error('[rangement] sauvegarde impossible :', e.message); return send(res, 500, { error: 'sauvegarde impossible : rien n’a été appliqué' }); }
     const fait = RG.applique(db, plan);
     send(res, 200, { ...fait, sauvegarde: sauve });
   },

@@ -119,6 +119,13 @@ test('en-têtes de sécurité et pages servies par le socle', async () => {
   const corps = await page.text();
   assert.ok(!/cdnjs|googleapis|gstatic/.test(corps), 'aucune ressource tierce');
   assert.equal((await fetch(inst.url('/.well-known/security.txt'))).status, 200);
+  const notice = await fetch(inst.url('/confidentialite.txt'));
+  assert.equal(notice.status, 200);
+  assert.match(await notice.text(), /Questions posées[\s\S]*trente jours/);
+  const cors = await demarrer({ env: { CORS_ORIGIN: 'https://hub.example' } });
+  const rc = await fetch(cors.url('/healthz'));
+  assert.equal(rc.headers.get('access-control-allow-origin'), 'https://hub.example');
+  assert.equal(rc.headers.get('access-control-allow-credentials'), null, 'jamais les cookies d\'une autre origine');
 });
 
 test('données d\'un compte : ses questions exportées à sa demande, effacées avec lui', async () => {
