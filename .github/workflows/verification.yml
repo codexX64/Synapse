@@ -68,7 +68,7 @@ jobs:
           echo "$auteurs"
           if [ -n "$auteurs" ] && [ "$(printf '%s\n' "$auteurs" | wc -l)" -ne 1 ]; then echo "plusieurs identités"; exit 1; fi
           if git log --format='%aI%n%cI' "$plage" | grep -v '+00:00$'; then echo "fuseau autre que UTC"; exit 1; fi
-          if git log --format='%B' "$plage" | grep -inE 'co-authored-by|generated (by|with)|as an ai|🤖|claude\.ai/code|session_[0-9A-Za-z]{10,}'; then echo "mention d'outil"; exit 1; fi
+          if git log --format='%B' "$plage" | grep -niE 'co-authored-by|generated with|assistant|claude|copilot|cursor|gpt|🤖'; then echo "mention d'outil"; exit 1; fi
 
   # Les motifs viennent d'un secret du dépôt, jamais du dépôt lui-même : la
   # liste de ce qui identifie l'auteur serait son meilleur index. Rien n'est
