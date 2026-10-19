@@ -1,0 +1,113 @@
+# Code quality record — SYNAPSE
+
+Method: Project Baseline Requirements & Security Manual, Part III (chapters 37-49)
+Reviewed: 2026-10-19   ·   Owner: Codex64
+
+## Behaviour freeze
+Point de départ : `v1.9.5`. Ensemble de référence relevé avant toute modification : 64 essais du service, tous verts, et l’inventaire des 67 routes. Sur l’arbre final : 85 essais du service et 69 du socle embarqué, tous verts ; des 64 de départ, 57 passent inchangés, et les 7 qui manquent sont ceux du module de comptes de la 1.x (`src/comptes.test.js`), retiré avec lui quand les comptes sont passés au socle (constat C1 de SECURITY.md), leurs cas repris par les essais du socle et par la reprise des comptes (`test/serveur.test.mjs`, « reprise des comptes de SYNAPSE 1.x »).
+
+Diff de l’API publique : les 51 routes de la mémoire, `/mcp` et la santé gardent leurs chemins, leurs méthodes et la forme de leurs réponses. Changements voulus, chacun le correctif d’un constat de SECURITY.md : les 14 routes `/v1/auth/*` et `/v1/admin/users*` de la 1.x remplacées par celles du socle (`/api/compte/*`, C1) ; un champ ou un paramètre non déclaré, un type ou une longueur hors bornes → 400 (C5) ; un corps trop grand → 413, une écriture sans JSON → 415 (C5) ; une méthode non servie → 405 au lieu de 404 ; l’entrée d’un autre espace → 404 au lieu de 403, et des liens filtrés (C7) ; l’export entier plafonné à deux par minute. Le champ `hash` qu’envoie le client fourni reste admis.
+
+Démarrage et parcours de bout en bout sur l’arbre final, le 2026-10-19 : `outils/exercice-incident.mjs` → 26 vérifications réussies ; parcours de l’interface dans Chromium (accueil, paramètres, compte, porte de connexion) → aucune erreur ni violation de la politique de contenu, l’enregistrement des réglages passe le schéma.
+
+## Layer status
+| Chapter | Subject | Status | What changed |
+|---|---|---|---|
+| 39 | Comment layer | DONE | 30 en-têtes de fichier encadrés de signes égal et 41 titres de section en tirets ou en égal ramenés à leur texte (`06b1cd3`) ; trois commentaires réécrits pour dire leur raison, dont deux qui renvoyaient à une consigne plutôt qu’au besoin et un qui prêtait à la recherche d’un jeton une comparaison à temps constant qu’elle ne fait pas ; les commentaires restants disent une raison (contrat d’un client, choix de seuil, menace), aucun ne raconte le code |
+| 40 | Naming and vocabulary | DONE | vocabulaire hérité gardé là où il est contrat : routes, tables et champs en anglais (`ingest`, `recall`, `neurons`, `entries`), lus par les clients ; domaine et ajouts en français (espace, cerveau, fiche, trait, rangement, renfort) ; `handleMcp` devient `repondreMcp` (`3cead9f`) ; les `obj` des lectures de réponses de modèle disparaissent avec leur aide commune |
+| 41 | Formatting, layout and whitespace | DONE | aucun formateur dans le dépôt, aucun introduit ; serveur : 2 espaces, apostrophes simples, points-virgules, comme le socle ; `ui/index.html` garde son écriture compacte d’origine (la reformater changerait chaque ligne sans rien corriger) ; `git diff --check` depuis l’arbre vide : propre ; aucun caractère invisible |
+| 42 | Gratuitous abstraction | DONE | aucune interface à une seule implémentation ; une seule lecture d’un objet JSON dans une réponse de modèle, au lieu de trois copies (`234d235`) ; les schémas des routes en une table (`src/schemas.js`) plutôt qu’un contrôle par route |
+| 43 | Defensive noise | DONE | chaque erreur avalée dit pourquoi, et une entrée injoignable le dit dans l’inspecteur au lieu d’attendre (`2508607`) ; une relecture n’avale plus une erreur de schéma (`460435e`) ; 106 `catch` rangés ci-dessous selon ce que fait leur bloc ; aucun message vague, aucune journalisation d’entrée ou de sortie de fonction |
+| 44 | Control flow and idiom | DONE | retours anticipés ; identité exigée avant tout, puis paramètres validés, puis portée, espace ou rôle en tête de chaque route ; 405 avec Allow pour une méthode non servie |
+| 45 | Types, signatures and data shapes | DONE | JavaScript sans TypeScript ; contrat d’erreur : `ErreurHttp` du socle, traduite une fois à la frontière (`traiter`), le reste devient un 500 générique ; schémas au même validateur que le socle |
+| 46 | Dependencies, configuration, fitting the repository | DONE | aucune dépendance npm, contrôlé en CI ; three.js r128 et deux polices OFL figés dans `ui/vendor` avec provenance et empreintes ; clé maîtresse d’une installation seule en secret Docker, jamais dans le `.env` |
+| 47 | Tests | DONE | 18 cassures volontaires, chacune détectée (ci-dessous) ; une passait d’abord inaperçue et a donné un essai (`8d23578`) ; table des droits de chaque route (`e9d60db`) ; runbook d’incident joué par les essais (`0ac9ff7`) |
+| 48 | Documentation, furniture and version control | DONE | README (démarrage avec la clé en secret, rotation, sauvegardes, incident, jetons, schémas), notice de confidentialité, `.env.example`, Compose, Dependabot, vérification CI relus ; un sujet par commit, sans mention d’outil, en UTC |
+
+`catch` restants, par raison (`rg -o 'catch\s*(\(\s*\w*\s*\))?\s*\{|\.catch\(' src ui client outils test`, 106), classés à la lecture de chaque bloc :
+
+| Raison | Nombre | Où |
+|---|---|---|
+| valeur de repli explicite (réponse illisible d’un modèle, d’Ollama ou de Telegram, réglage absent, stockage du navigateur indisponible) | 41 | `src/llm.js`, `src/search.js`, `src/config.js`, `src/moi.js`, `src/apprentissage.js`, `src/embed.js`, `src/cli.js`, `src/server.js`, `src/rangement.js`, `client/`, `ui/` |
+| montrée à l’écran, rendue au demandeur ou portée dans l’état du service, avec sa cause | 33 | `ui/`, `src/server.js`, `src/tickets.js`, `src/planif.js`, `src/tache.js`, `src/rangement.js`, `src/moi.js`, `src/apprentissage.js`, `src/embed.js`, `src/neurons.js` |
+| sans effet voulu, la raison écrite dans le bloc (déjà retiré, déjà fermé, rien à effacer) | 15 | `client/`, `src/db.js`, `src/llm.js`, `src/config.js`, `src/moi.js`, `src/apprentissage.js`, `src/tache.js`, `src/neurons.js`, `outils/`, essais |
+| relevée, traduite en erreur du domaine ou transmise | 11 | `src/server.js`, `src/cli.js`, `src/embed.js`, `src/eval.js`, essais |
+| repli du client fourni sur son spool disque (le client n’échoue jamais pour son appelant) | 4 | `client/` |
+| journalisée | 2 | `src/activite.js`, `src/planif.js` |
+
+## Tests
+Cassures volontaires (REQ-CODE-005) : chacune posée seule, les essais du service lancés en entier, le fichier rétabli (`mutations.py`, hors dépôt), sur l’arbre final.
+
+| Cassure | Fichier | Essais en échec | Premier essai qui échoue |
+|---|---|---|---|
+| un service lit l’espace privé d’un autre | `src/server.js` | 4 | « écriture : son espace ou un espace commun, jamais celui d'un autre » |
+| un jeton de service passe pour un humain admin | `src/server.js` | 1 | « jeton d'un service : ni les gestes de la portée admin, ni ceux réservés aux humains » |
+| un paramètre de requête n’est plus contrôlé | `src/server.js` | 1 | « schémas : champ ou paramètre inconnu, type faux, paramètre répété → 400 ; un inconnu n'apprend rien des routes » |
+| un corps n’est plus validé | `src/server.js` | 3 | « « Retrouver une résolution passée » : la signature donnée par le Hub ramène le correctif » |
+| un paramètre répété passe | `src/server.js` | 1 | « schémas : champ ou paramètre inconnu, type faux, paramètre répété → 400 ; un inconnu n'apprend rien des routes » |
+| un jeton faux ne compte plus | `src/server.js` | 1 | « jetons de service : un jeton refusé ne retombe pas sur la session, il est compté et journalisé » |
+| un refus de jeton n’est plus journalisé | `src/server.js` | 1 | « refus d'un jeton : au journal de sécurité, une ligne par appelant et par route » |
+| l’entrée d’un autre espace se lit | `src/server.js` | 1 | « lecture d'une entrée : celle d'un autre espace est introuvable, et un lien n'en montre pas le titre » |
+| un lien montre le titre d’une entrée d’un autre espace | `src/server.js` | 1 | « lecture d'une entrée : celle d'un autre espace est introuvable, et un lien n'en montre pas le titre » |
+| l’export entier sans plafond | `src/server.js` | 1 | « export entier : portée admin seule, deux par minute » |
+| l’IA sans débit par appelant | `src/server.js` | 1 | « IA : trente questions par minute et par appelant » |
+| l’IA distante sans plafond du jour | `src/llm.js` | 1 | « IA distante : plafond du jour, puis refus dit et journalisé » |
+| une réponse démesurée du modèle est lue entière | `src/llm.js` | 1 | « IA : une réponse démesurée est abandonnée, pas gardée en mémoire » |
+| une balise du texte referme les données | `src/llm.js` | 2 | « données closes : les balises ne se referment pas depuis le texte, la règle le dit » |
+| un jeton de cerveau passe sans le bon calcul | `src/cerveaux.js` | 1 | « un jeton de cerveau ne vaut que pour son nom, et seulement avec la bonne clé » |
+| le jeton Telegram est gardé en clair | `src/config.js` | 1 | « session humaine : lecture permise, écriture sous jeton anti-CSRF et rôle, réglages sous renfort » |
+| une source signe au nom d’une autre | `src/ingest.js` | 1 | « provenance : celle du jeton, l'origine annoncée reste à part » |
+| la base reste lisible de tous | `src/db.js` | 1 | « base : dossier et fichiers lisibles du seul service » |
+
+Cassures manquées : 0 (la cassure du refus consigné passait d’abord inaperçue : un essai l’a ajoutée, `8d23578`).
+
+## Repository style profile
+Node 24 sans dépendance, CommonJS côté serveur (`'use strict'`), le socle en module ES chargé par `import()` ; 2 espaces, apostrophes simples, points-virgules ; une route = une entrée de la table `routes` de `src/server.js`, son schéma dans `src/schemas.js` ; accès en tête de route par `can`, `canIncident`, `nsAllowed`, `exigerHumain` ; réponses par `send(res, code, objet)` ; erreurs du client en `ErreurHttp` ; essais `node:test`, instances lancées comme en production (`test/instance.mjs`), aides du socle pour les comptes (`socle/essai/`) ; interface : un fichier par page, HTML, CSS et script ensemble, texte inséré par `esc()` ; commentaires en français, qui disent une raison ; commits d’une ligne, un sujet chacun.
+
+Aides existantes réutilisées plutôt que réinventées : lecture bornée du corps, schémas, limiteur persistant, coffre, journal, sauvegarde et en-têtes du socle ; `texteBorne`/`jsonBorne` et `objetJson` de `src/llm.js` pour toute réponse de modèle.
+
+## Detection sweep
+Annexe B.5, sur l’arbre final (`b5.sh`, hors dépôt ; `ui/vendor` et `socle/` exclus, le socle ayant son propre relevé) :
+
+```
+B.5.1	0 lignes
+B.5.2	0 lignes
+B.5.3	0 lignes
+B.5.4	0 lignes
+B.5.5	0 lignes
+B.5.6	0 lignes
+B.5.7	12
+B.5.8	2 lignes
+    ./src/rangement.js:49:function doublons(db, { ns = null, seuil = 0.94, max = 40 } = {}) {
+    ./src/planif.js:19:function doitTourner(cfg, now = new Date()) {
+B.5.9	0 lignes
+B.5.10	0 lignes
+B.5.11	3 lignes
+    ./ui/index.html:1484:        const data=(bloc.match(/^data: (.*)$/m)||[])[1];
+    ./ui/index.html:1485:        if(!type||data==null)continue;
+    ./ui/index.html:1822:    MOI.data=await apiMoi('/v1/moi');
+B.5.12	89
+B.5.12b	15
+B.5.13	0 lignes
+B.5.14	0 lignes
+B.5.15	0 lignes
+41.1.1	0 lignes
+41.2.1	0 lignes
+45.1.1	0 lignes
+47.1.1	0 lignes
+48.3.1	0 lignes
+48.3.2	7
+48.3.3	0 lignes
+48.4.1	0 lignes
+```
+
+Justification de chaque résultat non nul : B.5.7, des symboles d’interface (boutons ⚙ ✕ ✎ ✷ et glyphes de la fiche) et les marques ✓ / ✗ de deux essais anciens ; B.5.8, `doublons` et `doitTourner` sont des mots français (le motif lit « do ») ; B.5.11, `data` est le nom du champ du protocole SSE que l’interface lit, et `MOI.data` l’état de la fiche ; B.5.12 et B.5.12b, les `catch` rangés plus haut ; 48.3.2, des attributs `placeholder` de champs de formulaire et l’exemple d’adresse du manifeste (plage de documentation).
+
+## Verification (chapter 49)
+- [x] Full suite passes and matches the baseline — 85 essais du service et 69 du socle, verts ; les 57 essais de départ qui restent passent inchangés, les 7 autres partis avec le module de comptes de la 1.x (« Behaviour freeze »)
+- [x] Public API diff empty — inventaire des routes relu ligne à ligne : aucune route de la mémoire changée de chemin, de méthode ou de forme ; les seuls écarts sont les correctifs listés plus haut
+- [x] Characterisation tests deleted after use — aucun essai de caractérisation écrit : la référence était la suite existante, et chaque changement de comportement voulu a son essai de non-régression, gardé
+- [x] Read-aloud test passed — en-têtes, commentaires et messages d’erreur relus à voix haute : ils disent une raison ou un fait, sans formule
+- [x] Blind-comparison test passed — les fichiers repris ne se distinguent plus du reste du dépôt par leurs bandeaux, leurs noms ou leurs `catch`
+- [x] Commit history: one concern per commit, repository style, no attribution trailers — `git log --format=%b v1.9.5..main | grep -c .` → 0 ; identité, fuseau et mentions d’outil contrôlés en CI
+- [x] REQ-CODE-001 to REQ-CODE-006 all PASS — voir SECURITY.md
