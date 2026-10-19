@@ -8,7 +8,7 @@ const SRC = require('./sources.js');
 test('par source : comptes, types du jour, simulées ; la purge ne touche que les simulées', () => {
   const db = open(':memory:');
   ingest.insert(db, { kind: 'network.alert', title: 'Port 23 ouvert sur camera', tags: ['mapmylan', 'simulation'] }, 'mapmylan');
-  ingest.insert(db, { kind: 'network.device.new', title: 'Nouvel appareil 10.0.0.9', tags: ['simulation'] }, 'mapmylan');
+  ingest.insert(db, { kind: 'network.device.new', title: 'Nouvel appareil 192.0.2.9', tags: ['simulation'] }, 'mapmylan');
   ingest.insert(db, { kind: 'network.alert', title: 'Vraie alerte', tags: ['mapmylan'] }, 'mapmylan');
   ingest.insert(db, { kind: 'echange', title: 'Question au Hub' }, 'hub');
   const s = Object.fromEntries(SRC.parSource(db).map(x => [x.source, x]));
