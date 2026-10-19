@@ -335,7 +335,7 @@ async function toolCall(db, src, name, args, ctx) {
 }
 
 /* JSON-RPC 2.0, sous-ensemble MCP. */
-async function handleMcp(db, src, msg, ctx) {
+async function repondreMcp(db, src, msg, ctx) {
   const id = msg && msg.id !== undefined ? msg.id : null;
   const reply = (result) => ({ jsonrpc: '2.0', id, result });
   const fail  = (code, message) => ({ jsonrpc: '2.0', id, error: { code, message } });
@@ -375,4 +375,4 @@ async function handleMcp(db, src, msg, ctx) {
   }
 }
 
-module.exports = { handleMcp, TOOLS };
+module.exports = { repondreMcp, TOOLS };

@@ -17,7 +17,7 @@ const { open } = require('./db.js');
 const ingest = require('./ingest.js');
 const { search, parse: analyseRequete } = require('./search.js');
 const { Embedder, startWorker } = require('./embed.js');
-const { handleMcp } = require('./mcp.js');
+const { repondreMcp } = require('./mcp.js');
 const { buildGraph } = require('./graph.js');
 const inc = require('./incidents.js');
 const neu = require('./neurons.js');
@@ -1073,7 +1073,7 @@ const routes = {
 
   'POST /mcp': async (req, res, ctx) => {
     const b = await readBody(req);
-    const out = await handleMcp(db, ctx.src, b, { embed: t => embedder.query(t) });
+    const out = await repondreMcp(db, ctx.src, b, { embed: t => embedder.query(t) });
     send(res, 200, out);
   }
 };
