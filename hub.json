@@ -728,45 +728,75 @@
         "method": "POST",
         "path": "/v1/recall",
         "body": {
-          "signature": "{{params.signature}}",
-          "service": "{{params.service}}",
-          "host": "{{params.host}}"
+          "query": "{{params.signature}}",
+          "context": {
+            "signature": "{{params.signature}}",
+            "service": "{{params.service}}",
+            "host": "{{params.host}}"
+          }
         }
       },
       "output": {
         "type": "object",
         "properties": {
-          "found": {
-            "type": "boolean"
-          },
-          "neurons": {
+          "results": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "id": {
-                  "type": "number"
-                },
-                "fix": {
-                  "type": "string"
-                },
                 "similarity": {
                   "type": "number"
+                },
+                "via": {
+                  "type": "string"
+                },
+                "neuron": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "number"
+                    },
+                    "root_cause": {
+                      "type": "string"
+                    },
+                    "resolution": {
+                      "type": "string"
+                    },
+                    "service": {
+                      "type": "string"
+                    },
+                    "host": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
+          },
+          "took_ms": {
+            "type": "number"
+          },
+          "threshold": {
+            "type": "number"
           }
         }
       },
       "sample": {
-        "found": true,
-        "neurons": [
+        "results": [
           {
-            "id": 19,
-            "fix": "Relancer le service après avoir relevé la limite mémoire.",
-            "similarity": 0.91
+            "similarity": 0.91,
+            "via": "L0",
+            "neuron": {
+              "id": 19,
+              "root_cause": "Limite mémoire atteinte.",
+              "resolution": "Relancer le service après avoir relevé la limite mémoire.",
+              "service": "web",
+              "host": "srv-1"
+            }
           }
-        ]
+        ],
+        "took_ms": 4,
+        "threshold": 0.85
       }
     },
     {
