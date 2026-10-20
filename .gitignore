@@ -1,5 +1,5 @@
 # Données : jamais dans le dépôt.
-data/
+/data/
 *.db
 *.db-shm
 *.db-wal
