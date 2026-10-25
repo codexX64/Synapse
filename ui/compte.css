@@ -1,0 +1,5 @@
+/* Page du compte : sur un téléphone, le retour et la déconnexion gardent
+   leur icône seule ; les onglets restent lisibles. */
+@media (max-width:560px){
+  .top .etiquette{display:none}
+}
