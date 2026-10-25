@@ -83,9 +83,9 @@ B.5.8	2 lignes
 B.5.9	0 lignes
 B.5.10	0 lignes
 B.5.11	3 lignes
-    ./ui/index.html:1484:        const data=(bloc.match(/^data: (.*)$/m)||[])[1];
-    ./ui/index.html:1485:        if(!type||data==null)continue;
-    ./ui/index.html:1822:    MOI.data=await apiMoi('/v1/moi');
+    ./ui/index.html:1524:        const data=(bloc.match(/^data: (.*)$/m)||[])[1];
+    ./ui/index.html:1525:        if(!type||data==null)continue;
+    ./ui/index.html:1885:    MOI.data=await apiMoi('/v1/moi');
 B.5.12	89
 B.5.12b	15
 B.5.13	0 lignes
@@ -111,3 +111,6 @@ Justification de chaque résultat non nul : B.5.7, des symboles d’interface (b
 - [x] Blind-comparison test passed — les fichiers repris ne se distinguent plus du reste du dépôt par leurs bandeaux, leurs noms ou leurs `catch`
 - [x] Commit history: one concern per commit, repository style, no attribution trailers — `git log --format=%b v1.9.5..main | grep -c .` → 0 ; identité, fuseau et mentions d’outil contrôlés en CI
 - [x] REQ-CODE-001 to REQ-CODE-006 all PASS — voir SECURITY.md
+
+## Suivi du 2026-10-25 (2.0.2)
+Socle 6f2c864 embarqué sans adaptation du code (son API ne change que par ajouts : `confirmerIdentite`, `raisonCle` exporté, gamme Lavande). La mémoire prend des jetons de mise en page (`--haut`, `--bas`) au lieu de hauteurs répétées dans chaque panneau ; les paramètres prennent `--ecart` au lieu de 14 px ; les textes d'aide sont des paragraphes ; la page du compte reprend la coque du socle au lieu d'une barre à elle. Parcours du navigateur et vitrine écrits sur le modèle de ceux de ProxLab et de NEXARC ; essai du relais de confiance écrit comme le leur. 87 essais du service et 77 du socle, verts ; parcours : 112 écrans × largeurs par gamme, 0 défaut.
