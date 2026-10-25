@@ -19,8 +19,9 @@ function rendre(gamme) {
   return corps;
 }
 
-test('SOCLE_THEME : soma par défaut, console et exploitation admises, toute autre valeur arrête le démarrage', () => {
-  assert.deepEqual(GAMMES, ['soma', 'console', 'exploitation']);
+test('SOCLE_THEME : soma par défaut, console, exploitation et lavande admises, toute autre valeur arrête le démarrage', () => {
+  assert.deepEqual(GAMMES, ['soma', 'console', 'exploitation', 'lavande']);
+  assert.equal(lireConfig(SPEC_SOCLE, { SOCLE_THEME: 'lavande' }).gamme, 'lavande');
   assert.equal(lireConfig(SPEC_SOCLE, { SOCLE_THEME: 'exploitation' }).gamme, 'exploitation');
   assert.equal(lireConfig(SPEC_SOCLE, {}).gamme, 'soma');
   assert.equal(lireConfig(SPEC_SOCLE, { SOCLE_THEME: 'console' }).gamme, 'console');
@@ -39,7 +40,7 @@ test('gamme Console : chaque jeton de SOMA redéfini, polices servies par le soc
   const jetons = b => new Set([...b.matchAll(/--([\w-]+)\s*:/g)].map(m => m[1]));
   const soma = jetons(bloc(/\n:root\{([^}]*)\}/));
   const consoleJ = jetons(bloc(/html:root\[data-gamme="console"\]\{([^}]*)\}/));
-  const aRedefinir = [...soma].filter(j => !['rail', 'gouttiere', 'courbe'].includes(j));
+  const aRedefinir = [...soma].filter(j => !['rail', 'gouttiere', 'courbe', 'ecart'].includes(j));
   assert.ok(aRedefinir.length > 20);
   assert.deepEqual(aRedefinir.filter(j => !consoleJ.has(j)), [], 'jeton de SOMA laissé à sa valeur claire');
   for (const [, f] of css.matchAll(/url\((polices\/[^)]+)\)/g)) assert.ok(fs.existsSync(path.join(WEB, f)), f);
@@ -48,7 +49,7 @@ test('gamme Console : chaque jeton de SOMA redéfini, polices servies par le soc
   // de couleur est redéfini, accent bleu.
   assert.doesNotMatch(css, /\.bascule-theme\{display:none/);
   const clair = jetons(bloc(/html:root\[data-gamme="console"\]\[data-theme="light"\]\{([^}]*)\}/));
-  const couleurs = [...consoleJ].filter(j => !['sans', 'mono', 'r-ctl', 'r-carte', 'grain'].includes(j));
+  const couleurs = [...consoleJ].filter(j => !['sans', 'mono', 'r-ctl', 'r-carte', 'grain', 'ecart'].includes(j));
   assert.deepEqual(couleurs.filter(j => !clair.has(j)), [], 'jeton de la Console sombre sans valeur claire');
   assert.match(bloc(/html:root\[data-gamme="console"\]\[data-theme="light"\]\{([^}]*)\}/), /--accent:#2563EB/);
   // Les composants de la Console ne portent plus de couleur en dur : les deux
@@ -61,18 +62,37 @@ test('gamme Exploitation : chaque jeton de SOMA redéfini en clair et en sombre,
   const css = fs.readFileSync(path.join(WEB, 'soma.css'), 'utf8');
   const bloc = re => (re.exec(css) || [])[1] || '';
   const jetons = b => new Set([...b.matchAll(/--([\w-]+)\s*:/g)].map(m => m[1]));
-  const soma = [...jetons(bloc(/\n:root\{([^}]*)\}/))].filter(j => !['rail', 'gouttiere', 'courbe'].includes(j));
+  const soma = [...jetons(bloc(/\n:root\{([^}]*)\}/))].filter(j => !['rail', 'gouttiere', 'courbe', 'ecart'].includes(j));
   const clair = jetons(bloc(/html:root\[data-gamme="exploitation"\]\{([^}]*)\}/));
   const sombreSysteme = jetons(bloc(/html:root\[data-gamme="exploitation"\]:not\(\[data-theme="light"\]\)\{([^}]*)\}/));
   const sombreChoisi = jetons(bloc(/html:root\[data-gamme="exploitation"\]\[data-theme="dark"\]\{([^}]*)\}/));
   assert.deepEqual(soma.filter(j => !clair.has(j)), [], 'jeton de SOMA laissé à sa valeur');
-  const couleurs = [...clair].filter(j => !['sans', 'mono', 'r-ctl', 'r-carte', 'grain'].includes(j));
+  const couleurs = [...clair].filter(j => !['sans', 'mono', 'r-ctl', 'r-carte', 'grain', 'ecart'].includes(j));
   assert.deepEqual(couleurs.filter(j => !sombreSysteme.has(j)), [], 'sombre du système incomplet');
   assert.deepEqual(couleurs.filter(j => !sombreChoisi.has(j)), [], 'sombre choisi incomplet');
   assert.equal(bloc(/html:root\[data-gamme="exploitation"\]:not\(\[data-theme="light"\]\)\{([^}]*)\}/).trim(), bloc(/html:root\[data-gamme="exploitation"\]\[data-theme="dark"\]\{([^}]*)\}/).trim(), 'les deux sombres sont le même');
   const composants = css.split('\n').filter(l => /^\s*html\[data-gamme="exploitation"\]/.test(l));
   assert.ok(composants.length > 30);
   assert.deepEqual(composants.filter(l => /#[0-9A-Fa-f]{3,6}\b|rgba\(/.test(l)), []);
+});
+
+test('gamme Lavande : chaque jeton de SOMA redéfini en clair et en sombre, composants sans couleur en dur, Poppins servie', () => {
+  const css = fs.readFileSync(path.join(WEB, 'soma.css'), 'utf8');
+  const bloc = re => (re.exec(css) || [])[1] || '';
+  const jetons = b => new Set([...b.matchAll(/--([\w-]+)\s*:/g)].map(m => m[1]));
+  const soma = [...jetons(bloc(/\n:root\{([^}]*)\}/))].filter(j => !['rail', 'gouttiere', 'courbe', 'ecart'].includes(j));
+  const clair = jetons(bloc(/html:root\[data-gamme="lavande"\]\{([^}]*)\}/));
+  const sombreSysteme = bloc(/html:root\[data-gamme="lavande"\]:not\(\[data-theme="light"\]\)\{([^}]*)\}/);
+  const sombreChoisi = bloc(/html:root\[data-gamme="lavande"\]\[data-theme="dark"\]\{([^}]*)\}/);
+  assert.deepEqual(soma.filter(j => !clair.has(j)), [], 'jeton de SOMA laissé à sa valeur');
+  const couleurs = [...clair].filter(j => !['sans', 'mono', 'r-ctl', 'r-carte', 'grain', 'ecart'].includes(j));
+  assert.deepEqual(couleurs.filter(j => !jetons(sombreSysteme).has(j)), [], 'sombre du système incomplet');
+  assert.equal(sombreSysteme.trim(), sombreChoisi.trim(), 'les deux sombres sont le même');
+  const composants = css.split('\n').filter(l => /^\s*html\[data-gamme="lavande"\]/.test(l));
+  assert.ok(composants.length > 25);
+  assert.deepEqual(composants.filter(l => /#[0-9A-Fa-f]{3,6}\b|rgba\(/.test(l)), []);
+  for (const w of [300, 400, 500, 600]) for (const p of ['latin', 'latin-ext']) assert.ok(fs.existsSync(path.join(WEB, 'polices', `poppins-${p}-${w}-normal.woff2`)));
+  assert.match(fs.readFileSync(path.join(WEB, 'polices', 'OFL-poppins.txt'), 'utf8'), /SIL Open Font License/);
 });
 
 test('fichiers sous /v/<version>/ : la page porte sa version, le préfixe est retiré, cache durable pour la version courante seulement', () => {

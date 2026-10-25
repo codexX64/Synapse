@@ -58,7 +58,7 @@ export const SPEC_SOCLE = {
   smtpMotDePasse: { env: 'SOCLE_SMTP_MOTDEPASSE', type: 'secret', min: 8 },
   smtpDe: { env: 'SOCLE_SMTP_DE', type: 'chaine' },
   smtpAutorite: { env: 'SOCLE_SMTP_AUTORITE', type: 'chaine' },
-  // Gamme de l'interface (SOMA, Console ou Exploitation) : posée par le Hub pour tous les services qui l'acceptent.
+  // Gamme de l'interface (SOMA, Console, Exploitation ou Lavande) : posée par le Hub pour tous les services qui l'acceptent.
   gamme: { env: 'SOCLE_THEME', type: 'choix', parmi: GAMMES, defaut: 'soma' },
   // Administration des comptes déléguée au Hub : jeton à lui seul, généré par
   // le Hub, distinct du jeton de service. Absent : aucune délégation.

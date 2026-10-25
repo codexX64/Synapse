@@ -7,7 +7,7 @@ import path from 'node:path';
 import { ErreurHttp } from './outils.js';
 import { requeteCourante } from './requete.js';
 
-// ---- mandataires de confiance ----
+// mandataires de confiance
 // Seuls les relais listés (SOCLE_PROXYS, en CIDR) peuvent dire qui est le
 // client. Sans cette liste, X-Forwarded-For est ignoré : sinon n'importe qui
 // choisit l'adresse que le limiteur et le journal enregistrent.
@@ -56,7 +56,7 @@ export function origineDe(req, bl) {
   return `${estSecurise(req, bl) ? 'https' : 'http'}://${hote.toLowerCase()}`;
 }
 
-// ---- en-têtes ----
+// en-têtes
 export function nonceCsp() { return crypto.randomBytes(16).toString('base64'); }
 
 export function politiqueContenu({ nonce, connect = [], img = [], media = [], frame = [], secure, stylesEnLigne = false }) {
@@ -88,7 +88,7 @@ export function entetesSecurite(res, { secure, csp, hote, permissions = 'camera=
   if (secure && !hoteLocal(hote)) res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
 }
 
-// ---- cookies ----
+// cookies
 export function lireCookies(entete = '') {
   const out = {};
   for (const morceau of String(entete).split(';')) {
@@ -109,7 +109,7 @@ export function poseCookie(res, nom, valeur, { maxAge, secure, sameSite = 'Stric
   res.setHeader('Set-Cookie', [...(Array.isArray(avant) ? avant : avant ? [avant] : []), attributs.join('; ')]);
 }
 
-// ---- corps ----
+// corps
 export function lireCorps(req, { limite = 64 * 1024, json = true } = {}) {
   // Un formulaire HTML ne sait pas envoyer application/json sans pré-vol CORS :
   // l'exiger sur toute écriture ferme la soumission silencieuse d'un autre site.
@@ -173,7 +173,7 @@ export function repondreErreur(res, e, { journal = console } = {}) {
   repondreJson(res, status, { error: e.message, ...(e.details ? { details: e.details } : {}) });
 }
 
-// ---- fichiers statiques ----
+// fichiers statiques
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp',
@@ -182,7 +182,7 @@ const TYPES = {
 
 // Les gammes de SOMA. Une page HTML qui porte data-gamme="__GAMME__" la reçoit
 // rendue côté serveur : aucun éclair d'une gamme à l'autre au chargement.
-export const GAMMES = ['soma', 'console', 'exploitation'];
+export const GAMMES = ['soma', 'console', 'exploitation', 'lavande'];
 
 // Renvoie false si le fichier n'existe pas (l'appelant décide du 404).
 // Fichiers de l'interface sous /v/<version>/ : l'adresse change avec la
@@ -224,7 +224,7 @@ export function servirFichier(req, res, racine, chemin, { nonce, gamme = 'soma',
   return true;
 }
 
-// ---- routeur ----
+// routeur
 // Motifs à segments nommés (« /api/conversation/:id »). Chaque paramètre est
 // décodé une fois ; un encodage invalide ne correspond à aucune route.
 export class Routeur {
@@ -255,7 +255,7 @@ export class Routeur {
   }
 }
 
-// ---- débit par adresse ----
+// débit par adresse
 // Fenêtre glissante en mémoire : le service tourne en un seul processus
 // longue durée, et ce plafond ne protège que contre l'emballement. Les
 // essais d'authentification ont leur propre limiteur, persistant.

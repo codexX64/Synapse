@@ -70,7 +70,7 @@ export class Limiteur {
 
   liberer(cle) { this.db.prepare('DELETE FROM socle_essais WHERE cle = ?').run(cle); }
 
-  // ---- preuve de travail ----
+  // preuve de travail
   emettrePreuve() {
     const id = crypto.randomBytes(16).toString('base64url');
     const sel = crypto.randomBytes(16).toString('base64url');

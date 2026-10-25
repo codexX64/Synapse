@@ -36,7 +36,20 @@
 @font-face{font-family:"Geist Mono";font-style:normal;font-display:swap;font-weight:500;src:url(polices/geist-mono-latin-500-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 @font-face{font-family:"Geist Mono";font-style:normal;font-display:swap;font-weight:500;src:url(polices/geist-mono-latin-ext-500-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
 
+/* Police de la gamme Lavande (Poppins, SIL OFL 1.1, paquet @fontsource/poppins
+   5.2.7, intégrité du registre vérifiée). Téléchargée seulement en Lavande. */
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:300;src:url(polices/poppins-latin-300-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:300;src:url(polices/poppins-latin-ext-300-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:400;src:url(polices/poppins-latin-400-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:400;src:url(polices/poppins-latin-ext-400-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:500;src:url(polices/poppins-latin-500-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:500;src:url(polices/poppins-latin-ext-500-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:600;src:url(polices/poppins-latin-600-normal.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Poppins";font-style:normal;font-display:swap;font-weight:600;src:url(polices/poppins-latin-ext-600-normal.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
 :root{
+  /* L'écart entre deux cartes, partout : grilles, colonnes, piles, chiffres. */
+  --ecart:16px;
   --paper:#F6F6F3;--surface:#FFFFFF;--well:#F1F1ED;--hair:#E5E5E0;--hair-soft:#EDEDE8;
   --ink:#14161A;--ink-soft:#3E434A;--muted:#858B93;--faint:#B2B7BD;
   --accent:#1B2AFF;--wash:#EEF0FF;--alarm:#C8322B;--alarm-wash:#FBEEED;--warn:#B7791F;--warn-wash:#FBF3E4;
@@ -73,6 +86,7 @@
  * Choisie par le service (SOCLE_THEME=console, posée par le Hub), rendue dans
  * la page avant le premier affichage : pas d'éclair d'une gamme à l'autre. */
 html:root[data-gamme="console"]{
+  --ecart:12px;
   --paper:#000000;--surface:#0D0D0D;--well:#141414;--hair:#222222;--hair-soft:#1A1A1A;
   --ink:#EDEDED;--ink-soft:#A3A3A3;--muted:#8A8A8A;--faint:#6B6B6B;
   --accent:#7EE2A8;--wash:#1F3A2A;--alarm:#FF7B72;--alarm-wash:#3A1D1B;--warn:#E3B341;--warn-wash:#3A2E14;
@@ -146,7 +160,6 @@ html[data-gamme="console"] .btn.flat:hover{background:var(--well);color:var(--in
 html[data-gamme="console"] .views{background:var(--well);border:1px solid var(--hair);border-radius:8px;padding:2px;box-shadow:none;gap:0}
 html[data-gamme="console"] .view{padding:4px 10px;border-radius:6px;font-size:13px;color:var(--ink-soft);border:1px solid transparent}
 html[data-gamme="console"] .view.on{background:var(--k-raise);color:var(--ink);border-color:var(--k-line2);font-weight:400}
-html[data-gamme="console"] .figs{gap:10px;margin-bottom:12px}
 html[data-gamme="console"] .fig{padding:16px 18px;transition:none}
 html[data-gamme="console"] .fig:hover{box-shadow:var(--lift);transform:none}
 html[data-gamme="console"] .fig .tile{display:none}
@@ -158,8 +171,6 @@ html[data-gamme="console"] .card>header{padding:18px 20px 14px}
 html[data-gamme="console"] .card>header h2{font-size:15px;font-weight:500}
 html[data-gamme="console"] .card>header .note{font-size:12px;color:var(--faint)}
 html[data-gamme="console"] .card .pad{padding:0 20px 18px}
-html[data-gamme="console"] .split,html[data-gamme="console"] .colonnes,html[data-gamme="console"] .colonne{gap:12px}
-html[data-gamme="console"] .page>*+*{margin-top:12px}
 html[data-gamme="console"] th{font-weight:400;font-size:13px;letter-spacing:0;text-transform:none;color:var(--faint);padding:10px 14px;background:var(--well);border-bottom:none}
 html[data-gamme="console"] td{padding:12px 14px;border-bottom:none;border-top:1px solid var(--hair);font-size:14px}
 html[data-gamme="console"] tbody tr:hover td{background:var(--k-row)}
@@ -298,7 +309,7 @@ svg.i{display:block;flex:none;stroke:currentColor;fill:none;stroke-linecap:round
 .barre .compte{margin-left:auto;color:var(--muted);font-size:12.5px;white-space:nowrap}
 .barre+.tw th{padding-top:2px}
 
-.figs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.figs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--ecart);margin-bottom:var(--ecart)}
 .fig{background:var(--surface);border-radius:var(--r-carte);padding:16px 17px 12px;box-shadow:var(--lift);overflow:hidden;min-width:0;transition:.18s}
 .fig:hover{box-shadow:var(--lift-hi);transform:translateY(-2px)}
 .tile{width:30px;height:30px;border-radius:9px;background:var(--wash);color:var(--accent);display:flex;align-items:center;justify-content:center;margin-bottom:13px;flex:none}
@@ -311,23 +322,25 @@ svg.i{display:block;flex:none;stroke:currentColor;fill:none;stroke-linecap:round
 .fig .delta.pos{color:var(--accent)}
 .fig .chart{margin:8px -17px -12px;display:block;width:calc(100% + 34px);height:46px}
 
-.split{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr);gap:16px;align-items:start}
-/* Deux colonnes de cartes qui s'empilent chacune à sa hauteur : jamais de vide
- * sous une carte courte parce que sa voisine est longue (une ligne de .split
- * prend la hauteur de la plus haute). */
-.colonnes{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr);gap:16px;align-items:start}
-.colonne{display:grid;gap:16px;align-content:start;min-width:0}
-.grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:16px}
+.split{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr);gap:var(--ecart);align-items:stretch}
+/* Deux colonnes de cartes empilées, chacune à son rythme, qui finissent à la
+ * même ligne : la dernière carte de la plus courte s'allonge jusqu'au bas de
+ * sa voisine. Ni trou sous une colonne, ni carte étirée au milieu d'une pile. */
+.colonnes{display:grid;grid-template-columns:minmax(0,1.42fr) minmax(0,1fr);gap:var(--ecart);align-items:stretch}
+.colonne{display:flex;flex-direction:column;gap:var(--ecart);min-width:0}
+.colonne>:last-child{flex-grow:1}
+.grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:var(--ecart)}
 .card{background:var(--surface);border-radius:var(--r-carte);box-shadow:var(--lift);overflow:hidden;min-width:0}
 .card>header{display:flex;align-items:center;gap:10px;padding:15px 18px 13px;flex-wrap:wrap;min-width:0}
 .card>header h2{font-size:13.5px;font-weight:600;min-width:0}
-.card>header .note{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint)}
+/* La note d'en-tête n'est pas un encadré .note : ni marge intérieure, ni fond. */
+.card>header .note{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint);display:block;padding:0;border-radius:0;background:none}
 .card>header>h2+.btn{margin-left:auto}
 .card>header p{color:var(--muted);font-size:12.5px;margin-top:2px;flex-basis:100%}
 .card>header p a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
 .card .pad{padding:0 18px 16px}
 .card>.pad:first-child{padding-top:14px}
-.page>*+*{margin-top:16px}
+.page>*+*{margin-top:var(--ecart)}
 .page>.headrow+*{margin-top:0}
 .tw{overflow-x:auto;min-width:0}
 table{width:100%;border-collapse:collapse}
@@ -545,10 +558,8 @@ textarea.field{min-height:90px;resize:vertical;line-height:1.5}
 /* Zone de travail : ce qui se replie quand la place manque. */
 @container stage (max-width:900px){
   .split,.colonnes{grid-template-columns:minmax(0,1fr)}
-  .cache-l{display:none!important}
-}
-@container stage (max-width:720px){
   .figs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cache-l{display:none!important}
 }
 @container stage (min-width:761px){
   .seul-m{display:none!important}
@@ -573,7 +584,7 @@ textarea.field{min-height:90px;resize:vertical;line-height:1.5}
   .headrow{margin-bottom:14px;align-items:stretch}
   .actions{margin-left:0;width:100%}
   .actions>.btn{flex:1 1 auto}
-  .figs{gap:10px}
+  .stage>*{--ecart:12px}
   .fig{padding:12px 13px 10px}
   .fig strong{font-size:24px}
   .fig .chart,.fig .tile{display:none}
@@ -729,6 +740,83 @@ html[data-gamme="exploitation"] .toast{border-radius:6px}
 @container stage (max-width:520px){
   html[data-gamme="exploitation"] .fig{padding:0 14px}
   html[data-gamme="exploitation"] .fig strong{font-size:24px}
+}
+
+/* Gamme Lavande : verre clair sur un fond lavande, rail sombre arrondi, accent
+   indigo, Poppins, rayons généreux. Claire ou sombre selon le système ou la
+   bascule. Choisie par SOCLE_THEME=lavande. */
+html:root[data-gamme="lavande"]{
+  --paper:#F3E9F4;--surface:rgba(255,255,255,.86);--well:#F7F2F9;--hair:#E7DFEC;--hair-soft:#EFE8F2;
+  --ink:#1D1F55;--ink-soft:#3A3B66;--muted:#7E7E8C;--faint:#A9A9B4;
+  --accent:#2B26F5;--wash:#E9E8FF;--alarm:#D6455D;--alarm-wash:#FBE9EE;--warn:#B7791F;--warn-wash:#FBF1E2;
+  --ok:#2FA444;--ok-wash:#E6F6E9;--on-ink:#FFFFFF;
+  --lift:0 10px 30px -20px rgba(40,30,90,.4);
+  --lift-hi:0 30px 80px -20px rgba(40,30,90,.45);
+  --grain:0;
+  --sans:"Poppins",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --r-ctl:12px;--r-carte:20px;
+  --l-fond:radial-gradient(ellipse 70% 55% at 0% 45%,#CDBDF2 0%,transparent 70%),radial-gradient(ellipse 55% 40% at 100% 0%,#EBCBEA 0%,transparent 70%),linear-gradient(135deg,#F6E9F3 0%,#EFE3F7 40%,#F7EEF4 100%);
+  --l-verre:rgba(255,255,255,.86);--l-verre-bord:rgba(255,255,255,.8);
+  --l-rail:#232326;--l-rail-encre:#FFFFFF;--l-rail-doux:#9C9CA6;--l-rail-survol:#34343A;
+  --l-bouton:#232326;--l-bouton-encre:#FFFFFF;
+  color-scheme:light}
+@media (prefers-color-scheme:dark){html:root[data-gamme="lavande"]:not([data-theme="light"]){
+  --paper:#14121C;--surface:#1D1A28;--well:#191623;--hair:#2C2838;--hair-soft:#24212F;
+  --ink:#ECEAF7;--ink-soft:#C6C2DA;--muted:#8F8AA3;--faint:#6E6984;
+  --accent:#8F8BFF;--wash:#25233F;--alarm:#F07A8C;--alarm-wash:#2C1820;--warn:#D9A441;--warn-wash:#2A2213;
+  --ok:#5ED47A;--ok-wash:#16261B;--on-ink:#14121C;
+  --lift:0 1px 0 rgba(255,255,255,.03) inset,0 12px 30px -18px rgba(0,0,0,.8);
+  --lift-hi:0 30px 80px -24px rgba(0,0,0,.85);
+  --l-fond:radial-gradient(ellipse 70% 55% at 0% 45%,#2A2045 0%,transparent 70%),radial-gradient(ellipse 55% 40% at 100% 0%,#2B1E3A 0%,transparent 70%),linear-gradient(135deg,#17131F 0%,#120F1A 100%);
+  --l-verre:rgba(29,26,40,.82);--l-verre-bord:rgba(255,255,255,.06);
+  --l-rail:#0D0C13;--l-rail-encre:#FFFFFF;--l-rail-doux:#8B8798;--l-rail-survol:#1F1D2A;
+  --l-bouton:#ECEAF7;--l-bouton-encre:#14121C;
+  color-scheme:dark}}
+html:root[data-gamme="lavande"][data-theme="dark"]{
+  --paper:#14121C;--surface:#1D1A28;--well:#191623;--hair:#2C2838;--hair-soft:#24212F;
+  --ink:#ECEAF7;--ink-soft:#C6C2DA;--muted:#8F8AA3;--faint:#6E6984;
+  --accent:#8F8BFF;--wash:#25233F;--alarm:#F07A8C;--alarm-wash:#2C1820;--warn:#D9A441;--warn-wash:#2A2213;
+  --ok:#5ED47A;--ok-wash:#16261B;--on-ink:#14121C;
+  --lift:0 1px 0 rgba(255,255,255,.03) inset,0 12px 30px -18px rgba(0,0,0,.8);
+  --lift-hi:0 30px 80px -24px rgba(0,0,0,.85);
+  --l-fond:radial-gradient(ellipse 70% 55% at 0% 45%,#2A2045 0%,transparent 70%),radial-gradient(ellipse 55% 40% at 100% 0%,#2B1E3A 0%,transparent 70%),linear-gradient(135deg,#17131F 0%,#120F1A 100%);
+  --l-verre:rgba(29,26,40,.82);--l-verre-bord:rgba(255,255,255,.06);
+  --l-rail:#0D0C13;--l-rail-encre:#FFFFFF;--l-rail-doux:#8B8798;--l-rail-survol:#1F1D2A;
+  --l-bouton:#ECEAF7;--l-bouton-encre:#14121C;
+  color-scheme:dark}
+
+/* Composants de la gamme Lavande : rail sombre détaché du bord, indicateur
+   blanc à gauche de l'entrée choisie, cartes de verre, onglets en pilule. */
+html[data-gamme="lavande"] body{background-color:var(--paper);background-image:var(--l-fond);background-attachment:fixed}
+html[data-gamme="lavande"] h1,html[data-gamme="lavande"] h2,html[data-gamme="lavande"] h3{font-weight:600;letter-spacing:-.02em}
+html[data-gamme="lavande"] nav.rail{background:var(--l-rail);color:var(--l-rail-encre);border-radius:30px;margin:14px 0 14px 14px;padding:24px 14px 18px}
+html[data-gamme="lavande"] .mark .g{background:var(--l-rail-encre);color:var(--l-rail);box-shadow:none;border-radius:10px}
+html[data-gamme="lavande"] .mark b{color:var(--l-rail-encre);font-weight:600}
+html[data-gamme="lavande"] .grp>span{color:var(--l-rail-doux);letter-spacing:.12em}
+html[data-gamme="lavande"] .nav{position:relative;color:var(--l-rail-doux);border-radius:14px;padding:8px 12px}
+html[data-gamme="lavande"] .nav:hover{background:var(--l-rail-survol);color:var(--l-rail-encre)}
+html[data-gamme="lavande"] .nav.on{background:var(--l-rail-survol);color:var(--l-rail-encre);box-shadow:none;font-weight:500}
+html[data-gamme="lavande"] .nav.on::before{content:"";position:absolute;left:-14px;top:50%;width:4px;height:22px;margin-top:-11px;border-radius:0 4px 4px 0;background:var(--l-rail-encre)}
+html[data-gamme="lavande"] .nav.on svg{color:var(--l-rail-encre)}
+html[data-gamme="lavande"] .nav .cnt{background:var(--accent);color:var(--l-rail-encre);border-radius:7px;padding:0 6px}
+html[data-gamme="lavande"] .railcard{background:var(--l-rail-survol);box-shadow:none;color:var(--l-rail-encre)}
+html[data-gamme="lavande"] .railcard .row,html[data-gamme="lavande"] .railcard .btn.flat{color:var(--l-rail-doux)}
+html[data-gamme="lavande"] .railcard b{color:var(--l-rail-encre)}
+html[data-gamme="lavande"] .railcard .btn.flat:hover{background:var(--l-rail);color:var(--l-rail-encre)}
+html[data-gamme="lavande"] .title{font-weight:600;letter-spacing:-.025em}
+html[data-gamme="lavande"] .card,html[data-gamme="lavande"] .fig{background:var(--l-verre);border:1px solid var(--l-verre-bord);backdrop-filter:blur(18px) saturate(1.15);-webkit-backdrop-filter:blur(18px) saturate(1.15)}
+html[data-gamme="lavande"] .btn{border-radius:12px}
+html[data-gamme="lavande"] .btn.solid{background:var(--l-bouton);color:var(--l-bouton-encre)}
+html[data-gamme="lavande"] .views{background:var(--l-verre);border-radius:16px;padding:5px;box-shadow:var(--lift)}
+html[data-gamme="lavande"] .view{border-radius:11px;padding:7px 14px}
+html[data-gamme="lavande"] .view.on{background:var(--l-bouton);color:var(--l-bouton-encre)}
+html[data-gamme="lavande"] .field{border-radius:14px}
+html[data-gamme="lavande"] .dialogue{border-radius:22px;background:var(--l-verre);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+html[data-gamme="lavande"] .toast{border-radius:12px;background:var(--l-bouton);color:var(--l-bouton-encre)}
+@media (max-width:760px){
+  html[data-gamme="lavande"] nav.rail{margin:0;border-radius:0 26px 26px 0}
+  html[data-gamme="lavande"] .nav.on::before{left:-16px}
 }
 
 /* Un secret dévoilé : à côté de son bouton, en chasse fixe, sélectionnable d'un
