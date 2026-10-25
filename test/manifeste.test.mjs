@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import net from 'node:net';
 import { createRequire } from 'node:module';
 import { valider } from '../socle/src/schema.js';
 
@@ -48,4 +49,13 @@ test('« Retrouver une résolution passée » : la signature donnée par le Hub 
     assert.equal(r.json.results[0]?.neuron.resolution, 'rotation des journaux rétablie', JSON.stringify(r.json));
     assert.equal((await hub.post('/v1/recall', { signature: 'disque-plein-var' })).status, 400, 'l\'ancienne forme à plat est refusée');
   } finally { await inst.arreter(); }
+});
+
+test('manifeste : relais de confiance du réseau du Hub par défaut, HTTPS reconnu derrière Relay', () => {
+  // Derrière Relay (réseau Docker du Hub), le HTTPS n'est reconnu que si le relais est de confiance.
+  const proxys = manifeste.config.find(c => c.key === 'SOCLE_PROXYS').default;
+  assert.ok(proxys, 'relais de confiance vide : SYNAPSE se croirait en HTTP derrière Relay');
+  const relais = new net.BlockList();
+  for (const p of proxys.split(',')) { const [a, l] = p.trim().split('/'); relais.addSubnet(a, Number(l)); }
+  assert.ok(relais.check('172.18.0.5') && !relais.check('10.0.0.11'), 'le réseau Docker du Hub, pas le réseau local');
 });

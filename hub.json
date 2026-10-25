@@ -179,9 +179,9 @@
       "key": "SOCLE_PROXYS",
       "label": "Relais de confiance",
       "type": "string",
-      "default": "",
+      "default": "172.16.0.0/12",
       "advanced": true,
-      "help": "Plages (CIDR) des relais inverses autorisés à transmettre l'adresse du client. Vide : l'adresse vue est celle de la connexion."
+      "help": "Plages (CIDR, séparées par des virgules) des relais autorisés à transmettre l'adresse du client et le HTTPS : au moins celle du réseau du Hub, où vit Relay. Vide : SYNAPSE se croit en HTTP derrière Relay et refuse les clés d'accès."
     },
     {
       "key": "SOCLE_ORIGINES",
