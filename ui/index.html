@@ -988,11 +988,11 @@ function sphereCerveau(centre,rb,ids,coul,cid,nom,total,commun,parent){
     const sp=new THREE.Sprite(n.cardMat);
     sp.position.set(Math.cos(t)*r*rb,y*rb,Math.sin(t)*r*rb);
     const cw=Math.min(n.cwBase*.85,cote);sp.scale.set(cw,cw*120/168,1);
-    sp.userData.id=n.id;g.add(sp);BRAIN_SPRS.push(sp);
+    sp.userData.id=n.id;sp.userData.dans=cid;g.add(sp);BRAIN_SPRS.push(sp);
   }
   const l=texteSprite(commun?nom.toUpperCase():nom,nfr(total)+(total>1?' entrées':' entrée'),coul,commun?1.35:1);
   l.position.set(0,rb*1.14+(commun?4:3),0);l.userData.cerveau=cid;g.add(l);BRAIN_LBLS.push(l);
-  BRAIN_INFO.set(cid,{g,rb,nom,total});
+  BRAIN_INFO.set(cid,{g,rb,nom,total,lbl:l});
 }
 function brin(a,b,coul,op){
   const mid=a.clone().add(b).multiplyScalar(.5);mid.y+=a.distanceTo(b)*.14;
@@ -1066,7 +1066,7 @@ function majNav(){
   $('#navC').querySelectorAll('[data-c]').forEach(b=>{const on=b.dataset.c===ici;b.classList.toggle('ici',on);if(on&&b.scrollIntoView)b.scrollIntoView({block:'nearest',inline:'nearest'});});
 }
 function allerA(cid){
-  if(cid==='global'){state.libre=false;state.cerveauSuivi=null;tweenTo({tgx:0,tgy:0,tgz:0,r:72},850,easeIOC);toast('Cerveau global · '+nfr(ETAT.total)+' entrées');majNav();return;}
+  if(cid==='global'){lacheCarteMini();state.cible=null;state.libre=false;state.cerveauSuivi=null;tweenTo({tgx:0,tgy:0,tgz:0,r:72},850,easeIOC);toast('Cerveau global · '+nfr(ETAT.total)+' entrées');majNav();return;}
   versCerveau(cid);
 }
 function pasCerveau(pas){
@@ -1084,12 +1084,13 @@ function pickCerveau(cx,cy){
   ray.setFromCamera(mouse,camera);
   const hit=ray.intersectObjects(BRAIN_LBLS.concat(BRAIN_SPRS),false)[0];
   if(!hit)return null;
-  return hit.object.userData.cerveau?{cerveau:hit.object.userData.cerveau}:{id:hit.object.userData.id};
+  return hit.object.userData.cerveau?{cerveau:hit.object.userData.cerveau}:{id:hit.object.userData.id,dans:hit.object.userData.dans,sprite:hit.object};
 }
 /* la caméra suit le cerveau choisi, la scène cesse de tourner : la cible
    ne s'échappe pas pendant qu'on la regarde */
 function versCerveau(cid){
   const b=BRAIN_INFO.get(cid);if(!b)return;
+  lacheCarteMini();state.cible=null;
   state.cerveauSuivi=cid;state.libre=false;
   tweenTo({r:b.rb*5+22},850,easeIOC);majNav();
   toast(b.nom+' · '+nfr(b.total)+(b.total>1?' entrées':' entrée'));
@@ -1308,7 +1309,7 @@ function focusCard(n){
      de la texture retombe sous 1.5x et le contexte reste visible. */
   tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+20},760,easeIOC);
 }
-function homeCam(){state.cerveauSuivi=null;state.libre=false;if(ORDRE_C.length)majNav();tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:ETAT.cerveaux?.64:1.12,r:ETAT.cerveaux?240:62},900,easeIOC);}
+function homeCam(){lacheCarteMini();state.cible=null;state.cerveauSuivi=null;state.libre=false;if(ORDRE_C.length)majNav();tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:ETAT.cerveaux?.64:1.12,r:ETAT.cerveaux?240:62},900,easeIOC);}
 function frame(v,r){tweenTo({tgx:v.x,tgy:v.y,tgz:v.z,r},650,easeIOC);}
 function worldOf(id){byId[id].spr.getWorldPosition(_wp);return _wp;}
 
@@ -1318,7 +1319,7 @@ let dragging=false,px=0,py=0,pinch=0,downX=0,downY=0,downT=0,panX=0,panY=0;
 function deplace(dx,dy){
   const right=_v1.setFromMatrixColumn(camera.matrixWorld,0),up=_v2.setFromMatrixColumn(camera.matrixWorld,1);
   const k=rig.r*.0016;
-  if(state.cerveauSuivi){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;majNav();}
+  if(state.cerveauSuivi||state.cible){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;state.cible=null;majNav();}
   state.libre=true;
   rig.tgG.addScaledVector(right,-dx*k).addScaledVector(up,dy*k);
   if(rig.tgG.length()>260)rig.tgG.setLength(260);
@@ -1353,13 +1354,13 @@ canvas.addEventListener('pointerup',e=>{
     const id=pick(e.clientX,e.clientY);
     const c=id?null:pickCerveau(e.clientX,e.clientY);
     if(id)selectNode(id);
-    else if(c&&c.id)selectNode(c.id);
+    else if(c&&c.id)selectNodeMini(c.id,c.sprite);
     else if(c&&c.cerveau)versCerveau(c.cerveau);
     else if(state.selected)clearSelection();
     else if(state.filtre)clearFiltre();
   }
 });
-canvas.addEventListener('dblclick',()=>{state.selected?focusCard(byId[state.selected]):homeCam();});
+canvas.addEventListener('dblclick',()=>recadre());
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();cancelTween();
@@ -1406,13 +1407,13 @@ function vole(){
   if(TOUCHES.has('f'))y-=1;
   if(!x&&!y&&!z)return;
   cancelTween();
-  if(state.cerveauSuivi){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;majNav();}
+  if(state.cerveauSuivi||state.cible){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;state.cible=null;majNav();}
   state.libre=true;
   rig.tgG.addScaledVector(avant,z*v).addScaledVector(cote,x*v);rig.tgG.y+=y*v;
   if(rig.tgG.length()>260)rig.tgG.setLength(260);
 }
 $('#btnHome').onclick=()=>{clearSelection(true);};
-$('#btnReset').onclick=()=>{state.selected?focusCard(byId[state.selected]):homeCam();};
+$('#btnReset').onclick=()=>recadre();
 
 /* SÉLECTION */
 const state={selected:null,related:new Set(),tags:new Set(),lastSig:0,rot:reduced?0:.0004,rotCur:0,
@@ -1420,18 +1421,47 @@ const state={selected:null,related:new Set(),tags:new Set(),lastSig:0,rot:reduce
      Tant qu il est actif, les autres cartes s estompent et ne repondent
      plus au clic — la scene ne montre que la reponse. */
   filtre:null};
-function selectNode(id){
+/* Une carte choisie dans la sphère d'un cerveau reste dans ce cerveau :
+   la caméra va sur CETTE carte, vue de l'extérieur de sa sphère, et la
+   suit ; la même entrée dans la grande sphère n'est pas touchée. */
+function lacheCarteMini(){
+  if(state.carteMini){const sp=state.carteMini;sp.scale.set(sp.userData.w,sp.userData.h,1);
+    const b=BRAIN_INFO.get(sp.userData.dans);if(b)b.lbl.visible=true;state.carteMini=null;}
+}
+function focusMini(sp){
+  const b=BRAIN_INFO.get(sp.userData.dans);if(!b)return;
+  b.g.getWorldPosition(_v2);sp.getWorldPosition(_wp);
+  const d=_v1.copy(_wp).sub(_v2).normalize();
+  const thT=Math.atan2(d.z,d.x),phT=Math.min(Math.PI-.15,Math.max(.15,Math.acos(Math.max(-1,Math.min(1,d.y)))));
+  state.cible=sp;
+  tweenTo({th:thT,ph:phT,r:Math.max(7,b.rb*1.2+5)},760,easeIOC);
+}
+function selectNodeMini(id,sp){
+  lacheCarteMini();
+  selectNode(id,true);
+  state.cerveauSuivi=sp.userData.dans;state.carteMini=sp;state.libre=false;
+  sp.userData.w=sp.scale.x;sp.userData.h=sp.scale.y;sp.scale.set(sp.scale.x*1.7,sp.scale.y*1.7,1);
+  /* de si près, le nom du cerveau couvrirait l'écran : il revient à la fermeture */
+  {const b=BRAIN_INFO.get(sp.userData.dans);if(b)b.lbl.visible=false;}
+  focusMini(sp);majNav();
+}
+function recadre(){
+  if(state.carteMini)focusMini(state.carteMini);
+  else if(state.selected)focusCard(byId[state.selected]);
+  else homeCam();
+}
+function selectNode(id,mini){
   const n=byId[id];if(!n)return;
+  if(!mini){lacheCarteMini();state.cible=null;}
   state.selected=id;state.cerveauSuivi=null;
   state.related=new Set(NEIGH[id]);
   state.tags=new Set(n.pathTags);
   pulse(id,.0,1);              /* purge d'un éventuel pulse résiduel */
-  activeLabels.add(id);
-  spawnSignal(id,true);
-  focusCard(n);
+  if(!mini){activeLabels.add(id);spawnSignal(id,true);focusCard(n);}
   renderInspector(n);
 }
 function clearSelection(goHome){
+  if(state.carteMini){lacheCarteMini();state.cible=null;}
   if(state.selected)activeLabels.delete(state.selected);
   state.selected=null;state.related.clear();state.tags.clear();
   insp.classList.remove('on');
@@ -1832,7 +1862,8 @@ function loop(){
   state.rotCur+=(rotGoal-state.rotCur)*.05;
   world.rotation.y+=state.rotCur;
   world.updateMatrixWorld(true);
-  if(state.cerveauSuivi&&BRAIN_INFO.has(state.cerveauSuivi)){BRAIN_INFO.get(state.cerveauSuivi).g.getWorldPosition(_wp);rig.tgG.copy(_wp);}
+  if(state.cible){state.cible.getWorldPosition(_wp);rig.tgG.copy(_wp);}
+  else if(state.cerveauSuivi&&BRAIN_INFO.has(state.cerveauSuivi)){BRAIN_INFO.get(state.cerveauSuivi).g.getWorldPosition(_wp);rig.tgG.copy(_wp);}
 
   /* --- respiration du noyau --- */
   const br=1+Math.sin(t*1.1)*.05;
