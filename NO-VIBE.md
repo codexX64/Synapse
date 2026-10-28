@@ -181,3 +181,8 @@ Vérifié dans Chromium contre la vitrine : trois fois → mène à kimi, ↑ à
 Une carte choisie dans la sphère d'un cerveau ouvrait son double dans la grande sphère : la caméra quittait le cerveau. Elle va maintenant sur cette carte-là, vue de l'extérieur de la sphère du cerveau, et la suit ; la carte grossit, l'inspecteur s'ouvre, le nom du cerveau se masque le temps de la lecture. RESET CAM et le double-clic recadrent sur elle ; Échap ferme et laisse dans le cerveau. Une carte de la grande sphère se comporte comme avant.
 
 Vérifié dans Chromium contre la vitrine : clic sur une carte de vigie à l'écran, caméra à 15 unités de cette carte (105 de son double central), inspecteur ouvert, nom masqué puis revenu après Échap, toujours dans vigie ; aucune erreur. 190 essais verts.
+
+## Suivi du 2026-10-28 (3.3.2) : plus de cerveau vide
+En production, la scène montre 1 400 cartes sur 145 387, choisies par liens puis récence : vigie (141 990 entrées) prenait toutes les places et vox (2 entrées) s'affichait en sphère vide. `/v1/graph` réserve maintenant à chaque cerveau ses 24 entrées les plus récentes (placées chez lui ou remontées jusqu'à lui) avant de compléter avec le reste, sans dépasser la limite. Côté scène, un cerveau sans carte à montrer n'est plus dessiné ni proposé dans la barre ; un commun vide qui a des cerveaux en dessous reste un point de jonction sans enveloppe.
+
+Vérifié : essai unitaire (300 alertes de vigie, 2 entrées de vox, scène de 50 : vox présent, limite tenue, chaque carte sait où elle est) ; scène et point de jonction dans Chromium sans erreur. 191 essais verts.
