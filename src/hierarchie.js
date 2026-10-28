@@ -28,8 +28,8 @@ const PROFONDEUR_MAX = 12;
 
 const DEFAUTS = {
   membre: {},
-  commun: { seuil: 70, convergence: 2, remontee: 'auto', toujours: ['securite', 'decision'], jamais: ['simulation'], fenetre_jours: 90 },
-  global: { seuil: 101, convergence: 2, remontee: 'auto', toujours: [], jamais: ['simulation'], fenetre_jours: 180 },
+  commun: { seuil: 70, convergence: 2, remontee: 'auto', toujours: ['decision'], jamais: ['simulation'], fenetre_jours: 90, repetition_heures: 24 },
+  global: { seuil: 101, convergence: 2, remontee: 'auto', toujours: [], jamais: ['simulation'], fenetre_jours: 180, repetition_heures: 24 },
 };
 const REMONTEES = new Set(['auto', 'valider', 'coupee']);
 const NOM_DOMAINE = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,47}$/u;
@@ -151,6 +151,7 @@ function regler(db, id, demande) {
   const r = reglages(c), o = {};
   if (demande.seuil !== undefined) o.seuil = Math.max(0, Math.min(101, Math.round(Number(demande.seuil))));
   if (demande.convergence !== undefined) o.convergence = Math.max(2, Math.min(20, Math.round(Number(demande.convergence))));
+  if (demande.repetition_heures !== undefined) o.repetition_heures = Math.max(0, Math.min(720, Math.round(Number(demande.repetition_heures))));
   if (demande.fenetre_jours !== undefined) o.fenetre_jours = Math.max(1, Math.min(3650, Math.round(Number(demande.fenetre_jours))));
   if (demande.remontee !== undefined) {
     if (!REMONTEES.has(demande.remontee)) throw new Error('remontée : auto, valider ou coupee');
@@ -188,21 +189,59 @@ function cles(e, entites) {
   return [...out].filter(k => k.length > 3).slice(0, 12);
 }
 
+/* La gravité dite par la source (vigie écrit meta.gravite, d'autres
+   meta.severity) prime sur le genre. Une étiquette de domaine comme
+   « securite » ne dit rien de l'importance : chez vigie, elle est sur
+   tout. */
+const GRAVITES = { critique: 90, critical: 90, eleve: 70, 'élevé': 70, high: 70, error: 70,
+  moyen: 50, moyenne: 50, medium: 50, warning: 50, faible: 30, low: 30, info: 15, debug: 5 };
+
 function importanceDe(e, demandee) {
   if (Number.isFinite(Number(demandee)) && demandee !== null && demandee !== undefined && demandee !== '')
     return Math.max(0, Math.min(100, Math.round(Number(demandee))));
   const k = String(e.kind || ''), tags = ' ' + (e.tags || '') + ' ';
-  let n = { L3: 70, L2: 55, L1: 50, L0: 20 }[e.level] ?? 20;
+  let meta = {};
+  try { meta = typeof e.meta === 'string' ? JSON.parse(e.meta) : (e.meta || {}); } catch { /* méta illisible : pas de gravité */ }
+  const grav = GRAVITES[String(meta.gravite || meta.severity || '').toLowerCase()];
+  let n = grav ?? ({ L3: 70, L2: 55, L1: 50, L0: 20 }[e.level] ?? 20);
   if (/^decision\./.test(k)) n = Math.max(n, 80);
-  if (/^incident\./.test(k)) n = Math.max(n, 60);
-  if (tags.includes(' securite ')) n = Math.max(n, 90);
+  if (/^incident\./.test(k) && grav === undefined) n = Math.max(n, 60);
   if (tags.includes(' simulation ')) n = Math.min(n, 5);
   return n;
 }
 
+/* Le motif d'une entrée : son genre et son titre, adresses, nombres et
+   identifiants neutralisés. « Menace non bloquée : 87.120.84.129 (score
+   239) » et « … 87.120.84.248 (score 241) » ont le même motif. */
+const crypto = require('node:crypto');
+function motifDe(e) {
+  const t = String(e.title || '').toLowerCase()
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b/g, '<ip>')
+    .replace(/\b[0-9a-f]{8,}\b/g, '<id>')
+    .replace(/\d+/g, '#')
+    .replace(/\s+/g, ' ').trim().slice(0, 200);
+  return crypto.createHash('sha1').update(String(e.kind) + '\u001f' + t).digest('hex').slice(0, 20);
+}
+
 /* placement et tamis */
 
-const entree = (db, id) => db.prepare(`SELECT id, kind, level, title, body, tags, meta, ref, ns, occurred_at FROM entries WHERE id=?`).get(id);
+const entree = (db, id) => db.prepare(`SELECT id, source, kind, level, title, body, tags, meta, ref, ns, occurred_at FROM entries WHERE id=?`).get(id);
+
+/* Le Hub relaie sous son nom les alertes des autres services (« Alerte
+   eleve : <titre> »). Un relais n'est pas une seconde source : le même
+   fait vu deux fois ferait une fausse convergence. Une alerte du Hub qui
+   reprend mot pour mot le titre d'une entrée d'un autre service, à dix
+   minutes près, est rangée chez ce service. */
+function origineRelayee(db, e) {
+  const m = /^alerte\s+\S+\s*:\s*(.+)$/i.exec(String(e.title || ''));
+  const titre = (m ? m[1] : String(e.title || '')).trim();
+  if (!titre) return null;
+  const t = Date.parse(e.occurred_at);
+  const de = new Date(t - 600000).toISOString(), a = new Date(t + 600000).toISOString();
+  const r = db.prepare(`SELECT source FROM entries WHERE ns = ? AND occurred_at BETWEEN ? AND ? AND source != ? AND title = ? LIMIT 1`)
+    .get(e.ns, de, a, e.source, titre);
+  return r ? r.source : null;
+}
 
 function placer(db, id, c, importance, lesCles) {
   db.prepare(`INSERT OR IGNORE INTO h_place(entry_id,cerveau_id,importance,place) VALUES(?,?,?,?)`).run(id, c.id, importance, maintenant());
@@ -220,7 +259,8 @@ function classer(db, id, { src, membre, domaine: chemin, importance, entites } =
   const e = entree(db, id);
   if (!e || String(e.kind).startsWith('fiche.')) return null;
   const compte = compteDe(db, src) || PRINCIPAL;
-  const nom = String(membre || (src && src.name) || 'inconnu').slice(0, 80);
+  const relais = !membre && src && src.name === 'hub' && /^alert/.test(String(e.kind)) ? origineRelayee(db, e) : null;
+  const nom = String(relais || (membre && membre !== 'inconnu' ? membre : (src && src.name) || 'inconnu')).slice(0, 80);
   const dom = chemin || (IA_CONNUES.test(nom) || e.kind === 'echange' ? 'IA' : 'HomeLab');
   const c = cerveauMembre(db, compte, nom, dom);
   const imp = importanceDe(e, importance), k = cles(e, entites);
@@ -266,7 +306,8 @@ function presenter(db, id, de, prof, journal) {
   const a = l => (l || []).some(t => tags.has(t));
   if (r.remontee !== 'coupee' && !a(r.jamais)) {
     const regle = a(r.toujours) ? 'etiquette' : p.importance >= r.seuil ? 'importance' : null;
-    if (regle) {
+    if (regle && repetee(db, e, vers, r)) journal.push({ entree: id, de: de.id, vers: vers.id, regle: 'repetition', statut: 'comptee' });
+    else if (regle) {
       const statut = r.remontee === 'valider' ? 'a_valider' : 'faite';
       const ins = db.prepare(`INSERT OR IGNORE INTO h_remontees(entry_id,de_cerveau,vers_cerveau,regle,statut,quand) VALUES(?,?,?,?,?,?)`)
         .run(id, de.id, vers.id, regle, statut, maintenant());
@@ -277,6 +318,25 @@ function presenter(db, id, de, prof, journal) {
     }
   }
   converger(db, vers, id, r, prof, journal);
+}
+
+/* Un motif déjà monté dans ce cerveau depuis moins de repetition_heures
+   ne remonte pas : il est compté sur l'entrée qui le représente. La
+   période se lit sur la date du fait, pas sur l'horloge : une reprise
+   d'un mois d'historique compte comme le mois s'est passé. */
+function repetee(db, e, vers, r) {
+  if (!r.repetition_heures) return false;
+  const m = motifDe(e);
+  const quand = e.occurred_at;
+  const deja = db.prepare(`SELECT representant, dernier FROM h_motifs WHERE cerveau_id=? AND motif=?`).get(vers.id, m);
+  const fenetre = r.repetition_heures * 3600000;
+  if (deja && Math.abs(Date.parse(quand) - Date.parse(deja.dernier)) < fenetre) {
+    db.prepare(`UPDATE h_motifs SET n = n + 1, dernier = max(dernier, ?) WHERE cerveau_id=? AND motif=?`).run(quand, vers.id, m);
+    return true;
+  }
+  db.prepare(`INSERT INTO h_motifs(cerveau_id,motif,representant,n,dernier) VALUES(?,?,?,1,?)
+    ON CONFLICT(cerveau_id,motif) DO UPDATE SET representant=excluded.representant, n=1, dernier=excluded.dernier`).run(vers.id, m, e.id, quand);
+  return false;
 }
 
 /* Versement au commun : une entrée arrivée dans le commun d'un domaine
@@ -336,10 +396,16 @@ function reecrire(db, f, ns, kind, ref, titre, corps) {
     .run(corps, ingest.hashOf({ ns, source: '@tamis', kind, ref, title: titre, body: corps }), f.id);
 }
 
-/* Une fiche naît avec ses contributions les plus récentes, puis se
-   complète d'une ligne par contribution nouvelle : jamais refaite en
-   entier à chaque écriture. Au-delà de LIGNES_MAX lignes, les liens
-   continuent de s'ajouter, le texte ne grossit plus. */
+/* Une fiche cite au plus LIENS_PAR_ORIGINE exemples par origine, les plus
+   récents à sa naissance, puis les suivants jusqu'au plafond ; elle compte
+   toutes les mentions. Une clé vue des milliers de fois donne une fiche
+   lisible, pas une liste de milliers de liens. */
+const LIENS_PAR_ORIGINE = 10;
+
+function entete(globale, k, mentions, origines) {
+  return `${globale ? 'Plusieurs domaines' : 'Plusieurs sources'} parlent de ${k} : ${mentions} mention(s), ${origines} origine(s).`;
+}
+
 function fiche(db, c, k, id, depuis, prof, journal) {
   const globale = c.genre === 'global';
   const kind = globale ? 'fiche.correlation' : 'fiche.commune';
@@ -347,22 +413,32 @@ function fiche(db, c, k, id, depuis, prof, journal) {
   const ref = `fiche:${c.id}:${k}`;
   const titre = `${globale ? 'Corrélation' : 'Fiche commune'} · ${k}`;
   const ns = 'h:' + c.compte;
+  const origines = () => db.prepare(`SELECT count(*) n FROM h_convergence WHERE cerveau_id=? AND cle=?`).get(c.id, k).n;
   const f = db.prepare(`SELECT id, body FROM entries WHERE ref=? AND kind=?`).get(ref, kind);
   if (f) {
-    if (f.id === id || db.prepare(`SELECT 1 FROM links WHERE from_id=? AND to_id=? AND relation=?`).get(f.id, id, relation)) return;
+    if (f.id === id) return;
     const v = db.prepare(`SELECT origine FROM h_vu WHERE entry_id=? AND cerveau_id=?`).get(id, c.id);
-    if (!v) return;
-    ingest.link(db, f.id, id, relation, '@tamis');
-    if (f.body.split('\n').filter(l => l.startsWith('- ')).length < LIGNES_MAX)
-      reecrire(db, f, ns, kind, ref, titre, f.body + '\n' + ligneDe(db, id, v.origine));
+    if (!v || db.prepare(`SELECT 1 FROM links WHERE from_id=? AND to_id=? AND relation=?`).get(f.id, id, relation)) return;
+    db.prepare(`INSERT INTO h_fiches(fiche_id,mentions) VALUES(?,1) ON CONFLICT(fiche_id) DO UPDATE SET mentions = mentions + 1`).run(f.id);
+    const mentions = db.prepare(`SELECT mentions FROM h_fiches WHERE fiche_id=?`).get(f.id).mentions;
+    const cites = db.prepare(`SELECT count(*) n FROM links l JOIN h_vu w ON w.entry_id = l.to_id AND w.cerveau_id = ?
+                              WHERE l.from_id = ? AND l.relation = ? AND w.origine = ?`).get(c.id, f.id, relation, v.origine).n;
+    let lignes = f.body.split('\n').slice(1);
+    if (cites < LIENS_PAR_ORIGINE) {
+      ingest.link(db, f.id, id, relation, '@tamis');
+      if (lignes.filter(l => l.startsWith('- ')).length < LIGNES_MAX) lignes = [...lignes, ligneDe(db, id, v.origine)];
+    }
+    reecrire(db, f, ns, kind, ref, titre, [entete(globale, k, mentions, origines()), ...lignes].join('\n'));
     return;
   }
-  const vus = db.prepare(`SELECT v.entry_id, v.origine ${VUS_PAR_CLE} ORDER BY v.entry_id DESC LIMIT ${LIGNES_MAX}`)
-    .all(c.id, k, depuis).reverse();
-  const corps = `${globale ? 'Plusieurs domaines' : 'Plusieurs sources'} parlent de ${k}.\n\n`
-    + vus.map(v => ligneDe(db, v.entry_id, v.origine)).join('\n');
+  const mentions = db.prepare(`SELECT count(*) n ${VUS_PAR_CLE}`).get(c.id, k, depuis).n;
+  const vus = db.prepare(`SELECT entry_id, origine FROM (
+      SELECT v.entry_id, v.origine, row_number() OVER (PARTITION BY v.origine ORDER BY v.entry_id DESC) rang ${VUS_PAR_CLE})
+    WHERE rang <= ${LIENS_PAR_ORIGINE} ORDER BY entry_id`).all(c.id, k, depuis);
+  const corps = [entete(globale, k, mentions, origines()), '', ...vus.slice(-LIGNES_MAX).map(v => ligneDe(db, v.entry_id, v.origine))].join('\n');
   const r = ingest.insert(db, { ns, kind, ref, title: titre, body: corps, level: 'L2', tags: ['fiche'] }, '@tamis');
   if (!r.ok || r.duplicate) return;
+  db.prepare(`INSERT OR REPLACE INTO h_fiches(fiche_id,mentions) VALUES(?,?)`).run(r.id, mentions);
   const imp = Math.min(100, 10 + Math.max(0, ...vus.map(v =>
     (db.prepare(`SELECT importance FROM h_place WHERE entry_id=?`).get(v.entry_id) || { importance: 0 }).importance)));
   db.prepare(`INSERT OR IGNORE INTO h_place(entry_id,cerveau_id,importance,place) VALUES(?,?,?,?)`).run(r.id, c.id, imp, maintenant());
@@ -507,7 +583,7 @@ function reprendre(db, { lot = 500, max = Infinity } = {}) {
         if (String(e.kind).startsWith('fiche.') || String(e.ns).startsWith('h:')) continue;
         let agent = null;
         try { agent = JSON.parse(e.meta || '{}').agent || null; } catch { /* méta illisible : la source sert de membre */ }
-        if (classer(db, e.id, { src: { name: e.source }, membre: e.kind === 'echange' && agent ? agent : e.source })) total++;
+        if (classer(db, e.id, { src: { name: e.source }, membre: e.kind === 'echange' && agent && agent !== 'inconnu' ? agent : undefined })) total++;
       }
       db.prepare(`INSERT OR REPLACE INTO meta(k,v) VALUES('hierarchie_reprise',?)`).run(String(ids.at(-1).id));
       db.exec('COMMIT');
@@ -525,6 +601,6 @@ function resteAReprendre(db) {
 
 module.exports = {
   COMMUN, PRINCIPAL, DEFAUTS, mode, changerMode, principal, compteDe, globalDe, domaineChemin, cerveauMembre,
-  cerveau, parentDe, ascendants, reglages, regler, cles, importanceDe, classer, valider, acces, chercher,
+  cerveau, parentDe, ascendants, reglages, regler, cles, importanceDe, motifDe, classer, valider, acces, chercher,
   arbre, rattacher, creerProjet, reprendre, resteAReprendre, slug,
 };

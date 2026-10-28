@@ -245,6 +245,23 @@ function migrerV2(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_h_vu_cerveau ON h_vu(cerveau_id);
 
+    /* motifs déjà montés dans un cerveau : la même alerte répétée sous
+       une autre adresse ne remonte qu'une fois par période, comptée */
+    CREATE TABLE IF NOT EXISTS h_motifs (
+      cerveau_id  INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      motif       TEXT NOT NULL,
+      representant INTEGER REFERENCES entries(id) ON DELETE SET NULL,
+      n           INTEGER NOT NULL DEFAULT 1,
+      dernier     TEXT NOT NULL,
+      PRIMARY KEY (cerveau_id, motif)
+    );
+
+    /* mentions comptées d'une fiche : ses liens sont bornés, son compte non */
+    CREATE TABLE IF NOT EXISTS h_fiches (
+      fiche_id INTEGER PRIMARY KEY REFERENCES entries(id) ON DELETE CASCADE,
+      mentions INTEGER NOT NULL DEFAULT 0
+    );
+
     /* qui a parlé de quelle clé, par cerveau, et quand pour la dernière
        fois : compter une convergence lit quelques lignes, jamais toutes
        les entrées qui portent la clé */

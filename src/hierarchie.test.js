@@ -82,8 +82,10 @@ test('tamis : importance, étiquette forcée, étiquette interdite', () => {
   const db = base();
   const d = ecrire(db, 'claude-code', { kind: 'decision.archi', title: 'On garde SQLite', body: '' });
   assert.deepEqual(d.c.remontees.map(r => [r.regle, r.statut]), [['importance', 'faite']], 'une décision monte au commun, pas au global');
-  const s = ecrire(db, 'proxmox', { title: 'Port SSH ouvert', body: '', tags: ['securite'] });
+  const s = ecrire(db, 'proxmox', { title: 'Port SSH ouvert', body: '', tags: ['decision'] });
   assert.deepEqual(s.c.remontees.map(r => r.regle), ['etiquette']);
+  const dom = ecrire(db, 'vigie', { title: 'Note de veille', body: '', tags: ['securite'] });
+  assert.deepEqual(dom.c.remontees, [], 'une étiquette de domaine ne force rien');
   const x = ecrire(db, 'proxmox', { kind: 'decision.x', title: 'Décision simulée', body: '', tags: ['simulation'] });
   assert.deepEqual(x.c.remontees, []);
   const forte = ecrire(db, 'kimi', { title: 'Note', body: '' }, { importance: 95 });
@@ -105,7 +107,7 @@ test('remontée à valider : rien ne monte avant le geste humain', () => {
 
 test('sous-domaines : Connaissance/Réseau remonte par Connaissance jusqu\'au global', () => {
   const db = base();
-  const a = ecrire(db, 'notes-reseau', { tags: ['securite'], title: 'Segmenter les IoT', body: '' }, { domaine: 'Connaissance/Réseau' });
+  const a = ecrire(db, 'notes-reseau', { tags: ['decision'], title: 'Segmenter les IoT', body: '' }, { domaine: 'Connaissance/Réseau' });
   const reseau = commun(db, 'Réseau'), conn = commun(db, 'Connaissance');
   const dReseau = db.prepare(`SELECT * FROM h_domaines WHERE id=?`).get(reseau.domaine_id);
   assert.equal(dReseau.parent_id, conn.domaine_id);
@@ -245,4 +247,67 @@ test('coût : une clé répétée par une seule source ne rend pas l\'écriture 
   const fin = mesure();
   assert.ok(fin < Math.max(2, debut * 3), `écriture ${debut.toFixed(2)} ms au début, ${fin.toFixed(2)} ms après 800 répétitions`);
   assert.equal(fiches(db, 'fiche.commune').length, 0, 'une seule source : jamais de fiche');
+});
+
+test('gravité : celle dite par la source (gravite ou severity) fixe l\'importance', () => {
+  const db = base();
+  const g = (meta, kind = 'security.alert') => ecrire(db, 'vigie', { kind, title: 'x ' + JSON.stringify(meta), body: '', meta, tags: ['securite'] }).c.importance;
+  assert.equal(g({ gravite: 'critique' }), 90);
+  assert.equal(g({ gravite: 'eleve' }), 70);
+  assert.equal(g({ severity: 'low' }), 30);
+  assert.equal(g({}), 20, 'sans gravité : le niveau L0, pas l\'étiquette securite');
+  assert.equal(g({ gravite: 'faible' }, 'incident.security'), 30, 'une gravité dite prime sur le genre incident');
+});
+
+test('répétition : la même alerte sous mille adresses monte une fois par période, comptée', () => {
+  const db = base();
+  const t0 = Date.parse('2026-10-22T10:00:00Z');
+  const ecr = (i, h) => ecrire(db, 'vigie', { kind: 'security.alert', tags: ['securite'], meta: { gravite: 'eleve' }, body: '',
+    title: `Menace extérieure non bloquée : 87.120.${i % 250}.${i % 200} (score ${200 + i % 50})`,
+    occurred_at: new Date(t0 + h * 3600000).toISOString() });
+  for (let i = 0; i < 300; i++) ecr(i, i / 100);
+  const montees = db.prepare(`SELECT count(*) n FROM h_remontees WHERE regle != 'versement'`).get().n;
+  assert.equal(montees, 1, 'un motif, une remontée');
+  assert.equal(db.prepare(`SELECT n FROM h_motifs`).get().n, 300);
+  ecr(999, 30);
+  assert.equal(db.prepare(`SELECT count(*) n FROM h_remontees`).get().n, 2, 'la période passée, le motif remonte à nouveau');
+  const autre = ecrire(db, 'vigie', { kind: 'security.alert', tags: ['securite'], meta: { gravite: 'eleve' }, body: '',
+    title: 'nas : force brute : huit refus de la même adresse', occurred_at: new Date(t0).toISOString() });
+  assert.equal(autre.c.remontees[0].regle, 'importance', 'un autre motif monte');
+  assert.notEqual(H.motifDe({ kind: 'a', title: 'web-01 : x' }), H.motifDe({ kind: 'b', title: 'web-01 : x' }));
+});
+
+test('fiche bornée : dix exemples par origine, toutes les mentions comptées', () => {
+  const db = base();
+  for (let i = 0; i < 40; i++) {
+    ecrire(db, 'vigie', { title: `balayage ${i} : port 21 ouvert`, body: '' });
+    ecrire(db, 'hub', { title: `alerte ${i} : port 21 ouvert`, body: '' });
+  }
+  const [f] = fiches(db, 'fiche.commune');
+  assert.ok(f);
+  assert.equal(liens(db, f.id, 'consolide').length, 20, 'dix par origine');
+  const fraiche = db.prepare(`SELECT body FROM entries WHERE id=?`).get(f.id).body;
+  assert.match(fraiche.split('\n')[0], /port:21 : 80 mention\(s\), 2 origine\(s\)/);
+});
+
+test('agent inconnu : le cerveau prend le nom de la source', () => {
+  const db = base();
+  const r = ingest.insert(db, { ns: 'shared', kind: 'echange', title: 'q', body: 'r', meta: { agent: 'inconnu' } }, 'hub');
+  H.reprendre(db);
+  assert.equal(db.prepare(`SELECT cerveau_id FROM h_place WHERE entry_id=?`).get(r.id).cerveau_id, membre(db, 'hub').id);
+  assert.equal(membre(db, 'inconnu'), undefined);
+});
+
+test('relais du Hub : une alerte reprise mot pour mot va chez le service d\'origine, sans fausse convergence', () => {
+  const db = base();
+  const q = '2026-10-22T10:00:00.000Z';
+  for (let i = 0; i < 5; i++) {
+    const titre = `Menace extérieure non bloquée : 87.120.84.${100 + i} (score 239)`;
+    ecrire(db, 'vigie', { kind: 'security.alert', title: titre, body: '', occurred_at: q });
+    ecrire(db, 'hub', { kind: 'alert', title: 'Alerte eleve : ' + titre, body: '', occurred_at: q });
+  }
+  assert.equal(fiches(db, 'fiche.commune').length, 0, 'le même fait relayé ne converge pas');
+  assert.equal(membre(db, 'hub'), undefined, 'les relais sont chez vigie');
+  const propre = ecrire(db, 'hub', { kind: 'alert', title: 'Alerte eleve : sauvegarde du NAS en échec', body: '', occurred_at: q });
+  assert.equal(propre.c.cerveau, membre(db, 'hub').id, 'une alerte sans original reste au Hub');
 });

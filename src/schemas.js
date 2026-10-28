@@ -115,7 +115,7 @@ const SCHEMAS = {
   'GET /v1/hierarchie/chercher': { requete: { cerveau: { ...ID, requis: true }, q: txt(4000), agent: AGENT, monter: txt(1, { parmi: ['0', '1'] }), limit: ent(1, 200) } },
   'POST /v1/hierarchie/domaines': { corps: { chemin: txt(300, { requis: true }), compte: txt(80) } },
   'PUT /v1/hierarchie/reglages': { corps: {
-    cerveau: { ...ID, requis: true }, seuil: ent(0, 101), convergence: ent(2, 20), fenetre_jours: ent(1, 3650),
+    cerveau: { ...ID, requis: true }, seuil: ent(0, 101), convergence: ent(2, 20), fenetre_jours: ent(1, 3650), repetition_heures: ent(0, 720),
     remontee: txt(10, { parmi: ['auto', 'valider', 'coupee'] }),
     toujours: { type: 'liste', max: 30, de: txt(60) }, jamais: { type: 'liste', max: 30, de: txt(60) },
   } },
