@@ -157,3 +157,10 @@ Ce que la mesure a montré, et corrigé depuis :
 - **agent « inconnu »** : le cerveau prend le nom de la source.
 
 Rejoué sur la forme réelle (alertes vigie en rafale, gravité « élevé », relais du Hub) : 4 remontées pour 5 430 alertes (une par motif), 0 fausse fiche, 0,56 ms par entrée. À remesurer sur la copie de production avant l'étiquette.
+
+## Suivi du 2026-10-28 (3.1.0) : la page Cerveaux
+Page `/cerveaux` (un fichier, `ui/cerveaux.html`, même gamme et même contrat d'API que les autres pages), accès ⬡ dans l'en-tête de la mémoire. Constellation en Canvas 2D : le global en nébuleuse colorée par domaine au centre, les communs en couronne, les sous-domaines un cran plus loin, les membres en amas hexagonaux à la taille logarithmique de leur volume, l'enceinte en anneau de points ; une remontée se voit comme une particule de l'enfant vers le parent (arbre relu toutes les 8 s, seuls les compteurs se mettent à jour si la structure n'a pas changé). Panneau gauche : arbre, projets partagés, instance (mode, versements, jetons de compte). Fiche d'un cerveau : recherche qui monte, fiches, remontées à valider, tamis, rattachement.
+
+Vérifié dans Chromium contre la vitrine (enrichie de dix cerveaux, deux sous-domaines, des convergences et une rafale d'alertes répétées) : 1440, 1024, 768 et 360 px, aucune erreur de console, aucun texte brut ; création d'un projet et d'un domaine depuis la page. 189 essais du service et du socle verts.
+
+Pas encore vérifié : le rendu sur la base de production ; le parcours `outils/parcours-navigateur.mjs` ne couvre pas encore cette page.
