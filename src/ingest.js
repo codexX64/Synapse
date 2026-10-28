@@ -18,7 +18,10 @@
 const crypto = require('node:crypto');
 
 const LEVELS = new Set(['L0', 'L1', 'L2', 'L3']);
-const RELATIONS = new Set(['causes', 'fixes', 'supersedes', 'relates_to', 'part_of']);
+const RELATIONS = new Set(['causes', 'fixes', 'supersedes', 'relates_to', 'part_of', 'consolide', 'correle']);
+/* Une fiche relie ses sources : seul le tamis pose ces liens, sinon
+   n'importe quel appelant ferait passer une entrée pour une fiche. */
+const RELATIONS_PUBLIQUES = new Set([...RELATIONS].filter(r => r !== 'consolide' && r !== 'correle'));
 
 /* filtrage
    Chaque règle correspond à une famille de bruit observée en vrai.
@@ -194,8 +197,9 @@ function insert(db, evt, sourceName) {
 }
 
 function link(db, fromId, toId, relation, by) {
-  if (!RELATIONS.has(relation)) {
-    return { ok: false, error: 'relation hors vocabulaire : ' + [...RELATIONS].join(', ') };
+  const permises = by === '@tamis' ? RELATIONS : RELATIONS_PUBLIQUES;
+  if (!permises.has(relation)) {
+    return { ok: false, error: 'relation hors vocabulaire : ' + [...RELATIONS_PUBLIQUES].join(', ') };
   }
   if (fromId === toId) return { ok: false, error: 'boucle sur soi-même' };
   const has = id => db.prepare(`SELECT 1 FROM entries WHERE id=?`).get(id);
@@ -207,4 +211,4 @@ function link(db, fromId, toId, relation, by) {
 }
 
 module.exports = { insert, link, reject, chunk, normalize, hashOf,
-                   defaultLevel, LEVELS, RELATIONS, looksLikeLog };
+                   defaultLevel, LEVELS, RELATIONS, RELATIONS_PUBLIQUES, looksLikeLog };
