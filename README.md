@@ -107,6 +107,54 @@ PUT    /v1/cerveaux/moi/etat     poser son état du moment (court résumé)
 POST   /v1/cerveaux/orienter     « qui sait ça ? » — et, pour une action, qui a le droit de la faire
 ```
 
+## La hiérarchie des cerveaux (3.0)
+
+Chaque compte a un arbre : un cerveau par IA ou par service (cerveau
+membre), des domaines libres et imbricables (IA, HomeLab, Connaissance/Réseau…)
+qui ont chacun leur cerveau commun, et un cerveau global au sommet. Une
+entrée est écrite une fois ; l'arbre dit où elle est présente.
+
+À l'écriture, l'entrée reçoit ses étiquettes (importance de 0 à 100, clés
+d'entité : IP, VLAN, VM, port, hôte, service, référence) puis passe le tamis
+de chaque niveau :
+
+- elle **monte** si une étiquette la force (`securite`, `decision` par
+  défaut) ou si son importance passe le seuil du cerveau (70 au commun ; le
+  global ne reçoit que ce qu'on force) ; `simulation` ne monte jamais ;
+- si **deux enfants distincts** ont parlé de la même clé, le cerveau fait
+  une **fiche commune** qui cite chacun (lien `consolide`) ; au global, deux
+  domaines sur la même clé donnent une **fiche de corrélation** (lien `correle`) ;
+- une remontée peut être automatique, à valider par une personne, ou coupée.
+
+Une IA lit son propre cerveau et seulement les fiches des cerveaux
+au-dessus : jamais le cerveau brut d'une autre IA. Exception voulue : dans
+un **projet partagé** ouvert, ses membres lisent chez les autres les entrées
+étiquetées `projet:<nom>`.
+
+**Un ou plusieurs comptes**, au choix (`PUT /v1/hierarchie/mode`). En mode
+plusieurs, chacun a son arbre, un compte commun porte l'arbre partagé, et
+chacun choisit les domaines qu'il y verse. Le premier compte garde l'arbre
+d'avant. Un service sans compte écrit au commun ; un **jeton de compte**
+(`cpt_…`) fait écrire une IA dans l'arbre de la personne qui l'a créé.
+
+```
+GET  /v1/hierarchie                      l'arbre (noms et compteurs, jamais de contenu)
+GET  /v1/hierarchie/chercher?cerveau=&q= cherche dans un cerveau, monte jusqu'au global si rien
+POST /v1/hierarchie/domaines             { chemin: "Connaissance/Réseau" }
+PUT  /v1/hierarchie/reglages             seuil, convergence, remontee, toujours, jamais, fenetre_jours
+PUT  /v1/hierarchie/rattacher            déplacer un cerveau membre vers un autre domaine
+GET  /v1/hierarchie/remontees            journal et file « à valider »
+POST /v1/hierarchie/valider              accepter ou refuser une remontée
+GET|POST /v1/hierarchie/projets          projets partagés ; /projets/clore
+PUT  /v1/hierarchie/versements           verser un domaine racine au compte commun
+PUT  /v1/hierarchie/mode                 un | plusieurs (admin, renfort)
+POST /v1/hierarchie/jetons               jeton de compte, montré une fois (renfort)
+```
+
+Un envoi peut nommer son domaine (`domaine`), son importance (`importance`)
+et ses entités (`entites`). Au premier démarrage en 3.0, les entrées
+existantes sont rangées une fois, comme si leur source venait de les écrire.
+
 ## Les cerveaux
 
 SYNAPSE est le cerveau de l'infrastructure ; chaque service qui a son IA y a un

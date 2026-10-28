@@ -114,3 +114,21 @@ Justification de chaque résultat non nul : B.5.7, des symboles d’interface (b
 
 ## Suivi du 2026-10-25 (2.0.2)
 Socle 6f2c864 embarqué sans adaptation du code (son API ne change que par ajouts : `confirmerIdentite`, `raisonCle` exporté, gamme Lavande). La mémoire prend des jetons de mise en page (`--haut`, `--bas`) au lieu de hauteurs répétées dans chaque panneau ; les paramètres prennent `--ecart` au lieu de 14 px ; les textes d'aide sont des paragraphes ; la page du compte reprend la coque du socle au lieu d'une barre à elle. Parcours du navigateur et vitrine écrits sur le modèle de ceux de ProxLab et de NEXARC ; essai du relais de confiance écrit comme le leur. 87 essais du service et 77 du socle, verts ; parcours : 112 écrans × largeurs par gamme, 0 défaut.
+
+## Suivi du 2026-10-28 (3.0.0) : hiérarchie des cerveaux
+Point de départ : `v2.0.2`, 163 essais verts, 1 sauté. Arbre final : 182 verts, 1 sauté. Les 163 de départ passent inchangés ; seul `test/balayage.test.mjs` gagne les 14 routes nouvelles (une catégorie ajoutée : lues par une personne, même en lecture, jamais par un service).
+
+Vérifié :
+- schéma v2 additif : aucune table ni colonne retirée ou renommée ; une base écrite par le `db.js` de la 2.0.2 (copie figée dans `test/anciens/`) migre sans perte, et sa reprise produit la fiche attendue ;
+- tamis : importance, étiquette forcée, étiquette interdite, remontée à valider, sous-domaines, convergence (une source qui se répète ne converge pas avec elle-même), corrélation au global ;
+- accès : une IA ne lit jamais le cerveau brut d'une autre hors projet ouvert ; projet clos, l'accès croisé s'arrête ; un compte ne lit ni ne règle l'arbre d'un autre ; le commun se règle par un admin ;
+- les liens `consolide` et `correle` ne se posent que par le tamis (signé `@tamis`, nom qu'aucun jeton ne peut porter) ; l'espace `h:` refuse toute écriture directe ;
+- jeton de compte : montré une fois, stocké en empreinte, écrit dans l'arbre de son créateur seulement.
+
+Pas encore vérifié :
+- **volume** : le tamis tourne dans la requête d'écriture ; mesuré seulement sur les bases des essais. À mesurer sur la base réelle avant de lâcher un connecteur bavard (cible : < 5 ms par entrée sur 10 000 entrées).
+- **reprise** sur la base réelle : elle range tout au premier démarrage, en lots de 500. Durée non mesurée.
+- une source effacée ne met pas encore à jour le corps des fiches qui la citaient (les liens partent, le texte reste).
+- le choix des domaines du commun qu'un compte consulte (abonnements) n'est pas fait : une personne lit tout le commun.
+- l'interface ne montre pas encore la hiérarchie : phase 3.4.
+- le manifeste `hub.json` n'expose pas encore les routes de la hiérarchie : phase 3.2.
