@@ -70,9 +70,9 @@ nav button.locked{opacity:.45}
 #status span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #status i{flex-shrink:0;width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px var(--mint);animation:bl 2.4s infinite}
 @keyframes bl{50%{opacity:.35}}
-#cerveauxBtn,#paramBtn,#compteBtn{color:var(--mut);text-decoration:none;font-size:15px;padding:4px 8px;
+#paramBtn,#compteBtn{color:var(--mut);text-decoration:none;font-size:15px;padding:4px 8px;
   border:1px solid var(--panel-line);border-radius:5px;transition:.2s;line-height:1}
-#cerveauxBtn:hover,#paramBtn:hover,#compteBtn:hover{color:#fff;border-color:rgba(255,255,255,.3)}
+#paramBtn:hover,#compteBtn:hover{color:#fff;border-color:rgba(255,255,255,.3)}
 #hudBtn{display:none;background:var(--panel);border:1px solid var(--panel-line);color:var(--txt);
   padding:6px 11px;border-radius:5px;font-size:10px;letter-spacing:.12em;cursor:pointer}
 
@@ -289,7 +289,6 @@ body.cherche #console{z-index:50}
   header{flex-wrap:wrap;align-content:space-evenly;column-gap:8px;row-gap:0}
   #status{order:1;margin-left:0}
   #moiBtn{order:2;margin-left:auto}
-  #cerveauxBtn{order:3}
   #paramBtn{order:3}
   #compteBtn{order:4}
   .saut{display:block;order:5;flex-basis:100%;height:0}
@@ -340,7 +339,6 @@ body.cherche #console{z-index:50}
   </div>
   <div id="status"><i></i><span>VECTEURS · …</span></div>
   <button id="moiBtn" title="Ce que SYNAPSE sait de toi"><i></i>FICHE</button>
-  <a href="/cerveaux" id="cerveauxBtn" title="Les cerveaux : constellation, domaines, fiches, réglages">⬡</a>
   <a href="/parametres" id="paramBtn" title="Paramètres et rangement">⚙</a>
   <a href="/compte" id="compteBtn" title="Mon compte : connexion, sessions, données">◉</a>
   <i class="saut" aria-hidden="true"></i>
@@ -934,6 +932,119 @@ function majEchelle(visibles){
 majEchelle(nodes);
 const SPRS=nodes.map(n=>n.spr); // cache raycast
 
+/* CERVEAUX
+   La sphère du centre reste ce qu'elle était : toute la mémoire affichée,
+   et c'est le cerveau global. Autour d'elle, une sphère par cerveau de la
+   hiérarchie : les communs de domaine en couronne, leurs IA et leurs
+   services en orbite au-delà, les sous-domaines un cran plus loin. Chaque
+   petite sphère porte les mêmes cartes que la grande, celles des entrées
+   présentes dans ce cerveau ; un brin la relie au cerveau où elle remonte. */
+const BRAINS=new THREE.Group();BRAINS.visible=false;world.add(BRAINS);
+const BRAIN_SPRS=[],BRAIN_LBLS=[],BRAIN_INFO=new Map();
+const BR_COUL=['#3fe8a8','#b18cff','#ffb45e','#5cc8ff','#ff5c7a','#e6e070','#7aa2ff','#ff9ad5'];
+const nfr=v=>Number(v||0).toLocaleString('fr-FR');
+function texteSprite(t1,t2,coul,taille=1){
+  const c=document.createElement('canvas');c.width=512;c.height=128;const g=c.getContext('2d');
+  g.textAlign='center';g.fillStyle='#ffffff';g.font='600 44px "JetBrains Mono",monospace';
+  g.fillText(t1.length>18?t1.slice(0,17)+'…':t1,256,58);
+  g.fillStyle=coul;g.font='30px "JetBrains Mono",monospace';g.fillText(t2,256,104);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,opacity:.95}));
+  sp.scale.set(16*taille,4*taille,1);return sp;
+}
+function sphereCerveau(centre,rb,ids,coul,cid,nom,total,commun){
+  const g=new THREE.Group();g.position.copy(centre);BRAINS.add(g);
+  const or=Math.PI*(3-Math.sqrt(5));
+  /* enveloppe : des points en spirale, à la couleur du domaine */
+  const P=[],k=Math.max(140,Math.round(rb*rb*7));
+  for(let i=0;i<k;i++){const y=1-((i+.5)/k)*2,r=Math.sqrt(Math.max(0,1-y*y)),t=i*or;P.push(new THREE.Vector3(Math.cos(t)*r*rb*1.14,y*rb*1.14,Math.sin(t)*r*rb*1.14));}
+  g.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(P),
+    new THREE.PointsMaterial({color:coul,size:.34,transparent:true,opacity:.5,depthWrite:false,blending:THREE.AdditiveBlending})));
+  const h=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:coul,transparent:true,opacity:.28,blending:THREE.AdditiveBlending,depthWrite:false}));
+  h.scale.set(rb*4.2,rb*4.2,1);g.add(h);
+  /* les cartes : mêmes textures que la grande sphère, à la taille que la
+     surface permet */
+  const m=Math.min(ids.length,260);
+  const cote=m?Math.min(2.6,Math.sqrt(4*Math.PI*rb*rb/m/.71)*.85):0;
+  for(let i=0;i<m;i++){
+    const n=byId[ids[i]];
+    const y=1-((i+.5)/m)*2,r=Math.sqrt(Math.max(0,1-y*y)),t=i*or;
+    const sp=new THREE.Sprite(n.cardMat);
+    sp.position.set(Math.cos(t)*r*rb,y*rb,Math.sin(t)*r*rb);
+    const cw=Math.min(n.cwBase*.85,cote);sp.scale.set(cw,cw*120/168,1);
+    sp.userData.id=n.id;g.add(sp);BRAIN_SPRS.push(sp);
+  }
+  const l=texteSprite(commun?nom.toUpperCase():nom,nfr(total)+(total>1?' entrées':' entrée'),coul,commun?1.35:1);
+  l.position.set(0,rb*1.14+(commun?4:3),0);l.userData.cerveau=cid;g.add(l);BRAIN_LBLS.push(l);
+  BRAIN_INFO.set(cid,{g,rb,nom,total});
+}
+function brin(a,b,coul,op){
+  const mid=a.clone().add(b).multiplyScalar(.5);mid.y+=a.distanceTo(b)*.14;
+  const pts=new THREE.QuadraticBezierCurve3(a,mid,b).getPoints(28);
+  for(const [dx,o] of [[0,op],[.12,op*.45]]){
+    const ln=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts.map(p=>p.clone().add(new THREE.Vector3(dx,dx,-dx)))),
+      new THREE.LineBasicMaterial({color:coul,transparent:true,opacity:o,depthWrite:false,blending:THREE.AdditiveBlending}));
+    BRAINS.add(ln);
+  }
+}
+async function chargeCerveaux(){
+  if(!ETAT.live||NS!=='shared'||!nodes.length)return;
+  let h;
+  try{
+    const r=await fetch('/v1/hierarchie',{credentials:'same-origin'});
+    if(!r.ok)return;   /* 404 : SYNAPSE d'avant la 3.0, la sphère reste seule */
+    h=await r.json();
+  }catch(e){console.warn('cerveaux : arbre illisible, la sphère reste seule',e);return;}
+  const a=h.comptes&&h.comptes[0];if(!a)return;
+  const dans=new Map();
+  nodes.forEach(n=>(n.d.cerveaux||[]).forEach(c=>{if(!dans.has(c))dans.set(c,[]);dans.get(c).push(n.id);}));
+  const doms=a.domaines,enfants=id=>doms.filter(d=>d.parent_id===id);
+  const poids=d=>1+d.membres.length+enfants(d.id).reduce((x,e)=>x+poids(e),0);
+  const racines=doms.filter(d=>!d.parent_id),tot=racines.reduce((x,d)=>x+poids(d),0)||1;
+  const rayonDe=ids=>Math.max(2.6,Math.min(9,1.7+Math.sqrt(ids.length)*.55));
+  const RC=52,PAS=21;
+  const pose=(d,a0,a1,niv,depuis,coul)=>{
+    const mid=(a0+a1)/2,R=RC+niv*PAS;
+    const pos=new THREE.Vector3(Math.cos(mid)*R,niv%2?7:-2,Math.sin(mid)*R);
+    const ids=dans.get(d.commun.id)||[];
+    sphereCerveau(pos,rayonDe(ids)+1.4,ids,coul,d.commun.id,d.nom,d.commun.n,true);
+    brin(depuis||pos.clone().normalize().multiplyScalar(LEAF_R+1.5),pos,coul,depuis?.45:.6);
+    const sous=enfants(d.id),ms=d.membres;
+    const Rm=RC+(niv+1+(sous.length?1:0))*PAS+6;
+    ms.forEach((m,i)=>{
+      const t=ms.length===1?mid:a0+(a1-a0)*(i+.5)/ms.length;
+      const mp=new THREE.Vector3(Math.cos(t)*Rm,(i%2?8:-8)*(ms.length>2?1:.4),Math.sin(t)*Rm);
+      const mi=dans.get(m.id)||[];
+      sphereCerveau(mp,rayonDe(mi),mi,coul,m.id,m.nom,m.n);
+      brin(mp,pos,coul,.38);
+    });
+    const ps=sous.map(poids),pt=ps.reduce((x,p)=>x+p,0)||1;let b=a0;
+    sous.forEach((e,i)=>{const l=(a1-a0)*ps[i]/pt;pose(e,b,b+l,niv+1,pos,coul);b+=l;});
+  };
+  let ang=-Math.PI/2;
+  racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.07,ang+l*.93,0,null,BR_COUL[i%BR_COUL.length]);ang+=l;});
+  /* le centre dit qu'il est le global */
+  const gl=texteSprite('GLOBAL',nfr(ETAT.total)+' entrées','#ffffff',1.7);gl.position.set(0,LEAF_R+7,0);BRAINS.add(gl);
+  ETAT.cerveaux=true;
+  if(!state.selected)homeCam();
+}
+function pickCerveau(cx,cy){
+  if(!BRAINS.visible)return null;
+  const r=canvas.getBoundingClientRect();
+  mouse.x=((cx-r.left)/r.width)*2-1;mouse.y=-((cy-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hit=ray.intersectObjects(BRAIN_LBLS.concat(BRAIN_SPRS),false)[0];
+  if(!hit)return null;
+  return hit.object.userData.cerveau?{cerveau:hit.object.userData.cerveau}:{id:hit.object.userData.id};
+}
+/* la caméra suit le cerveau choisi, la scène cesse de tourner : la cible
+   ne s'échappe pas pendant qu'on la regarde */
+function versCerveau(cid){
+  const b=BRAIN_INFO.get(cid);if(!b)return;
+  state.cerveauSuivi=cid;
+  tweenTo({r:b.rb*4.5+12},850,easeIOC);
+  toast(b.nom+' · '+nfr(b.total)+(b.total>1?' entrées':' entrée'));
+}
+
 /* VUES MULTIPLES : positions cibles galaxie + carte 2D */
 const VIEW={mode:'sphere',blend:{galaxy:0,card:0}}; // blend 0..1 vers chaque disposition alternative
 function calculeAlt(nodes){
@@ -1147,7 +1258,7 @@ function focusCard(n){
      de la texture retombe sous 1.5x et le contexte reste visible. */
   tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+20},760,easeIOC);
 }
-function homeCam(){tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:1.12,r:62},900,easeIOC);}
+function homeCam(){state.cerveauSuivi=null;tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:ETAT.cerveaux?.64:1.12,r:ETAT.cerveaux?240:62},900,easeIOC);}
 function frame(v,r){tweenTo({tgx:v.x,tgy:v.y,tgz:v.z,r},650,easeIOC);}
 function worldOf(id){byId[id].spr.getWorldPosition(_wp);return _wp;}
 
@@ -1176,7 +1287,10 @@ canvas.addEventListener('pointerup',e=>{
   const moved=Math.abs(e.clientX-downX)+Math.abs(e.clientY-downY);
   if(moved<6&&performance.now()-downT<350){
     const id=pick(e.clientX,e.clientY);
+    const c=id?null:pickCerveau(e.clientX,e.clientY);
     if(id)selectNode(id);
+    else if(c&&c.id)selectNode(c.id);
+    else if(c&&c.cerveau)versCerveau(c.cerveau);
     else if(state.selected)clearSelection();
     else if(state.filtre)clearFiltre();
   }
@@ -1185,12 +1299,12 @@ canvas.addEventListener('dblclick',()=>{state.selected?focusCard(byId[state.sele
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();cancelTween();
-  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:115,rig.rG*(1+e.deltaY*.0011)));
+  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?280:115,rig.rG*(1+e.deltaY*.0011)));
 },{passive:false});
 canvas.addEventListener('touchmove',e=>{
   if(e.touches.length===2){
     const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    if(pinch){cancelTween();rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:115,rig.rG*pinch/d));}
+    if(pinch){cancelTween();rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:ETAT.cerveaux?280:115,rig.rG*pinch/d));}
     pinch=d;dragging=false;
   }
 },{passive:true});
@@ -1207,7 +1321,7 @@ const state={selected:null,related:new Set(),tags:new Set(),lastSig:0,rot:reduce
   filtre:null};
 function selectNode(id){
   const n=byId[id];if(!n)return;
-  state.selected=id;
+  state.selected=id;state.cerveauSuivi=null;
   state.related=new Set(NEIGH[id]);
   state.tags=new Set(n.pathTags);
   pulse(id,.0,1);              /* purge d'un éventuel pulse résiduel */
@@ -1590,7 +1704,7 @@ function loop(){
   /* Le plafond de 115 convenait a la sphere (rayon 25). La carte 2D
      s'etale sur 350 unites : la plafonner a 115 revenait a l'ouvrir
      deja hors champ. Le plafond suit donc la vue. */
-  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:115,rig.rG));
+  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?280:115,rig.rG));
   rig.th+=(rig.thG-rig.th)*.085;rig.ph+=(rig.phG-rig.ph)*.085;
   rig.r+=(rig.rG-rig.r)*.085;rig.tg.lerp(rig.tgG,.085);
   camera.position.set(
@@ -1612,10 +1726,11 @@ function loop(){
     rig.tgG.set(-panX*0.06, panY*0.06, 0);
   } else { panX*=.9;panY*=.9; }
   /* --- rotation auto : pause fluide quand une carte est ouverte --- */
-  const rotGoal=(state.selected||dragging||reduced||VIEW.mode!=='sphere')?0:.0004;
+  const rotGoal=(state.selected||state.cerveauSuivi||dragging||reduced||VIEW.mode!=='sphere')?0:.0004;
   state.rotCur+=(rotGoal-state.rotCur)*.05;
   world.rotation.y+=state.rotCur;
   world.updateMatrixWorld(true);
+  if(state.cerveauSuivi&&BRAIN_INFO.has(state.cerveauSuivi)){BRAIN_INFO.get(state.cerveauSuivi).g.getWorldPosition(_wp);rig.tgG.copy(_wp);}
 
   /* --- respiration du noyau --- */
   const br=1+Math.sin(t*1.1)*.05;
@@ -1632,7 +1747,7 @@ function loop(){
     const id=pick(hoverEvt.x,hoverEvt.y);
     if(hoverId&&hoverId!==id&&hoverId!==state.selected)activeLabels.delete(hoverId);
     hoverId=id;if(id)activeLabels.add(id);
-    canvas.style.cursor=id?'pointer':'grab';
+    canvas.style.cursor=id||pickCerveau(hoverEvt.x,hoverEvt.y)?'pointer':'grab';
   }
 
   /* --- morphing des vues (sphère / galaxie / carte 2D) --- */
@@ -1651,7 +1766,8 @@ function loop(){
     VIEW._treeVis=Math.max(0,gS);
     /* La densite du brouillard suit la vue : sinon la carte 2D, vue de
        200 unites, disparait entierement dans le gris. */
-    const fogCible=gC>0.2?0.0012:gG>0.2?0.003:0.006;
+    const fogCible=gC>0.2?0.0012:gG>0.2?0.003:ETAT.cerveaux?0.0026:0.006;
+    BRAINS.visible=!!ETAT.cerveaux&&gS>.55;
     scene.fog.density+=(fogCible-scene.fog.density)*.08;
     cardLine.material.opacity+=((gC>0.15?0.62*gC:0)-cardLine.material.opacity)*.1;
     dust.material.opacity+=((gG>0.15?0.4*gG:0)-dust.material.opacity)*.1;
@@ -1916,6 +2032,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#moi').classList.contains
 chargeMoi();setInterval(()=>{if(!$('#moi').classList.contains('on'))chargeMoi();},120000);
 
 loop();
+chargeCerveaux();
 if(!reduced)setInterval(()=>{
   if(!state.selected&&nodes.length)spawnSignal(nodes[Math.floor(Math.random()*nodes.length)].id,false);
 },1000);
