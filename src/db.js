@@ -19,7 +19,7 @@ const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 function open(file) {
   /* Dossier en 0700, base et fichiers WAL en 0600 : seul le service les lit. */
@@ -43,7 +43,13 @@ function migrate(db) {
   const row = db.prepare(`SELECT v FROM meta WHERE k='schema_version'`).get();
   const cur = row ? Number(row.v) : 0;
   if (cur >= SCHEMA_VERSION) return;
+  if (cur < 1) migrerV1(db);
+  if (cur < 2) migrerV2(db);
+  db.prepare(`INSERT OR REPLACE INTO meta(k,v) VALUES('schema_version',?)`)
+    .run(String(SCHEMA_VERSION));
+}
 
+function migrerV1(db) {
   db.exec(`
     /* sources : un jeton par service */
     CREATE TABLE IF NOT EXISTS sources (
@@ -180,9 +186,99 @@ function migrate(db) {
     `INSERT OR IGNORE INTO namespaces(name,kind,owner,created_at) VALUES (?,?,?,?)`);
   insNs.run('shared', 'shared', null, now);
   insNs.run('savoir', 'knowledge', null, now);
+}
 
-  db.prepare(`INSERT OR REPLACE INTO meta(k,v) VALUES('schema_version',?)`)
-    .run(String(SCHEMA_VERSION));
+/* v2 : la hiérarchie des cerveaux (src/hierarchie.js). Rien n'est retiré
+   ni renommé : les routes de la 2.x lisent les mêmes tables. Une entrée
+   est écrite une fois ; ces tables disent où elle est présente. */
+function migrerV2(db) {
+  const cols = db.prepare(`PRAGMA table_info(sources)`).all().map(c => c.name);
+  if (!cols.includes('compte')) db.exec(`ALTER TABLE sources ADD COLUMN compte TEXT`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS h_domaines (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      compte    TEXT NOT NULL,
+      parent_id INTEGER REFERENCES h_domaines(id) ON DELETE CASCADE,
+      nom       TEXT NOT NULL,
+      cree      TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_h_domaines ON h_domaines(compte, COALESCE(parent_id, 0), nom);
+
+    /* genre : membre (une IA, un service) · commun (un par domaine) · global (un par compte) */
+    CREATE TABLE IF NOT EXISTS h_cerveaux (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      compte     TEXT NOT NULL,
+      domaine_id INTEGER REFERENCES h_domaines(id) ON DELETE CASCADE,
+      genre      TEXT NOT NULL CHECK (genre IN ('membre','commun','global')),
+      nom        TEXT NOT NULL,
+      membre     TEXT,
+      reglages   TEXT NOT NULL DEFAULT '{}',
+      cree       TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_h_global  ON h_cerveaux(compte) WHERE genre = 'global';
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_h_commun  ON h_cerveaux(domaine_id) WHERE genre = 'commun';
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_h_membre  ON h_cerveaux(compte, membre) WHERE genre = 'membre';
+
+    /* où une entrée a été écrite, avec ses étiquettes calculées */
+    CREATE TABLE IF NOT EXISTS h_place (
+      entry_id   INTEGER PRIMARY KEY REFERENCES entries(id) ON DELETE CASCADE,
+      cerveau_id INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      importance INTEGER NOT NULL DEFAULT 0,
+      place      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_h_place_cerveau ON h_place(cerveau_id);
+
+    CREATE TABLE IF NOT EXISTS h_cles (
+      entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+      cle      TEXT NOT NULL,
+      PRIMARY KEY (entry_id, cle)
+    );
+    CREATE INDEX IF NOT EXISTS idx_h_cles_cle ON h_cles(cle);
+
+    /* ce qu'un cerveau a vu passer de chacun de ses enfants : la base de la convergence */
+    CREATE TABLE IF NOT EXISTS h_vu (
+      entry_id   INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+      cerveau_id INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      origine    INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      vu         TEXT NOT NULL,
+      PRIMARY KEY (entry_id, cerveau_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_h_vu_cerveau ON h_vu(cerveau_id);
+
+    /* statut : faite · a_valider · refusee ; regle : importance · etiquette · versement */
+    CREATE TABLE IF NOT EXISTS h_remontees (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      entry_id    INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+      de_cerveau  INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      vers_cerveau INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      regle       TEXT NOT NULL,
+      statut      TEXT NOT NULL,
+      quand       TEXT NOT NULL,
+      UNIQUE (entry_id, vers_cerveau)
+    );
+    CREATE INDEX IF NOT EXISTS idx_h_remontees_vers ON h_remontees(vers_cerveau, statut);
+
+    CREATE TABLE IF NOT EXISTS h_projets (
+      id     INTEGER PRIMARY KEY AUTOINCREMENT,
+      compte TEXT NOT NULL,
+      nom    TEXT NOT NULL,
+      ouvert TEXT NOT NULL,
+      clos   TEXT,
+      UNIQUE (compte, nom)
+    );
+    CREATE TABLE IF NOT EXISTS h_projet_membres (
+      projet_id  INTEGER NOT NULL REFERENCES h_projets(id) ON DELETE CASCADE,
+      cerveau_id INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      PRIMARY KEY (projet_id, cerveau_id)
+    );
+
+    /* les domaines racines qu'un compte verse au compte commun */
+    CREATE TABLE IF NOT EXISTS h_versements (
+      compte     TEXT NOT NULL,
+      domaine_id INTEGER NOT NULL REFERENCES h_domaines(id) ON DELETE CASCADE,
+      PRIMARY KEY (compte, domaine_id)
+    );
+  `);
 }
 
 /* vecteurs
