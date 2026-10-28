@@ -126,9 +126,22 @@ Vérifié :
 - jeton de compte : montré une fois, stocké en empreinte, écrit dans l'arbre de son créateur seulement.
 
 Pas encore vérifié :
-- **volume** : le tamis tourne dans la requête d'écriture ; mesuré seulement sur les bases des essais. À mesurer sur la base réelle avant de lâcher un connecteur bavard (cible : < 5 ms par entrée sur 10 000 entrées).
-- **reprise** sur la base réelle : elle range tout au premier démarrage, en lots de 500. Durée non mesurée.
+- **volume réel** : mesuré sur bases synthétiques seulement (ci-dessous). La mesure sur la base de production (735 Mo) se fait sur une copie, hors service.
 - une source effacée ne met pas encore à jour le corps des fiches qui la citaient (les liens partent, le texte reste).
 - le choix des domaines du commun qu'un compte consulte (abonnements) n'est pas fait : une personne lit tout le commun.
 - l'interface ne montre pas encore la hiérarchie : phase 3.4.
 - le manifeste `hub.json` n'expose pas encore les routes de la hiérarchie : phase 3.2.
+
+### Mesure du tamis (2026-10-28, base synthétique, 12 sources, une clé sur cinq très fréquente, un cœur)
+Première écriture du tamis : la convergence recomptait toutes les entrées portant la clé, et une fiche était refaite et revectorisée à chaque contribution. Profil : `converger` 9,8 s sur 15,2 s. Reprise 6 à 7,5 ms par entrée et en hausse avec la taille ; écriture p50 6 à 10 ms.
+
+Correctif : table `h_convergence` (cerveau, clé, origine, dernière date) tenue à chaque passage ; une fiche existante reçoit une ligne et un lien, sans être refaite ni revectorisée (texte plafonné à 60 lignes, liens sans plafond).
+
+| Base | Reprise | Écriture p50 | Écriture p95 |
+|---|---|---|---|
+| 5 000 entrées | 1,94 ms/entrée | 0,44 ms | 8,7 ms |
+| 20 000 entrées | 1,92 ms/entrée | 0,43 ms | 8,7 ms |
+
+Le coût ne dépend plus de la taille. Essai de garde : une clé répétée 800 fois par une seule source ne rend pas l'écriture plus chère.
+
+La reprise ne bloque plus le démarrage : elle tourne en tâche de fond par lots de 200, derrière un curseur en base (`meta.hierarchie_reprise`) qui survit à un redémarrage. `/healthz` dit `hierarchie: reprise | prete`, sans compte. Cas limite assumé : la fenêtre de convergence lit la date de la dernière contribution par origine ; une entrée archivée après coup compte encore jusqu'à ce que cette date sorte de la fenêtre.
