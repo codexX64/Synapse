@@ -967,6 +967,17 @@ function texteSprite(t1,t2,coul,taille=1){
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,opacity:.95}));
   sp.scale.set(16*taille,4*taille,1);return sp;
 }
+/* Un commun sans carte à montrer mais avec des cerveaux en dessous : un
+   simple point de jonction, sans enveloppe, pour que l'arbre tienne. */
+function jonction(centre,coul,cid,nom,total,parent){
+  ORDRE_C.push({cid,nom,coul,commun:true,parent:parent??'global',total});
+  const g=new THREE.Group();g.position.copy(centre);BRAINS.add(g);
+  const k=new THREE.Sprite(new THREE.SpriteMaterial({map:CTEX,color:coul,transparent:true,opacity:.95,blending:THREE.AdditiveBlending,depthWrite:false}));
+  k.scale.set(2.4,2.4,1);g.add(k);
+  const l=texteSprite(nom.toUpperCase(),nfr(total)+(total>1?' entrées':' entrée'),coul,1.2);
+  l.position.set(0,3.4,0);l.userData.cerveau=cid;g.add(l);BRAIN_LBLS.push(l);
+  BRAIN_INFO.set(cid,{g,rb:2,nom,total,lbl:l});
+}
 function sphereCerveau(centre,rb,ids,coul,cid,nom,total,commun,parent){
   ORDRE_C.push({cid,nom,coul,commun:!!commun,parent:parent??'global',total});
   const g=new THREE.Group();g.position.copy(centre);BRAINS.add(g);
@@ -1015,17 +1026,22 @@ async function chargeCerveaux(){
   const dans=new Map();
   nodes.forEach(n=>(n.d.cerveaux||[]).forEach(c=>{if(!dans.has(c))dans.set(c,[]);dans.get(c).push(n.id);}));
   const doms=a.domaines,enfants=id=>doms.filter(d=>d.parent_id===id);
-  const poids=d=>1+d.membres.length+enfants(d.id).reduce((x,e)=>x+poids(e),0);
-  const racines=doms.filter(d=>!d.parent_id),tot=racines.reduce((x,d)=>x+poids(d),0)||1;
+  /* Un cerveau n'est dessiné que s'il a des cartes à montrer ; un
+     domaine sans rien à montrer, ni chez lui ni en dessous, disparaît. */
+  const plein=d=>(dans.get(d.commun.id)||[]).length>0||d.membres.some(m=>(dans.get(m.id)||[]).length)||enfants(d.id).some(plein);
+  const poids=d=>1+d.membres.filter(m=>(dans.get(m.id)||[]).length).length+enfants(d.id).filter(plein).reduce((x,e)=>x+poids(e),0);
+  const racines=doms.filter(d=>!d.parent_id&&plein(d)),tot=racines.reduce((x,d)=>x+poids(d),0)||1;
   const rayonDe=ids=>Math.max(2.6,Math.min(9,1.7+Math.sqrt(ids.length)*.55));
   const RC=52,PAS=21;
   const pose=(d,a0,a1,niv,depuis,coul,parentC)=>{
+    if(!plein(d))return;
     const mid=(a0+a1)/2,R=RC+niv*PAS;
     const pos=new THREE.Vector3(Math.cos(mid)*R,niv%2?7:-2,Math.sin(mid)*R);
     const ids=dans.get(d.commun.id)||[];
-    sphereCerveau(pos,rayonDe(ids)+1.4,ids,coul,d.commun.id,d.nom,d.commun.n,true,parentC);
+    if(ids.length)sphereCerveau(pos,rayonDe(ids)+1.4,ids,coul,d.commun.id,d.nom,d.commun.n,true,parentC);
+    else jonction(pos,coul,d.commun.id,d.nom,d.commun.n,parentC);
     brin(depuis||pos.clone().normalize().multiplyScalar(LEAF_R+1.5),pos,coul,depuis?.45:.6);
-    const sous=enfants(d.id),ms=d.membres;
+    const sous=enfants(d.id).filter(plein),ms=d.membres.filter(m=>(dans.get(m.id)||[]).length);
     const Rm=RC+(niv+1+(sous.length?1:0))*PAS+6;
     ms.forEach((m,i)=>{
       const t=ms.length===1?mid:a0+(a1-a0)*(i+.5)/ms.length;
