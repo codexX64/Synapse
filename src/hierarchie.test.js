@@ -311,3 +311,15 @@ test('relais du Hub : une alerte reprise mot pour mot va chez le service d\'orig
   const propre = ecrire(db, 'hub', { kind: 'alert', title: 'Alerte eleve : sauvegarde du NAS en échec', body: '', occurred_at: q });
   assert.equal(propre.c.cerveau, membre(db, 'hub').id, 'une alerte sans original reste au Hub');
 });
+
+test('scène : chaque cerveau a sa part, un gros cerveau ne prend pas toutes les places', () => {
+  const { buildGraph } = require('./graph');
+  const db = base();
+  for (let i = 0; i < 300; i++) ecrire(db, 'vigie', { kind: 'security.alert', title: `alerte ${i}`, body: '' });
+  const vox = [ecrire(db, 'vox', { title: 'Commande vocale : lumière salon', body: '' }), ecrire(db, 'vox', { title: 'Commande vocale : volets', body: '' })];
+  const g = buildGraph(db, { ns: 'shared', limit: 50 });
+  assert.ok(g.nodes.length <= 50, 'la limite tient');
+  const ids = new Set(g.nodes.map(n => n.id));
+  for (const v of vox) assert.ok(ids.has('e' + v.id), 'les entrées de vox sont dans la scène');
+  assert.ok(g.nodes.every(n => Array.isArray(n.d.cerveaux) && n.d.cerveaux.length), 'chaque carte sait où elle est');
+});

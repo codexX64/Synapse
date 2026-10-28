@@ -74,15 +74,42 @@ function buildGraph(db, opts = {}) {
   /* Les plus reliés d'abord, puis les plus récents : une scène tronquée
      doit garder les nœuds qui structurent le graphe, pas les derniers
      arrivés au hasard. */
-  const rows = db.prepare(`
-    SELECT e.id, e.source, e.kind, e.ref, e.level, e.title, e.tags,
+  const COLONNES = `e.id, e.source, e.kind, e.ref, e.level, e.title, e.tags,
            e.occurred_at, e.dup_count,
            (SELECT count(*) FROM links l
-             WHERE l.from_id = e.id OR l.to_id = e.id) AS deg
+             WHERE l.from_id = e.id OR l.to_id = e.id) AS deg`;
+  let rows = db.prepare(`
+    SELECT ${COLONNES}
     FROM entries e
     WHERE ${where}
     ORDER BY deg DESC, e.occurred_at DESC
     LIMIT ?`).all(...args, limit);
+
+  /* Chaque cerveau a sa part de la scène : ses PAR_CERVEAU entrées les
+     plus récentes (placées chez lui ou remontées jusqu'à lui) passent
+     avant le reste. Sans cela, une source de 140 000 alertes prend les
+     1 400 places et les petits cerveaux s'affichent vides. */
+  const hierarchie = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'h_place'`).get();
+  if (hierarchie && rows.length) {
+    const PAR_CERVEAU = 24;
+    const deja = new Set(rows.map(r => r.id)), reserve = [];
+    const places = db.prepare(`SELECT p.entry_id id FROM h_place p JOIN entries e ON e.id = p.entry_id
+      WHERE p.cerveau_id = ? AND ${where} ORDER BY p.entry_id DESC LIMIT ${PAR_CERVEAU}`);
+    const montees = db.prepare(`SELECT r.entry_id id FROM h_remontees r JOIN entries e ON e.id = r.entry_id
+      WHERE r.vers_cerveau = ? AND r.statut = 'faite' AND ${where} ORDER BY r.id DESC LIMIT ${PAR_CERVEAU}`);
+    for (const { id: c } of db.prepare(`SELECT id FROM h_cerveaux ORDER BY id`).all())
+      for (const q of [places, montees])
+        for (const { id } of q.all(c, ...args)) if (!deja.has(id)) { deja.add(id); reserve.push(id); }
+    if (reserve.length) {
+      const ajout = [];
+      for (let i = 0; i < reserve.length; i += 500) {
+        const lot = reserve.slice(i, i + 500);
+        ajout.push(...db.prepare(`SELECT ${COLONNES} FROM entries e WHERE e.id IN (${lot.map(() => '?').join(',')})`).all(...lot));
+      }
+      const garde = Math.max(0, limit - ajout.length);
+      rows = rows.slice(0, garde).concat(ajout.slice(0, limit));
+    }
+  }
 
   const keep = new Set(rows.map(r => r.id));
 
@@ -103,7 +130,6 @@ function buildGraph(db, opts = {}) {
 
   /* Les cerveaux où chaque entrée est présente : le sien d'abord, puis
      ceux où elle est remontée. La scène en fait une sphère par cerveau. */
-  const hierarchie = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'h_place'`).get();
   if (rows.length && hierarchie) {
     const ids = rows.map(r => r.id);
     const ou = new Map(ids.map(id => [id, []]));
