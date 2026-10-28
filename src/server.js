@@ -1377,7 +1377,7 @@ function nsAllowed(src, ns) {
    la nouvelle page. Les pages de la mémoire exigent une session complète du
    socle ; la porte (connexion, installation, facteurs) et la page du compte
    sont celles du socle, communes à tous les services. */
-const PAGES = { '/': 'index.html', '/parametres': 'parametres.html' };
+const PAGES = { '/': 'index.html', '/parametres': 'parametres.html', '/cerveaux': 'cerveaux.html' };
 const PAGES_LIBRES = { '/connexion': 'connexion.html', '/compte': 'compte.html' };
 
 async function servirInterface(req, res, url, sctx, nonce) {
