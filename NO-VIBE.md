@@ -171,3 +171,8 @@ La page séparée `/cerveaux` de la 3.1.0 est retirée : la hiérarchie se voit 
 Vérifié dans Chromium contre la vitrine (16 cerveaux, deux sous-domaines) : la couronne entière dans la vue de départ, le suivi d'un cerveau, aucune erreur de console. 190 essais verts, dont le graphe (cerveaux de chaque neurone, fiches présentes, entrée remontée dans deux cerveaux).
 
 Pas encore vérifié : le rendu sur la base de production (260 cartes au plus par sphère de cerveau) ; les performances sur un téléphone avec beaucoup de cerveaux. Les réglages du tamis, les projets et les jetons de compte n'ont plus d'écran : ils restent accessibles par l'API (`/v1/hierarchie/*`) en attendant leur place dans cette vue.
+
+## Suivi du 2026-10-28 (3.3.0) : aller d'un cerveau à l'autre, librement
+Barre des cerveaux sous l'en-tête (un bouton par cerveau dans l'ordre de l'arbre, ◀ ▶), qui s'allume sur le cerveau où l'on est. Déplacement libre dans la scène : clic droit glissé ou Maj + glisser déplace le point regardé, deux doigts au téléphone déplacent et zooment, ZQSD ou WASD font voler, R et F montent et descendent ; ← et → passent au cerveau précédent ou suivant, ↑ au cerveau parent, Échap revient à la vue d'ensemble. Dès qu'on se déplace librement, la rotation automatique s'arrête. Le clavier ne fait rien tant qu'on écrit dans un champ.
+
+Vérifié dans Chromium contre la vitrine : trois fois → mène à kimi, ↑ à IA, le clic droit glissé et le vol déplacent le point regardé, un bouton de la barre amène au cerveau voulu, Échap revient au global, les touches restent dans le champ de question ; rendu à 1440 et 390 px, aucune erreur de console. 190 essais verts.
