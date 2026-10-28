@@ -323,3 +323,18 @@ test('scène : chaque cerveau a sa part, un gros cerveau ne prend pas toutes les
   for (const v of vox) assert.ok(ids.has('e' + v.id), 'les entrées de vox sont dans la scène');
   assert.ok(g.nodes.every(n => Array.isArray(n.d.cerveaux) && n.d.cerveaux.length), 'chaque carte sait où elle est');
 });
+
+test('reprise : les écritures d\'après la reprise ne comptent pas comme reste, le curseur saute à la fin', () => {
+  const db = base();
+  ingest.insert(db, { ns: 'shared', kind: 'note', title: 'avant', body: '' }, 'triage');
+  assert.equal(H.resteAReprendre(db), 1);
+  H.reprendre(db);
+  for (let i = 0; i < 5; i++) ecrire(db, 'kimi', { title: 'après ' + i, body: '' });
+  assert.equal(H.resteAReprendre(db), 0, 'rangées à l\'écriture : rien à reprendre');
+  const curseur = Number(db.prepare(`SELECT v FROM meta WHERE k='hierarchie_reprise'`).get().v);
+  assert.equal(curseur, db.prepare(`SELECT max(id) m FROM entries`).get().m, 'le curseur est au bout');
+  // Une instance neuve, sans rien d'avant la 3.0 : prête tout de suite.
+  const neuve = base();
+  ecrire(neuve, 'kimi', { title: 'première', body: '' });
+  assert.equal(H.resteAReprendre(neuve), 0);
+});

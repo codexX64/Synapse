@@ -593,10 +593,20 @@ function reprendre(db, { lot = 500, max = Infinity } = {}) {
   return total;
 }
 
-/* Ce qui reste à ranger, pour le dire au journal et à /healthz. */
+/* Ce qui reste à ranger, pour le dire au journal et à /healthz : les
+   entrées au-delà du curseur qui n'ont pas de place. Une entrée écrite
+   après la reprise est rangée à l'écriture : elle ne compte pas. Quand il
+   ne reste rien, le curseur saute à la dernière entrée, et le compte
+   suivant ne relit plus rien. */
 function resteAReprendre(db) {
   const depuis = Number((db.prepare(`SELECT v FROM meta WHERE k='hierarchie_reprise'`).get() || { v: 0 }).v);
-  return db.prepare(`SELECT count(*) n FROM entries WHERE id > ?`).get(depuis).n;
+  const n = db.prepare(`SELECT count(*) n FROM entries e WHERE e.id > ? AND e.kind NOT LIKE 'fiche.%' AND e.ns NOT LIKE 'h:%'
+    AND NOT EXISTS (SELECT 1 FROM h_place p WHERE p.entry_id = e.id)`).get(depuis).n;
+  if (!n) {
+    const fin = db.prepare(`SELECT max(id) m FROM entries`).get().m;
+    if (fin && fin > depuis) db.prepare(`INSERT OR REPLACE INTO meta(k,v) VALUES('hierarchie_reprise',?)`).run(String(fin));
+  }
+  return n;
 }
 
 module.exports = {
