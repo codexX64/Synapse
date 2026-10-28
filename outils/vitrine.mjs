@@ -14,7 +14,7 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 
 const RACINE = path.resolve(import.meta.dirname, '..');
-const [port = '8140', gamme = 'soma'] = process.argv.slice(2);
+const [port = '8140', gamme = 'soma', volume = '0'] = process.argv.slice(2);
 const portIa = Number(port) + 1;
 
 // Un vecteur tiré des mots : deux textes proches se ressemblent assez pour
@@ -51,7 +51,7 @@ const JETON_INSTALLATION = crypto.randomBytes(18).toString('base64url');
 const JETON_HUB = crypto.randomBytes(24).toString('base64url');
 const proc = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'src/server.js'], { cwd: RACINE, stdio: ['ignore', 'pipe', 'pipe'], env: {
   PATH: process.env.PATH, PORT: port, HOTE: '127.0.0.1', DB_FILE: path.join(dossier, 'synapse.db'), UI_DIR: path.join(RACINE, 'ui'),
-  OLLAMA_URL: `http://127.0.0.1:${portIa}`, SOCLE_CLE: crypto.randomBytes(32).toString('base64'), SOCLE_JETON_INSTALLATION: JETON_INSTALLATION,
+  OLLAMA_URL: `http://127.0.0.1:${portIa}`, QUEUE_MAX: '100000000', SOCLE_CLE: crypto.randomBytes(32).toString('base64'), SOCLE_JETON_INSTALLATION: JETON_INSTALLATION,
   HUB_TOKEN_SEED: JETON_HUB, CONSOLIDATION_INTERVAL: '0', SOCLE_THEME: gamme,
 } });
 let sortie = '';
@@ -135,6 +135,23 @@ for (const [nom, corps] of [
   ['notes-securite', { kind: 'note', title: 'Le VLAN 40 sort par la passerelle seulement', body: '', domaine: 'Connaissance/Sécurité', occurred_at: quand(6) }],
 ]) await ecrit(nom, corps);
 for (let i = 0; i < 40; i++) await ecrit('vigie', { kind: 'security.alert', title: `Menace extérieure non bloquée : 203.0.113.${10 + i} (score ${200 + i})`, body: '', tags: ['securite'], meta: { gravite: 'eleve' }, occurred_at: quand(5 - i / 20) });
+
+// Volume : N alertes de vigie de plus, par lots de 200, pour voir la scène
+// à l'échelle d'une vraie base (outils/vitrine.mjs 8140 soma 40000).
+for (let fait = 0; fait < Number(volume); fait += 200) {
+  const events = Array.from({ length: Math.min(200, Number(volume) - fait) }, (_, k) => {
+    const i = fait + k;
+    return { ns: 'shared', kind: 'security.alert', title: `Menace extérieure non bloquée : 198.${51 + Math.floor(i / 62500)}.${Math.floor(i / 250) % 250}.${i % 250} (score ${150 + i % 120})`,
+      body: '', tags: ['securite'], meta: { gravite: 'eleve' }, occurred_at: quand(400 - i / 200) };
+  });
+  /* file de vectorisation pleine (429) : on attend qu'elle se vide, comme un vrai service */
+  for (let essai = 0; ; essai++) {
+    const r = await fetch(base + '/v1/ingest/batch', { method: 'POST', headers: { authorization: `Bearer ${jetonPour(JETON_HUB, 'vigie')}`, 'content-type': 'application/json' }, body: JSON.stringify({ events }) });
+    if (r.status === 429 && essai < 120) { await new Promise(ok => setTimeout(ok, 1000)); continue; }
+    if (r.status >= 300) throw new Error(`volume : ${r.status} ${await r.text()}`);
+    break;
+  }
+}
 
 console.log(`SYNAPSE ${gamme} : http://localhost:${port}`);
 console.log(`JETON=${JETON_INSTALLATION}`);
