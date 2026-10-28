@@ -245,6 +245,17 @@ function migrerV2(db) {
     );
     CREATE INDEX IF NOT EXISTS idx_h_vu_cerveau ON h_vu(cerveau_id);
 
+    /* qui a parlé de quelle clé, par cerveau, et quand pour la dernière
+       fois : compter une convergence lit quelques lignes, jamais toutes
+       les entrées qui portent la clé */
+    CREATE TABLE IF NOT EXISTS h_convergence (
+      cerveau_id INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      cle        TEXT NOT NULL,
+      origine    INTEGER NOT NULL REFERENCES h_cerveaux(id) ON DELETE CASCADE,
+      dernier    TEXT NOT NULL,
+      PRIMARY KEY (cerveau_id, cle, origine)
+    );
+
     /* statut : faite · a_valider · refusee ; regle : importance · etiquette · versement */
     CREATE TABLE IF NOT EXISTS h_remontees (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,

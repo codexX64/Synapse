@@ -218,3 +218,31 @@ test('migration : une base écrite par la 2.0.2 passe en v2 sans rien perdre', (
   assert.equal(fiches(db, 'fiche.commune').length, 1, 'les deux IA sur le VLAN 30 : une fiche');
   for (const id of ids) assert.ok(db.prepare(`SELECT 1 FROM h_place WHERE entry_id=?`).get(id));
 });
+
+test('reprise par lots : le curseur avance, un redémarrage reprend où on s\'était arrêté', () => {
+  const db = base();
+  for (let i = 0; i < 7; i++) ingest.insert(db, { ns: 'shared', kind: 'note', title: 'avant ' + i, body: '' }, 'triage');
+  assert.equal(H.resteAReprendre(db), 7);
+  assert.equal(H.reprendre(db, { lot: 3, max: 3 }), 3);
+  assert.equal(H.resteAReprendre(db), 4);
+  // Une écriture neuve pendant la reprise est rangée tout de suite, et la reprise ne la range pas deux fois.
+  const neuve = ecrire(db, 'kimi', { title: 'pendant la reprise', body: '' });
+  assert.ok(neuve.c);
+  assert.equal(H.reprendre(db, { lot: 3 }), 4);
+  assert.equal(H.resteAReprendre(db), 0);
+  assert.equal(db.prepare(`SELECT count(*) n FROM h_place`).get().n, 8);
+});
+
+test('coût : une clé répétée par une seule source ne rend pas l\'écriture plus chère', () => {
+  const db = base();
+  const mesure = () => {
+    const t = performance.now();
+    for (let i = 0; i < 200; i++) ecrire(db, 'triage', { title: `alerte disque ${i}`, body: '', ref: 'disk-full-pve' });
+    return (performance.now() - t) / 200;
+  };
+  const debut = mesure();
+  for (let i = 0; i < 3; i++) mesure();
+  const fin = mesure();
+  assert.ok(fin < Math.max(2, debut * 3), `écriture ${debut.toFixed(2)} ms au début, ${fin.toFixed(2)} ms après 800 répétitions`);
+  assert.equal(fiches(db, 'fiche.commune').length, 0, 'une seule source : jamais de fiche');
+});

@@ -245,10 +245,20 @@ function arrivee(db, id, c, prof, journal) {
   presenter(db, id, c, prof, journal);
 }
 
+/* Le cerveau c voit passer l'entrée depuis son enfant origine. */
+function voir(db, id, c, origine) {
+  const ins = db.prepare(`INSERT OR IGNORE INTO h_vu(entry_id,cerveau_id,origine,vu) VALUES(?,?,?,?)`).run(id, c.id, origine.id, maintenant());
+  if (!Number(ins.changes)) return;
+  const quand = (db.prepare(`SELECT occurred_at FROM entries WHERE id=?`).get(id) || {}).occurred_at || maintenant();
+  const up = db.prepare(`INSERT INTO h_convergence(cerveau_id,cle,origine,dernier) VALUES(?,?,?,?)
+    ON CONFLICT(cerveau_id,cle,origine) DO UPDATE SET dernier = max(dernier, excluded.dernier)`);
+  for (const { cle } of db.prepare(`SELECT cle FROM h_cles WHERE entry_id=?`).all(id)) up.run(c.id, cle, origine.id, quand);
+}
+
 function presenter(db, id, de, prof, journal) {
   const vers = parentDe(db, de);
   if (!vers) return;
-  db.prepare(`INSERT OR IGNORE INTO h_vu(entry_id,cerveau_id,origine,vu) VALUES(?,?,?,?)`).run(id, vers.id, de.id, maintenant());
+  voir(db, id, vers, de);
   const r = reglages(vers);
   const p = db.prepare(`SELECT importance FROM h_place WHERE entry_id=?`).get(id) || { importance: 0 };
   const e = entree(db, id);
@@ -279,7 +289,7 @@ function verser(db, id, c, prof, journal) {
   if (!db.prepare(`SELECT 1 FROM h_versements WHERE compte=? AND domaine_id=?`).get(c.compte, d.id)) return;
   globalDe(db, COMMUN);
   const cible = communDe(db, domaineChemin(db, COMMUN, d.nom).id);
-  db.prepare(`INSERT OR IGNORE INTO h_vu(entry_id,cerveau_id,origine,vu) VALUES(?,?,?,?)`).run(id, cible.id, c.id, maintenant());
+  voir(db, id, cible, c);
   const ins = db.prepare(`INSERT OR IGNORE INTO h_remontees(entry_id,de_cerveau,vers_cerveau,regle,statut,quand) VALUES(?,?,?,'versement','faite',?)`)
     .run(id, c.id, cible.id, maintenant());
   if (!Number(ins.changes)) return;
@@ -290,55 +300,76 @@ function verser(db, id, c, prof, journal) {
 
 /* convergence et fiches */
 
+/* La convergence part de l'index des clés : une clé ne touche qu'une
+   poignée d'entrées, un cerveau commun peut en voir des centaines de
+   milliers. Partir du cerveau rendrait chaque écriture proportionnelle à
+   sa taille. */
+const VUS_PAR_CLE = `FROM h_cles k INDEXED BY idx_h_cles_cle
+  JOIN h_vu v ON v.entry_id = k.entry_id AND v.cerveau_id = ?
+  JOIN entries e ON e.id = k.entry_id
+  WHERE k.cle = ? AND e.archived = 0 AND e.occurred_at >= ?`;
+const LIGNES_MAX = 60;
+
 function converger(db, c, id, r, prof, journal) {
   const depuis = new Date(Date.now() - r.fenetre_jours * 86400000).toISOString();
   const lesCles = db.prepare(`SELECT cle FROM h_cles WHERE entry_id=?`).all(id).map(x => x.cle);
+  const kind = c.genre === 'global' ? 'fiche.correlation' : 'fiche.commune';
   for (const k of lesCles) {
-    const vus = db.prepare(`
-      SELECT v.entry_id, v.origine FROM h_vu v
-      JOIN h_cles k ON k.entry_id = v.entry_id AND k.cle = ?
-      JOIN entries e ON e.id = v.entry_id
-      WHERE v.cerveau_id = ? AND e.archived = 0 AND e.occurred_at >= ?
-      ORDER BY v.entry_id LIMIT 200`).all(k, c.id, depuis);
-    if (new Set(vus.map(v => v.origine)).size >= r.convergence) fiche(db, c, k, vus, prof, journal);
+    const existe = db.prepare(`SELECT 1 FROM entries WHERE ref=? AND kind=?`).get(`fiche:${c.id}:${k}`, kind);
+    if (!existe && db.prepare(`SELECT count(*) n FROM h_convergence WHERE cerveau_id=? AND cle=? AND dernier>=?`).get(c.id, k, depuis).n < r.convergence) continue;
+    fiche(db, c, k, id, depuis, prof, journal);
   }
 }
 
-function fiche(db, c, k, vus, prof, journal) {
+const ligneDe = (db, entryId, origine) => {
+  const e = db.prepare(`SELECT title FROM entries WHERE id=?`).get(entryId);
+  const o = db.prepare(`SELECT nom FROM h_cerveaux WHERE id=?`).get(origine);
+  return `- ${o ? o.nom : '?'} : ${e ? e.title : '?'} (#${entryId})`;
+};
+
+/* Le texte s'allonge, le plein texte suit par ses déclencheurs. Les
+   morceaux vectorisés ne sont pas refaits : la fiche parle toujours de la
+   même clé, et la revectoriser à chaque ligne coûterait un appel au
+   modèle par écriture. */
+function reecrire(db, f, ns, kind, ref, titre, corps) {
+  db.prepare(`UPDATE entries SET body=?, hash=? WHERE id=?`)
+    .run(corps, ingest.hashOf({ ns, source: '@tamis', kind, ref, title: titre, body: corps }), f.id);
+}
+
+/* Une fiche naît avec ses contributions les plus récentes, puis se
+   complète d'une ligne par contribution nouvelle : jamais refaite en
+   entier à chaque écriture. Au-delà de LIGNES_MAX lignes, les liens
+   continuent de s'ajouter, le texte ne grossit plus. */
+function fiche(db, c, k, id, depuis, prof, journal) {
   const globale = c.genre === 'global';
   const kind = globale ? 'fiche.correlation' : 'fiche.commune';
   const relation = globale ? 'correle' : 'consolide';
   const ref = `fiche:${c.id}:${k}`;
-  const nomDe = id => (cerveau(db, id) || {}).nom || '?';
-  const lignes = vus.map(v => {
-    const e = db.prepare(`SELECT title FROM entries WHERE id=?`).get(v.entry_id);
-    return `- ${nomDe(v.origine)} : ${e ? e.title : '?'} (#${v.entry_id})`;
-  });
   const titre = `${globale ? 'Corrélation' : 'Fiche commune'} · ${k}`;
-  const corps = `${globale ? 'Plusieurs domaines' : 'Plusieurs sources'} parlent de ${k}.\n\n` + lignes.join('\n');
   const ns = 'h:' + c.compte;
-  let f = db.prepare(`SELECT id, body FROM entries WHERE ref=? AND kind=?`).get(ref, kind);
-  let neuve = false;
-  if (!f) {
-    const r = ingest.insert(db, { ns, kind, ref, title: titre, body: corps, level: 'L2', tags: ['fiche'] }, '@tamis');
-    if (!r.ok) return;
-    f = { id: r.id };
-    neuve = !r.duplicate;
-    const imp = Math.min(100, 10 + Math.max(0, ...vus.map(v => (db.prepare(`SELECT importance FROM h_place WHERE entry_id=?`).get(v.entry_id) || { importance: 0 }).importance)));
-    db.prepare(`INSERT OR IGNORE INTO h_place(entry_id,cerveau_id,importance,place) VALUES(?,?,?,?)`).run(f.id, c.id, imp, maintenant());
-    db.prepare(`INSERT OR IGNORE INTO h_cles(entry_id,cle) VALUES(?,?)`).run(f.id, k);
-  } else if (f.body !== corps) {
-    const o = { ns, source: '@tamis', kind, ref, title: titre, body: corps };
-    db.prepare(`UPDATE entries SET body=?, hash=? WHERE id=?`).run(corps, ingest.hashOf(o), f.id);
-    db.prepare(`DELETE FROM chunks WHERE entry_id=?`).run(f.id);
-    const ins = db.prepare(`INSERT INTO chunks(entry_id,seq,text,embedded) VALUES(?,?,?,?)`);
-    ingest.chunk({ title: titre, body: corps }).forEach((p, i) => ins.run(f.id, i, p.text, p.embedded));
+  const f = db.prepare(`SELECT id, body FROM entries WHERE ref=? AND kind=?`).get(ref, kind);
+  if (f) {
+    if (f.id === id || db.prepare(`SELECT 1 FROM links WHERE from_id=? AND to_id=? AND relation=?`).get(f.id, id, relation)) return;
+    const v = db.prepare(`SELECT origine FROM h_vu WHERE entry_id=? AND cerveau_id=?`).get(id, c.id);
+    if (!v) return;
+    ingest.link(db, f.id, id, relation, '@tamis');
+    if (f.body.split('\n').filter(l => l.startsWith('- ')).length < LIGNES_MAX)
+      reecrire(db, f, ns, kind, ref, titre, f.body + '\n' + ligneDe(db, id, v.origine));
+    return;
   }
-  for (const v of vus) if (v.entry_id !== f.id) ingest.link(db, f.id, v.entry_id, relation, '@tamis');
-  if (neuve) {
-    journal.push({ fiche: f.id, cerveau: c.id, cle: k, genre: kind });
-    arrivee(db, f.id, c, prof + 1, journal);
-  }
+  const vus = db.prepare(`SELECT v.entry_id, v.origine ${VUS_PAR_CLE} ORDER BY v.entry_id DESC LIMIT ${LIGNES_MAX}`)
+    .all(c.id, k, depuis).reverse();
+  const corps = `${globale ? 'Plusieurs domaines' : 'Plusieurs sources'} parlent de ${k}.\n\n`
+    + vus.map(v => ligneDe(db, v.entry_id, v.origine)).join('\n');
+  const r = ingest.insert(db, { ns, kind, ref, title: titre, body: corps, level: 'L2', tags: ['fiche'] }, '@tamis');
+  if (!r.ok || r.duplicate) return;
+  const imp = Math.min(100, 10 + Math.max(0, ...vus.map(v =>
+    (db.prepare(`SELECT importance FROM h_place WHERE entry_id=?`).get(v.entry_id) || { importance: 0 }).importance)));
+  db.prepare(`INSERT OR IGNORE INTO h_place(entry_id,cerveau_id,importance,place) VALUES(?,?,?,?)`).run(r.id, c.id, imp, maintenant());
+  db.prepare(`INSERT OR IGNORE INTO h_cles(entry_id,cle) VALUES(?,?)`).run(r.id, k);
+  for (const v of vus) ingest.link(db, r.id, v.entry_id, relation, '@tamis');
+  journal.push({ fiche: r.id, cerveau: c.id, cle: k, genre: kind });
+  arrivee(db, r.id, c, prof + 1, journal);
 }
 
 /* validation humaine d'une remontée en attente */
@@ -459,22 +490,26 @@ function creerProjet(db, compte, nom, membres) {
   return { id, nom, etiquette: 'projet:' + slug(nom), membres: ids };
 }
 
-/* Reprise : les entrées d'avant la hiérarchie sont rangées une fois, au
-   démarrage, comme si leur source venait de les écrire. */
-function reprendre(db, { lot = 500 } = {}) {
+/* Reprise : les entrées d'avant la hiérarchie sont rangées une fois,
+   comme si leur source venait de les écrire. Par lots, derrière un
+   curseur gardé en base : un redémarrage reprend où on s'était arrêté, et
+   chaque lot ne relit pas ce qui est déjà rangé. */
+function reprendre(db, { lot = 500, max = Infinity } = {}) {
   let total = 0;
-  for (;;) {
-    const ids = db.prepare(`SELECT e.id, e.source, e.kind, e.meta FROM entries e LEFT JOIN h_place p ON p.entry_id = e.id
-                            WHERE p.entry_id IS NULL AND e.kind NOT LIKE 'fiche.%' AND e.ns NOT LIKE 'h:%' ORDER BY e.id LIMIT ?`).all(lot);
+  const lire = () => Number((db.prepare(`SELECT v FROM meta WHERE k='hierarchie_reprise'`).get() || { v: 0 }).v);
+  while (total < max) {
+    const depuis = lire();
+    const ids = db.prepare(`SELECT id, source, kind, meta, ns FROM entries WHERE id > ? ORDER BY id LIMIT ?`).all(depuis, lot);
     if (!ids.length) break;
     db.exec('BEGIN');
     try {
       for (const e of ids) {
+        if (String(e.kind).startsWith('fiche.') || String(e.ns).startsWith('h:')) continue;
         let agent = null;
         try { agent = JSON.parse(e.meta || '{}').agent || null; } catch { /* méta illisible : la source sert de membre */ }
-        classer(db, e.id, { src: { name: e.source }, membre: e.kind === 'echange' && agent ? agent : e.source });
-        total++;
+        if (classer(db, e.id, { src: { name: e.source }, membre: e.kind === 'echange' && agent ? agent : e.source })) total++;
       }
+      db.prepare(`INSERT OR REPLACE INTO meta(k,v) VALUES('hierarchie_reprise',?)`).run(String(ids.at(-1).id));
       db.exec('COMMIT');
     } catch (err) { db.exec('ROLLBACK'); throw err; }
     if (ids.length < lot) break;
@@ -482,8 +517,14 @@ function reprendre(db, { lot = 500 } = {}) {
   return total;
 }
 
+/* Ce qui reste à ranger, pour le dire au journal et à /healthz. */
+function resteAReprendre(db) {
+  const depuis = Number((db.prepare(`SELECT v FROM meta WHERE k='hierarchie_reprise'`).get() || { v: 0 }).v);
+  return db.prepare(`SELECT count(*) n FROM entries WHERE id > ?`).get(depuis).n;
+}
+
 module.exports = {
   COMMUN, PRINCIPAL, DEFAUTS, mode, changerMode, principal, compteDe, globalDe, domaineChemin, cerveauMembre,
   cerveau, parentDe, ascendants, reglages, regler, cles, importanceDe, classer, valider, acces, chercher,
-  arbre, rattacher, creerProjet, reprendre, slug,
+  arbre, rattacher, creerProjet, reprendre, resteAReprendre, slug,
 };
