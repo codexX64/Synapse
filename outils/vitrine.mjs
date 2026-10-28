@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 
 const RACINE = path.resolve(import.meta.dirname, '..');
 const [port = '8140', gamme = 'soma'] = process.argv.slice(2);
@@ -104,6 +105,36 @@ await hub('/v1/apprendre', { agent: 'qwen3-8b', question: 'quel modèle utiliser
 await hub('/v1/apprendre', { agent: 'qwen3-8b', trait: { portee: 'commun', cle: 'format_commandes', valeur: 'Donne les commandes groupées en un seul bloc à coller.', confiance: 0.82 } });
 await hub('/v1/apprendre', { agent: 'qwen3-8b', trait: { portee: 'commun', cle: 'langue', valeur: 'Répond en français, sans détour.', confiance: 0.9 } });
 await hub('/v1/neurons', { neuron: { type: 'incident_resolution', alert_key: 'passerelle.down', host: 'passerelle', service: 'reseau', signature: 'passerelle injoignable', root_cause: 'Coupure de courant.', resolution: 'Attendre le retour du courant, vérifier la route par défaut.', outcome: 'resolved' } });
+
+// La hiérarchie des cerveaux : des IA et des services qui écrivent sous
+// leur propre nom (jetons de cerveau), deux domaines de connaissance, des
+// faits qui convergent d'une IA à l'autre et d'un domaine à l'autre, une
+// rafale d'alertes répétées que le tamis ne fait monter qu'une fois.
+const { jetonPour } = createRequire(import.meta.url)('../src/cerveaux.js');
+const ecrit = async (nom, corps) => {
+  const r = await fetch(base + '/v1/ingest', { method: 'POST', headers: { authorization: `Bearer ${jetonPour(JETON_HUB, nom)}`, 'content-type': 'application/json' }, body: JSON.stringify({ ns: 'shared', ...corps }) });
+  if (r.status >= 300) throw new Error(`${nom} : ${r.status} ${await r.text()}`);
+};
+const quand = ilYa => new Date(t - ilYa * h).toISOString();
+for (const [nom, corps] of [
+  ['claude-code', { kind: 'note', title: 'La VM 105 (hub) est sur le VLAN 30', body: 'Vue en session de déploiement.', occurred_at: quand(30) }],
+  ['claude-code', { kind: 'decision.stockage', title: 'On garde SQLite pour la mémoire', body: 'Un fichier, une sauvegarde, aucune dépendance.', occurred_at: quand(28) }],
+  ['claude-code', { kind: 'note', title: 'Le port 8120 sert la mémoire sur la VM 105', body: '', occurred_at: quand(26) }],
+  ['kimi', { kind: 'note', title: 'Le VLAN 30 regroupe les serveurs', body: '', occurred_at: quand(25) }],
+  ['kimi', { kind: 'note', title: 'Le port 8120 répond en 200 après la mise à jour', body: '', occurred_at: quand(20) }],
+  ['ollama', { kind: 'note', title: 'La VM 105 répond en 192.0.2.11', body: '', occurred_at: quand(18) }],
+  ['ollama', { kind: 'note', title: 'VLAN 66 réservé au labo', body: '', occurred_at: quand(16) }],
+  ['mapmylan', { kind: 'device.seen', title: 'Appareil vu en 192.0.2.11 sur le VLAN 30', body: '', occurred_at: quand(15) }],
+  ['proxmox', { kind: 'vm.started', title: 'VM 105 démarrée', body: '', occurred_at: quand(14) }],
+  ['proxmox', { kind: 'note', title: 'Port 8120 ouvert sur la VM 105', body: '', occurred_at: quand(13) }],
+  ['triage', { kind: 'incident.service', title: 'La mémoire ne répondait plus sur le port 8120', body: 'Relancée, revenue en 40 s.', meta: { gravite: 'eleve' }, occurred_at: quand(12) }],
+  ['vigie', { kind: 'security.alert', title: 'Force brute sur 192.0.2.11 : huit refus en trois minutes', body: '', tags: ['securite'], meta: { gravite: 'eleve' }, occurred_at: quand(10) }],
+  ['notes-reseau', { kind: 'decision.reseau', title: 'Isoler les objets connectés sur le VLAN 40', body: '', domaine: 'Connaissance/Réseau', occurred_at: quand(9) }],
+  ['notes-reseau', { kind: 'note', title: 'Le VLAN 40 ne parle pas au VLAN 30', body: '', domaine: 'Connaissance/Réseau', occurred_at: quand(8) }],
+  ['notes-securite', { kind: 'decision.securite', title: 'Fermer le port 23 partout', body: '', domaine: 'Connaissance/Sécurité', occurred_at: quand(7) }],
+  ['notes-securite', { kind: 'note', title: 'Le VLAN 40 sort par la passerelle seulement', body: '', domaine: 'Connaissance/Sécurité', occurred_at: quand(6) }],
+]) await ecrit(nom, corps);
+for (let i = 0; i < 40; i++) await ecrit('vigie', { kind: 'security.alert', title: `Menace extérieure non bloquée : 203.0.113.${10 + i} (score ${200 + i})`, body: '', tags: ['securite'], meta: { gravite: 'eleve' }, occurred_at: quand(5 - i / 20) });
 
 console.log(`SYNAPSE ${gamme} : http://localhost:${port}`);
 console.log(`JETON=${JETON_INSTALLATION}`);
