@@ -1,6 +1,6 @@
 {
   "name": "synapse",
-  "version": "3.3.1",
+  "version": "3.3.2",
   "description": "Mémoire consultable pour agents et humains : recherche en cascade, mémoire opérationnelle, apprentissage — sous le Hub, sur le socle commun.",
   "private": true,
   "license": "MIT",
