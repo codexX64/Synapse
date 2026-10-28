@@ -145,3 +145,15 @@ Correctif : table `h_convergence` (cerveau, clé, origine, dernière date) tenue
 Le coût ne dépend plus de la taille. Essai de garde : une clé répétée 800 fois par une seule source ne rend pas l'écriture plus chère.
 
 La reprise ne bloque plus le démarrage : elle tourne en tâche de fond par lots de 200, derrière un curseur en base (`meta.hierarchie_reprise`) qui survit à un redémarrage. `/healthz` dit `hierarchie: reprise | prete`, sans compte. Cas limite assumé : la fenêtre de convergence lit la date de la dernière contribution par origine ; une entrée archivée après coup compte encore jusqu'à ce que cette date sorte de la fenêtre.
+
+### Mesure sur une copie de la base de production (2026-10-28)
+142 308 entrées (141 990 de vigie), 734 Mo, un cœur, 512 Mo. Reprise 365,8 s (2,57 ms par entrée) ; tamis à l'écriture p50 2,53 ms, p95 4,49 ms, p99 17 ms ; mémoire 88 Mo ; base +106 Mo.
+
+Ce que la mesure a montré, et corrigé depuis :
+- **tout remontait** (141 990 remontées) : vigie étiquette chaque alerte `securite`, qui forçait la remontée et fixait l'importance à 90. `securite` n'est plus une étiquette forcée par défaut (seule `decision` l'est) et ne touche plus l'importance ; la gravité dite par la source (`meta.gravite` chez vigie, `meta.severity` ailleurs) la fixe.
+- **la même alerte répétée** (« Menace extérieure non bloquée : <ip> (score N) », jusqu'à 30 000 par jour en rafale) : un motif (genre et titre, adresses et nombres neutralisés) ne remonte qu'une fois par `repetition_heures` (24 par défaut, réglable par cerveau), les répétitions sont comptées dans `h_motifs`.
+- **fausses convergences** : le Hub relaie sous son nom les alertes des autres services ; vigie et son relais faisaient deux origines pour un fait. Une alerte du Hub qui reprend mot pour mot le titre d'une entrée d'un autre service à dix minutes près est rangée chez ce service.
+- **fiches illisibles** (2 161 liens sur « port:21 ») : dix exemples liés par origine au plus, toutes les mentions comptées dans `h_fiches` et dans la première ligne de la fiche.
+- **agent « inconnu »** : le cerveau prend le nom de la source.
+
+Rejoué sur la forme réelle (alertes vigie en rafale, gravité « élevé », relais du Hub) : 4 remontées pour 5 430 alertes (une par motif), 0 fausse fiche, 0,56 ms par entrée. À remesurer sur la copie de production avant l'étiquette.
