@@ -164,3 +164,10 @@ Page `/cerveaux` (un fichier, `ui/cerveaux.html`, même gamme et même contrat d
 Vérifié dans Chromium contre la vitrine (enrichie de dix cerveaux, deux sous-domaines, des convergences et une rafale d'alertes répétées) : 1440, 1024, 768 et 360 px, aucune erreur de console, aucun texte brut ; création d'un projet et d'un domaine depuis la page. 189 essais du service et du socle verts.
 
 Pas encore vérifié : le rendu sur la base de production ; le parcours `outils/parcours-navigateur.mjs` ne couvre pas encore cette page.
+
+## Suivi du 2026-10-28 (3.2.0) : une sphère par cerveau, dans la vue de la mémoire
+La page séparée `/cerveaux` de la 3.1.0 est retirée : la hiérarchie se voit dans la vue de la mémoire elle-même. La sphère du centre reste ce qu'elle était (ses cartes, ses vues, sa barre de question) et devient le cerveau global ; autour d'elle, une sphère par cerveau de la hiérarchie (communs de domaine en couronne, IA et services en orbite, sous-domaines un cran plus loin), faite des mêmes cartes (mêmes textures, aucune copie), avec une enveloppe de points à la couleur du domaine et des brins vers le cerveau où elle remonte. Clic sur une carte : l'inspecteur habituel ; clic sur le nom d'un cerveau : la caméra le suit, la rotation s'arrête. En galaxie et en carte 2D, les sphères s'effacent. `/v1/graph` dit pour chaque neurone les cerveaux où il est présent et montre, dans l'espace de l'infrastructure, les fiches du compte de l'appelant.
+
+Vérifié dans Chromium contre la vitrine (16 cerveaux, deux sous-domaines) : la couronne entière dans la vue de départ, le suivi d'un cerveau, aucune erreur de console. 190 essais verts, dont le graphe (cerveaux de chaque neurone, fiches présentes, entrée remontée dans deux cerveaux).
+
+Pas encore vérifié : le rendu sur la base de production (260 cartes au plus par sphère de cerveau) ; les performances sur un téléphone avec beaucoup de cerveaux. Les réglages du tamis, les projets et les jetons de compte n'ont plus d'écran : ils restent accessibles par l'API (`/v1/hierarchie/*`) en attendant leur place dans cette vue.

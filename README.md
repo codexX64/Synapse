@@ -84,8 +84,7 @@ premier compte se crée depuis le Hub (Comptes des services) ; seul, SYNAPSE
 
 | Chemin | Ce qu'on y fait |
 |---|---|
-| `/` | vue 3D de la mémoire, questions, activité mesurée et apprentissage |
-| `/cerveaux` | la hiérarchie des cerveaux : constellation en direct, arbre des domaines, fiche et tamis de chaque cerveau, projets partagés, comptes et jetons |
+| `/` | vue 3D de la mémoire, questions, activité mesurée et apprentissage ; autour de la sphère centrale (le cerveau global), une sphère par cerveau de la hiérarchie |
 | `/parametres` | rangement, plages horaires, notifications |
 | `/connexion` | la porte du socle commun : installation, connexion, facteurs à inscrire |
 | `/compte` | moyens de connexion, sessions, alertes, export et suppression de ses données ; comptes, politique et journal pour un administrateur |
