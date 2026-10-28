@@ -176,3 +176,8 @@ Pas encore vérifié : le rendu sur la base de production (260 cartes au plus pa
 Barre des cerveaux sous l'en-tête (un bouton par cerveau dans l'ordre de l'arbre, ◀ ▶), qui s'allume sur le cerveau où l'on est. Déplacement libre dans la scène : clic droit glissé ou Maj + glisser déplace le point regardé, deux doigts au téléphone déplacent et zooment, ZQSD ou WASD font voler, R et F montent et descendent ; ← et → passent au cerveau précédent ou suivant, ↑ au cerveau parent, Échap revient à la vue d'ensemble. Dès qu'on se déplace librement, la rotation automatique s'arrête. Le clavier ne fait rien tant qu'on écrit dans un champ.
 
 Vérifié dans Chromium contre la vitrine : trois fois → mène à kimi, ↑ à IA, le clic droit glissé et le vol déplacent le point regardé, un bouton de la barre amène au cerveau voulu, Échap revient au global, les touches restent dans le champ de question ; rendu à 1440 et 390 px, aucune erreur de console. 190 essais verts.
+
+## Suivi du 2026-10-28 (3.3.1) : une carte ouverte dans son cerveau
+Une carte choisie dans la sphère d'un cerveau ouvrait son double dans la grande sphère : la caméra quittait le cerveau. Elle va maintenant sur cette carte-là, vue de l'extérieur de la sphère du cerveau, et la suit ; la carte grossit, l'inspecteur s'ouvre, le nom du cerveau se masque le temps de la lecture. RESET CAM et le double-clic recadrent sur elle ; Échap ferme et laisse dans le cerveau. Une carte de la grande sphère se comporte comme avant.
+
+Vérifié dans Chromium contre la vitrine : clic sur une carte de vigie à l'écran, caméra à 15 unités de cette carte (105 de son double central), inspecteur ouvert, nom masqué puis revenu après Échap, toujours dans vigie ; aucune erreur. 190 essais verts.
