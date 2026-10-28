@@ -1004,6 +1004,7 @@ function sphereCerveau(centre,rb,ids,coul,cid,nom,total,commun,parent){
   const l=texteSprite(commun?nom.toUpperCase():nom,nfr(total)+(total>1?' entrées':' entrée'),coul,commun?1.35:1);
   l.position.set(0,rb*1.14+(commun?4:3),0);l.userData.cerveau=cid;g.add(l);BRAIN_LBLS.push(l);
   BRAIN_INFO.set(cid,{g,rb,nom,total,lbl:l});
+  return g;
 }
 function brin(a,b,coul,op){
   const mid=a.clone().add(b).multiplyScalar(.5);mid.y+=a.distanceTo(b)*.14;
@@ -1014,53 +1015,141 @@ function brin(a,b,coul,op){
     BRAINS.add(ln);
   }
 }
+/* TOUS LES POINTS
+   Les cartes sont des images : 1 400 tiennent dans un navigateur, pas
+   145 000. Chaque entrée est donc aussi un point, coloré par son type, sur
+   la sphère de son cerveau (et sur la grande sphère pour toutes) : un nuage
+   de points se dessine en un seul appel, même à plusieurs centaines de
+   milliers. Les cartes restent par-dessus pour les entrées les plus
+   parlantes ; un point cliqué s'ouvre comme une carte. */
+const NUAGES=[];
+function nuage(parent,indices,P,rb,cid){
+  const n=indices.length;if(!n)return null;
+  const pos=new Float32Array(n*3),col=new Float32Array(n*3),ids=new Int32Array(n),typ=new Uint8Array(n);
+  const or=Math.PI*(3-Math.sqrt(5)),r=rb*.965,cc=new THREE.Color(),cache=new Map();
+  for(let k=0;k<n;k++){
+    const i=indices[k],y=1-((k+.5)/n)*2,rr=Math.sqrt(Math.max(0,1-y*y)),t=k*or;
+    pos[k*3]=Math.cos(t)*rr*r;pos[k*3+1]=y*r;pos[k*3+2]=Math.sin(t)*rr*r;
+    const ty=P.t[i];let c=cache.get(ty);if(!c){c=cc.set(typeDe(P.types[ty]).c).clone();cache.set(ty,c);}
+    col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;ids[k]=P.e[i];typ[k]=ty;
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  /* la taille d'un point suit l'espacement : il ne recouvre pas ses voisins */
+  const pas=Math.sqrt(4*Math.PI*r*r/n);
+  const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:Math.max(.05,Math.min(.55,pas*.62)),vertexColors:true,transparent:true,opacity:.92,depthWrite:false}));
+  pts.userData={ids,typ,cerveau:cid,rb};
+  parent.add(pts);NUAGES.push(pts);
+  return pts;
+}
+
 async function chargeCerveaux(){
   if(!ETAT.live||NS!=='shared'||!nodes.length)return;
-  let h;
+  const t0=performance.now();
+  let h,P=null;
   try{
-    const r=await fetch('/v1/hierarchie',{credentials:'same-origin'});
-    if(!r.ok)return;   /* 404 : SYNAPSE d'avant la 3.0, la sphère reste seule */
-    h=await r.json();
+    const [r1,r2]=await Promise.all([fetch('/v1/hierarchie',{credentials:'same-origin'}),fetch('/v1/graph/points?ns=shared',{credentials:'same-origin'})]);
+    if(!r1.ok)return;   /* 404 : SYNAPSE d'avant la 3.0, la sphère reste seule */
+    h=await r1.json();
+    if(r2.ok)P=await r2.json();   /* sans les points, les cartes suffisent */
   }catch(e){console.warn('cerveaux : arbre illisible, la sphère reste seule',e);return;}
   const a=h.comptes&&h.comptes[0];if(!a)return;
   const dans=new Map();
   nodes.forEach(n=>(n.d.cerveaux||[]).forEach(c=>{if(!dans.has(c))dans.set(c,[]);dans.get(c).push(n.id);}));
+  /* les points de chaque cerveau, et le vrai compte qui fixe sa taille */
+  const pts=new Map();
+  if(P)for(let i=0;i<P.c.length;i++){const ci=P.c[i];if(ci<0)continue;const c=P.cerveaux[ci];if(!pts.has(c))pts.set(c,[]);pts.get(c).push(i);}
+  const G=P?P.g:ETAT.total;
+  const nb=cid=>P?(pts.get(cid)||[]).length:(dans.get(cid)||[]).length;
+  /* la surface d'une sphère suit son volume : même espacement partout ;
+     le global, qui a tout, reste la plus grosse */
+  const R=n=>Math.max(2.6,LEAF_R*.85*Math.sqrt(Math.min(1,n/Math.max(1,G))));
   const doms=a.domaines,enfants=id=>doms.filter(d=>d.parent_id===id);
-  /* Un cerveau n'est dessiné que s'il a des cartes à montrer ; un
-     domaine sans rien à montrer, ni chez lui ni en dessous, disparaît. */
-  const plein=d=>(dans.get(d.commun.id)||[]).length>0||d.membres.some(m=>(dans.get(m.id)||[]).length)||enfants(d.id).some(plein);
-  const poids=d=>1+d.membres.filter(m=>(dans.get(m.id)||[]).length).length+enfants(d.id).filter(plein).reduce((x,e)=>x+poids(e),0);
+  /* un cerveau sans aucune entrée n'est pas dessiné ; un domaine vide
+     partout en dessous non plus */
+  const plein=d=>nb(d.commun.id)>0||d.membres.some(m=>nb(m.id)>0)||enfants(d.id).some(plein);
+  const membresPleins=d=>d.membres.filter(m=>nb(m.id)>0);
+  const poids=d=>1+membresPleins(d).reduce((x,m)=>x+1+R(nb(m.id))/8,0)+enfants(d.id).filter(plein).reduce((x,e)=>x+poids(e),0);
   const racines=doms.filter(d=>!d.parent_id&&plein(d)),tot=racines.reduce((x,d)=>x+poids(d),0)||1;
-  const rayonDe=ids=>Math.max(2.6,Math.min(9,1.7+Math.sqrt(ids.length)*.55));
-  const RC=52,PAS=21;
-  const pose=(d,a0,a1,niv,depuis,coul,parentC)=>{
+  const ECART=10;
+  let borne=LEAF_R;
+  const pose=(d,a0,a1,base,depuis,coul,parentC,niv)=>{
     if(!plein(d))return;
-    const mid=(a0+a1)/2,R=RC+niv*PAS;
-    const pos=new THREE.Vector3(Math.cos(mid)*R,niv%2?7:-2,Math.sin(mid)*R);
-    const ids=dans.get(d.commun.id)||[];
-    if(ids.length)sphereCerveau(pos,rayonDe(ids)+1.4,ids,coul,d.commun.id,d.nom,d.commun.n,true,parentC);
+    const mid=(a0+a1)/2,rc=R(nb(d.commun.id)),dist=base+rc;
+    const pos=new THREE.Vector3(Math.cos(mid)*dist,niv%2?6:-2,Math.sin(mid)*dist);
+    let g;
+    if(nb(d.commun.id)){g=sphereCerveau(pos,rc,dans.get(d.commun.id)||[],coul,d.commun.id,d.nom,d.commun.n,true,parentC);if(P)nuage(g,pts.get(d.commun.id),P,rc,d.commun.id);}
     else jonction(pos,coul,d.commun.id,d.nom,d.commun.n,parentC);
+    borne=Math.max(borne,dist+rc);
     brin(depuis||pos.clone().normalize().multiplyScalar(LEAF_R+1.5),pos,coul,depuis?.45:.6);
-    const sous=enfants(d.id).filter(plein),ms=d.membres.filter(m=>(dans.get(m.id)||[]).length);
-    const Rm=RC+(niv+1+(sous.length?1:0))*PAS+6;
-    ms.forEach((m,i)=>{
-      const t=ms.length===1?mid:a0+(a1-a0)*(i+.5)/ms.length;
-      const mp=new THREE.Vector3(Math.cos(t)*Rm,(i%2?8:-8)*(ms.length>2?1:.4),Math.sin(t)*Rm);
-      const mi=dans.get(m.id)||[];
-      sphereCerveau(mp,rayonDe(mi),mi,coul,m.id,m.nom,m.n,false,d.commun.id);
-      brin(mp,pos,coul,.38);
+    /* membres et sous-domaines se partagent le secteur, au prorata de leur taille */
+    const items=[...membresPleins(d).map(m=>({m,w:1+R(nb(m.id))/8})),...enfants(d.id).filter(plein).map(e=>({e,w:poids(e)}))];
+    const W=items.reduce((x,i)=>x+i.w,0)||1;let b=a0;
+    items.forEach((it,i)=>{
+      const l=(a1-a0)*it.w/W,t=b+l/2;
+      if(it.m){
+        const rm=R(nb(it.m.id)),dm=dist+rc+ECART+rm;
+        const mp=new THREE.Vector3(Math.cos(t)*dm,(i%2?8:-8)*(items.length>2?1:.4),Math.sin(t)*dm);
+        const gm=sphereCerveau(mp,rm,dans.get(it.m.id)||[],coul,it.m.id,it.m.nom,it.m.n,false,d.commun.id);
+        if(P)nuage(gm,pts.get(it.m.id),P,rm,it.m.id);
+        brin(mp,pos,coul,.38);borne=Math.max(borne,dm+rm);
+      }else pose(it.e,b,b+l,dist+rc+ECART,pos,coul,d.commun.id,niv+1);
+      b+=l;
     });
-    const ps=sous.map(poids),pt=ps.reduce((x,p)=>x+p,0)||1;let b=a0;
-    sous.forEach((e,i)=>{const l=(a1-a0)*ps[i]/pt;pose(e,b,b+l,niv+1,pos,coul,d.commun.id);b+=l;});
   };
   let ang=-Math.PI/2;
-  racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.07,ang+l*.93,0,null,BR_COUL[i%BR_COUL.length]);ang+=l;});
+  racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.04,ang+l*.96,LEAF_R+ECART+4,null,BR_COUL[i%BR_COUL.length],null,0);ang+=l;});
+  /* la grande sphère porte toutes les entrées, une fois chacune */
+  if(P&&P.g){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,LEAF_R,null);}
   /* le centre dit qu'il est le global */
-  const gl=texteSprite('GLOBAL',nfr(ETAT.total)+' entrées','#ffffff',1.7);gl.position.set(0,LEAF_R+7,0);BRAINS.add(gl);
-  ETAT.cerveaux=true;
+  const gl=texteSprite('GLOBAL',nfr(G)+' entrées','#ffffff',1.7);gl.position.set(0,LEAF_R+7,0);BRAINS.add(gl);
+  ETAT.borne=borne;ETAT.cerveaux=true;if(P)P_TYPES=P.types;
+  ETAT.msCerveaux=Math.round(performance.now()-t0);
+  camera.far=Math.max(400,borne*7);camera.updateProjectionMatrix();
+  if(P){const tag=document.getElementById('demoTag');if(tag)tag.textContent='EN DIRECT · '+nfr(G)+' ENTRÉES · '+nfr(nodes.length)+' CARTES';}
   dessineNav();
-  if(!state.selected)homeCam();
+  /* ne pas reprendre la caméra à quelqu'un qui a déjà commencé à naviguer */
+  if(!state.selected&&!state.cerveauSuivi&&!state.libre)homeCam();
 }
+
+/* Un point cliqué : la caméra y va, l'inspecteur le lit. */
+function pickPoint(cx,cy){
+  if(!BRAINS.visible||!NUAGES.length)return null;
+  const r=canvas.getBoundingClientRect();
+  mouse.x=((cx-r.left)/r.width)*2-1;mouse.y=-((cy-r.top)/r.height)*2+1;
+  ray.setFromCamera(mouse,camera);
+  ray.params.Points.threshold=Math.max(.12,rig.r*.0035);
+  const hit=ray.intersectObjects(NUAGES,false)[0];
+  return hit?{obj:hit.object,index:hit.index}:null;
+}
+function lachePoint(){
+  if(state.pointSel){state.pointSel.parent&&state.pointSel.parent.remove(state.pointSel);state.pointSel=null;}
+}
+function focusPoint(){
+  const m=state.pointSel;if(!m)return;
+  m.parent.getWorldPosition(_v2);m.getWorldPosition(_wp);
+  const d=_v1.copy(_wp).sub(_v2);if(d.lengthSq()<1e-9)return;d.normalize();
+  tweenTo({th:Math.atan2(d.z,d.x),ph:Math.min(Math.PI-.15,Math.max(.15,Math.acos(Math.max(-1,Math.min(1,d.y))))),r:6},760,easeIOC);
+}
+async function ouvrePoint(p){
+  lacheCarteMini();lachePoint();
+  const u=p.obj.userData,id=u.ids[p.index];
+  const a=p.obj.geometry.attributes.position;
+  const marque=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:0xffffff,transparent:true,opacity:.95,blending:THREE.AdditiveBlending,depthWrite:false}));
+  marque.position.set(a.getX(p.index),a.getY(p.index),a.getZ(p.index));marque.scale.set(1.6,1.6,1);
+  p.obj.parent.add(marque);
+  state.pointSel=marque;state.cible=marque;state.cerveauSuivi=u.cerveau;state.libre=false;majNav();
+  focusPoint();
+  const nid='e'+id;
+  state.selected=nid;state.related=new Set(NEIGH[nid]||[]);state.tags=new Set();
+  if(byId[nid]){renderInspector(byId[nid]);return;}
+  let e=null;
+  try{const r=await fetch('/v1/entry?id='+id,{credentials:'same-origin'});if(r.ok)e=await r.json();}catch(err){console.warn('point : entrée illisible',err);}
+  if(state.selected!==nid)return;
+  renderInspector({id:nid,type:P_TYPES[u.typ[p.index]]||'service',name:e?e.title:'Entrée #'+id,
+    d:e?{sub:e.source+' · '+e.kind,level:e.level,at:e.occurred_at,ref:e.ref,dup:e.dup_count>1?e.dup_count:undefined}:{}});
+}
+let P_TYPES=[];
 /* NAVIGATION ENTRE CERVEAUX
    La barre sous l'en-tête : un bouton par cerveau, dans l'ordre de
    l'arbre ; ◀ ▶ et les flèches du clavier les parcourent, ↑ remonte au
@@ -1082,7 +1171,7 @@ function majNav(){
   $('#navC').querySelectorAll('[data-c]').forEach(b=>{const on=b.dataset.c===ici;b.classList.toggle('ici',on);if(on&&b.scrollIntoView)b.scrollIntoView({block:'nearest',inline:'nearest'});});
 }
 function allerA(cid){
-  if(cid==='global'){lacheCarteMini();state.cible=null;state.libre=false;state.cerveauSuivi=null;tweenTo({tgx:0,tgy:0,tgz:0,r:72},850,easeIOC);toast('Cerveau global · '+nfr(ETAT.total)+' entrées');majNav();return;}
+  if(cid==='global'){lacheCarteMini();lachePoint();state.cible=null;state.libre=false;state.cerveauSuivi=null;tweenTo({tgx:0,tgy:0,tgz:0,r:72},850,easeIOC);toast('Cerveau global · '+nfr(ETAT.total)+' entrées');majNav();return;}
   versCerveau(cid);
 }
 function pasCerveau(pas){
@@ -1106,7 +1195,7 @@ function pickCerveau(cx,cy){
    ne s'échappe pas pendant qu'on la regarde */
 function versCerveau(cid){
   const b=BRAIN_INFO.get(cid);if(!b)return;
-  lacheCarteMini();state.cible=null;
+  lacheCarteMini();lachePoint();state.cible=null;
   state.cerveauSuivi=cid;state.libre=false;
   tweenTo({r:b.rb*5+22},850,easeIOC);majNav();
   toast(b.nom+' · '+nfr(b.total)+(b.total>1?' entrées':' entrée'));
@@ -1325,7 +1414,7 @@ function focusCard(n){
      de la texture retombe sous 1.5x et le contexte reste visible. */
   tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+20},760,easeIOC);
 }
-function homeCam(){lacheCarteMini();state.cible=null;state.cerveauSuivi=null;state.libre=false;if(ORDRE_C.length)majNav();tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:ETAT.cerveaux?.64:1.12,r:ETAT.cerveaux?240:62},900,easeIOC);}
+function homeCam(){lacheCarteMini();lachePoint();state.cible=null;state.cerveauSuivi=null;state.libre=false;if(ORDRE_C.length)majNav();tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:ETAT.cerveaux?.64:1.12,r:ETAT.cerveaux?Math.max(240,ETAT.borne*2.3):62},900,easeIOC);}
 function frame(v,r){tweenTo({tgx:v.x,tgy:v.y,tgz:v.z,r},650,easeIOC);}
 function worldOf(id){byId[id].spr.getWorldPosition(_wp);return _wp;}
 
@@ -1338,7 +1427,7 @@ function deplace(dx,dy){
   if(state.cerveauSuivi||state.cible){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;state.cible=null;majNav();}
   state.libre=true;
   rig.tgG.addScaledVector(right,-dx*k).addScaledVector(up,dy*k);
-  if(rig.tgG.length()>260)rig.tgG.setLength(260);
+  if(rig.tgG.length()>(ETAT.borne||120)*1.6)rig.tgG.setLength((ETAT.borne||120)*1.6);
 }
 let glisseDeplace=false;
 canvas.addEventListener('pointerdown',e=>{
@@ -1372,6 +1461,7 @@ canvas.addEventListener('pointerup',e=>{
     if(id)selectNode(id);
     else if(c&&c.id)selectNodeMini(c.id,c.sprite);
     else if(c&&c.cerveau)versCerveau(c.cerveau);
+    else if(pickPoint(e.clientX,e.clientY))ouvrePoint(pickPoint(e.clientX,e.clientY));
     else if(state.selected)clearSelection();
     else if(state.filtre)clearFiltre();
   }
@@ -1380,13 +1470,13 @@ canvas.addEventListener('dblclick',()=>recadre());
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();cancelTween();
-  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?280:115,rig.rG*(1+e.deltaY*.0011)));
+  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?Math.max(280,ETAT.borne*3.2):115,rig.rG*(1+e.deltaY*.0011)));
 },{passive:false});
 canvas.addEventListener('touchmove',e=>{
   if(e.touches.length===2){
     const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
     const mx=(e.touches[0].clientX+e.touches[1].clientX)/2,my=(e.touches[0].clientY+e.touches[1].clientY)/2;
-    if(pinch){cancelTween();rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:ETAT.cerveaux?280:115,rig.rG*pinch/d));
+    if(pinch){cancelTween();rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:ETAT.cerveaux?Math.max(280,ETAT.borne*3.2):115,rig.rG*pinch/d));
       if(VIEW.mode==='sphere'&&milieu)deplace(mx-milieu[0],my-milieu[1]);}
     pinch=d;milieu=[mx,my];dragging=false;
   }
@@ -1426,7 +1516,7 @@ function vole(){
   if(state.cerveauSuivi||state.cible){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;state.cible=null;majNav();}
   state.libre=true;
   rig.tgG.addScaledVector(avant,z*v).addScaledVector(cote,x*v);rig.tgG.y+=y*v;
-  if(rig.tgG.length()>260)rig.tgG.setLength(260);
+  if(rig.tgG.length()>(ETAT.borne||120)*1.6)rig.tgG.setLength((ETAT.borne||120)*1.6);
 }
 $('#btnHome').onclick=()=>{clearSelection(true);};
 $('#btnReset').onclick=()=>recadre();
@@ -1462,12 +1552,14 @@ function selectNodeMini(id,sp){
   focusMini(sp);majNav();
 }
 function recadre(){
-  if(state.carteMini)focusMini(state.carteMini);
+  if(state.pointSel)focusPoint();
+  else if(state.carteMini)focusMini(state.carteMini);
   else if(state.selected)focusCard(byId[state.selected]);
   else homeCam();
 }
 function selectNode(id,mini){
   const n=byId[id];if(!n)return;
+  lachePoint();
   if(!mini){lacheCarteMini();state.cible=null;}
   state.selected=id;state.cerveauSuivi=null;
   state.related=new Set(NEIGH[id]);
@@ -1478,6 +1570,7 @@ function selectNode(id,mini){
 }
 function clearSelection(goHome){
   if(state.carteMini){lacheCarteMini();state.cible=null;}
+  if(state.pointSel){lachePoint();state.cible=null;}
   if(state.selected)activeLabels.delete(state.selected);
   state.selected=null;state.related.clear();state.tags.clear();
   insp.classList.remove('on');
@@ -1851,7 +1944,7 @@ function loop(){
   /* Le plafond de 115 convenait a la sphere (rayon 25). La carte 2D
      s'etale sur 350 unites : la plafonner a 115 revenait a l'ouvrir
      deja hors champ. Le plafond suit donc la vue. */
-  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?280:115,rig.rG));
+  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?Math.max(280,ETAT.borne*3.2):115,rig.rG));
   rig.th+=(rig.thG-rig.th)*.085;rig.ph+=(rig.phG-rig.ph)*.085;
   rig.r+=(rig.rG-rig.r)*.085;rig.tg.lerp(rig.tgG,.085);
   camera.position.set(
@@ -1915,7 +2008,7 @@ function loop(){
     VIEW._treeVis=Math.max(0,gS);
     /* La densite du brouillard suit la vue : sinon la carte 2D, vue de
        200 unites, disparait entierement dans le gris. */
-    const fogCible=gC>0.2?0.0012:gG>0.2?0.003:ETAT.cerveaux?0.0026:0.006;
+    const fogCible=gC>0.2?0.0012:gG>0.2?0.003:ETAT.cerveaux?Math.min(.0026,.6/(ETAT.borne*2.3)):0.006;
     BRAINS.visible=!!ETAT.cerveaux&&gS>.55;
     if(ETAT.cerveaux){const vis=BRAINS.visible&&!$('#moi').classList.contains('on');if(vis!==ETAT.navVis){ETAT.navVis=vis;$('#navC').classList.toggle('on',vis);$('#navAide').classList.toggle('on',vis);}}
     scene.fog.density+=(fogCible-scene.fog.density)*.08;
