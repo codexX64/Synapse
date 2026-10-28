@@ -138,3 +138,13 @@ test('plusieurs comptes : chacun son arbre, le commun pour tous, jetons de compt
   assert.equal(v.status, 200, JSON.stringify(v.json));
   assert.equal((await bruno.put('/v1/hierarchie/versements', { domaine: communDe(aa, 'IA').id, actif: true })).status, 400);
 });
+
+test('graphe : chaque neurone dit dans quels cerveaux il est, et les fiches du compte sont dans la scène', async () => {
+  // La session d'Ana : l'arbre principal est le sien depuis le passage à plusieurs comptes.
+  const g = (await admin.get('/v1/graph?ns=shared&limit=1400')).json;
+  const placees = g.nodes.filter(n => Array.isArray(n.d.cerveaux) && n.d.cerveaux.length);
+  assert.ok(placees.length > 0, 'des neurones rangés');
+  assert.ok(g.nodes.some(n => n.name.startsWith('Fiche commune')), 'les fiches communes sont dans la scène');
+  const decision = g.nodes.find(n => n.name === 'On garde qwen pour le routeur');
+  assert.ok(decision && decision.d.cerveaux.length >= 2, 'une entrée remontée est dans son cerveau et dans celui où elle est montée');
+});

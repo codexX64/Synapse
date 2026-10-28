@@ -1096,6 +1096,7 @@ const routes = {
     if (!nsAllowed(ctx.src, ns)) return send(res, 403, { error: 'espace interdit' });
     send(res, 200, buildGraph(db, {
       ns,
+      fiches: ns === 'shared' ? 'h:' + HI.compteDe(db, ctx.src) : null,
       limit: ctx.url.searchParams.get('limit'),
       days:  ctx.url.searchParams.get('days')
     }));
@@ -1377,7 +1378,7 @@ function nsAllowed(src, ns) {
    la nouvelle page. Les pages de la mémoire exigent une session complète du
    socle ; la porte (connexion, installation, facteurs) et la page du compte
    sont celles du socle, communes à tous les services. */
-const PAGES = { '/': 'index.html', '/parametres': 'parametres.html', '/cerveaux': 'cerveaux.html' };
+const PAGES = { '/': 'index.html', '/parametres': 'parametres.html' };
 const PAGES_LIBRES = { '/connexion': 'connexion.html', '/compte': 'compte.html' };
 
 async function servirInterface(req, res, url, sctx, nonce) {

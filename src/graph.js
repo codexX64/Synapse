@@ -63,6 +63,9 @@ function buildGraph(db, opts = {}) {
 
   const args = [ns];
   let where = 'e.archived = 0 AND e.ns = ?';
+  /* Les fiches de la hiérarchie vivent dans l'espace du compte : la scène
+     de l'infrastructure les montre avec le reste, dans leur cerveau. */
+  if (opts.fiches) { where = `e.archived = 0 AND (e.ns = ? OR (e.ns = ? AND e.kind LIKE 'fiche.%'))`; args.push(opts.fiches); }
   if (days) {
     where += ' AND e.occurred_at >= ?';
     args.push(new Date(Date.now() - days * 86400000).toISOString());
@@ -97,6 +100,21 @@ function buildGraph(db, opts = {}) {
       tags: r.tags || undefined
     }
   }));
+
+  /* Les cerveaux où chaque entrée est présente : le sien d'abord, puis
+     ceux où elle est remontée. La scène en fait une sphère par cerveau. */
+  const hierarchie = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'h_place'`).get();
+  if (rows.length && hierarchie) {
+    const ids = rows.map(r => r.id);
+    const ou = new Map(ids.map(id => [id, []]));
+    /* par lots : SQLite borne le nombre de paramètres d'une requête */
+    for (let i = 0; i < ids.length; i += 500) {
+      const lot = ids.slice(i, i + 500), marques = lot.map(() => '?').join(',');
+      for (const p of db.prepare(`SELECT entry_id, cerveau_id FROM h_place WHERE entry_id IN (${marques})`).all(...lot)) ou.get(p.entry_id).push(p.cerveau_id);
+      for (const r of db.prepare(`SELECT entry_id, vers_cerveau FROM h_remontees WHERE statut = 'faite' AND entry_id IN (${marques}) ORDER BY id`).all(...lot)) ou.get(r.entry_id).push(r.vers_cerveau);
+    }
+    nodes.forEach((n, i) => { const c = ou.get(rows[i].id); if (c.length) n.d.cerveaux = c; });
+  }
 
   /* Une arête dont un bout est hors du lot casserait la scène. */
   const edges = db.prepare(`
