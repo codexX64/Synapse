@@ -20,6 +20,7 @@
 
 const { search } = require('./search.js');
 const ingest = require('./ingest.js');
+const HI = require('./hierarchie.js');
 const inc = require('./incidents.js');
 const neu = require('./neurons.js');
 const { blobToVec } = require('./db.js');
@@ -148,7 +149,7 @@ const TOOLS = [
       properties: {
         from_id: { type: 'integer' },
         to_id: { type: 'integer' },
-        relation: { type: 'string', enum: [...ingest.RELATIONS] }
+        relation: { type: 'string', enum: [...ingest.RELATIONS_PUBLIQUES] }
       },
       required: ['from_id', 'to_id', 'relation']
     }
@@ -239,6 +240,10 @@ async function toolCall(db, src, name, args, ctx) {
         meta: { written_by: src.name, explicit: true }
       }, src.name);
       if (!r.ok) return { error: r.reason || 'refusé' };
+      if (!r.duplicate) {
+        try { HI.classer(db, r.id, { src }); }
+        catch (err) { console.error(`[synapse] hiérarchie : entrée #${r.id} écrite par MCP mais pas rangée (${err.message}).`); }
+      }
       return { id: r.id, ns, duplicate: !!r.duplicate,
                note: r.duplicate ? 'Ce fait était déjà en mémoire, rien de nouveau écrit.' : undefined };
     }

@@ -24,6 +24,7 @@ const EVT = {
   ns: NS, source: txt(64), kind: txt(80), ref: txt(200), level: txt(8),
   title: txt(2000), body: txt(1_000_000), tags: json, meta: json, occurred_at: txt(40),
   hash: txt(128),
+  domaine: txt(300), importance: ent(0, 100), entites: { type: 'liste', max: 24, de: txt(120) },
 };
 
 const NEURONE = {
@@ -110,6 +111,23 @@ const SCHEMAS = {
   'POST /v1/incidents/retention': { corps: { months: ent(1, 1200) } },
   'GET /v1/answer': { requete: { q: txt(4000), ns: NS, stream: txt(1, { parmi: ['0', '1'] }) } },
   'GET /v1/graph': { requete: { ns: NS, limit: ent(1, 100_000), days: ent(1, 36500) } },
+  'GET /v1/hierarchie': {},
+  'GET /v1/hierarchie/chercher': { requete: { cerveau: { ...ID, requis: true }, q: txt(4000), agent: AGENT, monter: txt(1, { parmi: ['0', '1'] }), limit: ent(1, 200) } },
+  'POST /v1/hierarchie/domaines': { corps: { chemin: txt(300, { requis: true }), compte: txt(80) } },
+  'PUT /v1/hierarchie/reglages': { corps: {
+    cerveau: { ...ID, requis: true }, seuil: ent(0, 101), convergence: ent(2, 20), fenetre_jours: ent(1, 3650),
+    remontee: txt(10, { parmi: ['auto', 'valider', 'coupee'] }),
+    toujours: { type: 'liste', max: 30, de: txt(60) }, jamais: { type: 'liste', max: 30, de: txt(60) },
+  } },
+  'PUT /v1/hierarchie/rattacher': { corps: { cerveau: { ...ID, requis: true }, domaine: { ...ID, requis: true } } },
+  'GET /v1/hierarchie/remontees': { requete: { cerveau: ID, statut: txt(10, { parmi: ['faite', 'a_valider', 'refusee'] }), limit: ent(1, 500) } },
+  'POST /v1/hierarchie/valider': { corps: { id: { ...ID, requis: true }, accepter: bool } },
+  'GET /v1/hierarchie/projets': {},
+  'POST /v1/hierarchie/projets': { corps: { nom: txt(60, { requis: true }), membres: { type: 'liste', max: 50, de: ID } } },
+  'POST /v1/hierarchie/projets/clore': { corps: { id: { ...ID, requis: true } } },
+  'PUT /v1/hierarchie/versements': { corps: { domaine: { ...ID, requis: true }, actif: bool } },
+  'PUT /v1/hierarchie/mode': { corps: { mode: txt(10, { requis: true, parmi: ['un', 'plusieurs'] }) } },
+  'POST /v1/hierarchie/jetons': { corps: { nom: txt(31, { requis: true }) } },
   'POST /mcp': { grand: true, corps: { jsonrpc: txt(10), id: json, method: txt(100), params: json } },
 };
 

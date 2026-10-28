@@ -15,16 +15,20 @@ const { jetonPour } = require('../src/cerveaux.js');
 
 // Ce que chaque route exige, au-delà d'une identité.
 const ADMIN_JETON = ['GET /v1/sources', 'POST /v1/prompts', 'GET /v1/export', 'POST /v1/import', 'POST /v1/purge', 'POST /v1/incidents/retention'];
-const HUMAIN_ADMIN = ['POST /v1/rangement/config', 'POST /v1/rangement/telegram/test'];
+const HUMAIN_ADMIN = ['POST /v1/rangement/config', 'POST /v1/rangement/telegram/test', 'PUT /v1/hierarchie/mode'];
 const HUMAIN_MEMBRE = ['POST /v1/rangement/lancer', 'POST /v1/rangement/pause', 'POST /v1/rangement/reprendre', 'POST /v1/rangement/arreter',
-  'POST /v1/rangement/valider', 'POST /v1/rangement/appliquer', 'POST /v1/moi/analyser', 'PUT /v1/moi/trait', 'DELETE /v1/moi/trait'];
+  'POST /v1/rangement/valider', 'POST /v1/rangement/appliquer', 'POST /v1/moi/analyser', 'PUT /v1/moi/trait', 'DELETE /v1/moi/trait',
+  'POST /v1/hierarchie/domaines', 'PUT /v1/hierarchie/reglages', 'PUT /v1/hierarchie/rattacher', 'POST /v1/hierarchie/valider',
+  'POST /v1/hierarchie/projets', 'POST /v1/hierarchie/projets/clore', 'PUT /v1/hierarchie/versements', 'POST /v1/hierarchie/jetons'];
+// Lues par une personne, même en lecture ; jamais par un service.
+const HUMAIN_LECTURE = ['GET /v1/hierarchie/remontees', 'GET /v1/hierarchie/projets'];
 const ECRITURE_SERVICE = ['POST /v1/ingest', 'POST /v1/ingest/batch', 'POST /v1/link', 'POST /v1/apprendre', 'POST /v1/echange',
   'PUT /v1/cerveaux/moi', 'PUT /v1/cerveaux/moi/etat', 'DELETE /v1/cerveaux/moi', 'DELETE /v1/profil', 'POST /v1/consolider',
   'POST /v1/neurons', 'DELETE /v1/neuron', 'POST /v1/incidents'];
 const LECTURE = ['GET /v1/stats', 'GET /v1/search', 'GET /v1/entry', 'POST /v1/click', 'GET /v1/prompts', 'GET /v1/rangement/etat',
   'GET /v1/rangement/analyse', 'POST /v1/brief', 'GET /v1/cerveaux', 'POST /v1/cerveaux/orienter', 'GET /v1/moi', 'GET /v1/profil',
   'POST /v1/recall', 'GET /v1/neurons', 'GET /v1/neuron', 'POST /v1/feedback', 'POST /v1/incidents/lookup', 'GET /v1/incidents/service',
-  'GET /v1/incidents/stats', 'GET /v1/answer', 'GET /v1/graph', 'POST /mcp'];
+  'GET /v1/incidents/stats', 'GET /v1/answer', 'GET /v1/graph', 'POST /mcp', 'GET /v1/hierarchie', 'GET /v1/hierarchie/chercher'];
 const PUBLIQUES = ['GET /healthz'];
 
 const inst = await lancer();
@@ -45,7 +49,7 @@ const appel = (qui, cle) => {
 const anonyme = { req: (m, c, b) => fetch(inst.url(c), { method: m, headers: b ? { 'content-type': 'application/json' } : {}, body: b ? '{}' : undefined }) };
 
 test('la table couvre chaque route, une fois', () => {
-  const table = [...ADMIN_JETON, ...HUMAIN_ADMIN, ...HUMAIN_MEMBRE, ...ECRITURE_SERVICE, ...LECTURE, ...PUBLIQUES];
+  const table = [...ADMIN_JETON, ...HUMAIN_ADMIN, ...HUMAIN_MEMBRE, ...HUMAIN_LECTURE, ...ECRITURE_SERVICE, ...LECTURE, ...PUBLIQUES];
   assert.equal(new Set(table).size, table.length, 'une route en double dans la table');
   assert.deepEqual([...table].sort(), Object.keys(SCHEMAS).sort());
 });
@@ -61,12 +65,13 @@ test('sans identité ou avec un jeton faux : 401 partout hors la santé', async 
 });
 
 test('jeton d\'un service : ni les gestes de la portée admin, ni ceux réservés aux humains', async () => {
-  for (const cle of [...ADMIN_JETON, ...HUMAIN_ADMIN, ...HUMAIN_MEMBRE]) assert.equal((await appel(vigie, cle)).status, 403, cle);
+  for (const cle of [...ADMIN_JETON, ...HUMAIN_ADMIN, ...HUMAIN_MEMBRE, ...HUMAIN_LECTURE]) assert.equal((await appel(vigie, cle)).status, 403, cle);
   for (const cle of [...ECRITURE_SERVICE, ...LECTURE]) assert.ok(![401, 403].includes((await appel(vigie, cle)).status), cle);
 });
 
 test('session humaine en lecture : elle lit, n\'écrit pas dans la mémoire, ne règle ni ne range rien', async () => {
   for (const cle of [...ADMIN_JETON, ...HUMAIN_ADMIN, ...HUMAIN_MEMBRE, ...ECRITURE_SERVICE]) assert.equal((await appel(lecteur, cle)).status, 403, cle);
+  for (const cle of HUMAIN_LECTURE) assert.ok(![401, 403].includes((await appel(lecteur, cle)).status), cle);
   for (const cle of LECTURE) {
     if (cle === 'POST /mcp') continue;   // MCP : protocole des services ; une session y lit comme un service en lecture
     assert.ok(![401, 403].includes((await appel(lecteur, cle)).status), cle);

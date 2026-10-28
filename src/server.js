@@ -53,6 +53,7 @@ const RG = require('./rangement.js');
 const CFG = require('./config.js');
 const TACHE = require('./tache.js');
 const PLANIF = require('./planif.js');
+const HI = require('./hierarchie.js');
 
 /* Reecriture d'un titre faible par le modele local. Le modele ne
    choisit pas quoi garder : il tire le FOND de l'extrait qu'on lui
@@ -126,6 +127,8 @@ ACT.migrate(db);
 MOI.migrer(db);
 CER.migrate(db);
 amorcerSourceHub(db);
+/* Entrées d'avant la hiérarchie : rangées une fois, au premier démarrage. */
+{ const n = HI.reprendre(db); if (n) console.log(`[synapse] hiérarchie : ${n} entrée(s) d'avant la 3.0 rangée(s) dans leurs cerveaux.`); }
 setInterval(() => ACT.purge(db), 600000).unref?.();
 PLANIF.demarre(db, reecritTitre);
 const embedder = new Embedder();
@@ -233,7 +236,7 @@ function auth(req) {
   if (!brut) return null;
   const hash = hashToken(brut);
   const row = db.prepare(
-    `SELECT name, scope, channel, enabled FROM sources WHERE token_hash = ?`).get(hash);
+    `SELECT name, scope, channel, enabled, compte FROM sources WHERE token_hash = ?`).get(hash);
   if (row) return row.enabled ? row : null;
   return jetonDeCerveau(brut, hash);
 }
@@ -396,7 +399,8 @@ const routes = {
     const r = ingest.insert(db, { ...body, ns }, ctx.src.name);
     if (!r.ok && r.filtered) return send(res, 202, { filtered: true, reason: r.reason });
     if (!r.ok) return send(res, 400, { error: r.reason || 'refusé' });
-    send(res, 202, r);
+    const h = ranger(r, ctx.src, body);
+    send(res, 202, h ? { ...r, hierarchie: resume(h) } : r);
   },
 
   'POST /v1/ingest/batch': async (req, res, ctx) => {
@@ -412,7 +416,10 @@ const routes = {
     const out = [];
     for (const e of events) {
       const ns = espaceEcrit(ctx.src, e && e.ns);
-      out.push(ns ? ingest.insert(db, { ...e, ns }, ctx.src.name) : { ok: false, reason: 'espace interdit' });
+      if (!ns) { out.push({ ok: false, reason: 'espace interdit' }); continue; }
+      const r = ingest.insert(db, { ...e, ns }, ctx.src.name);
+      ranger(r, ctx.src, e);
+      out.push(r);
     }
     send(res, 202, {
       accepted: out.filter(o => o.ok && !o.duplicate).length,
@@ -690,6 +697,7 @@ const routes = {
       return send(res, 202, { ok: true, id: avant.id, updated: true });
     }
     const r = ingest.insert(db, evt, ctx.src.name);
+    ranger(r, ctx.src, { membre: agentDe(ctx.src, b.agent) || ctx.src.name, domaine: 'IA' });
     if (r.ok && !r.duplicate) apresEchange();
     send(res, 202, r);
   },
@@ -1071,6 +1079,152 @@ const routes = {
     }));
   },
 
+  /* hiérarchie des cerveaux (3.0)
+     Lecture de l'arbre et recherche : personnes et services, chacun dans
+     ce qu'il a le droit de voir. Tout réglage est un geste humain. */
+  'GET /v1/hierarchie': async (req, res, ctx) => {
+    if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
+    const compte = HI.compteDe(db, ctx.src);
+    const comptes = [HI.arbre(db, compte)];
+    if (ctx.src.humain && HI.mode(db) === 'plusieurs' && compte !== HI.COMMUN) comptes.push(HI.arbre(db, HI.COMMUN));
+    send(res, 200, { mode: HI.mode(db), compte, comptes });
+  },
+
+  'GET /v1/hierarchie/chercher': async (req, res, ctx) => {
+    if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
+    const u = ctx.url.searchParams;
+    const agent = agentDe(ctx.src, u.get('agent'));
+    const t0 = performance.now();
+    const r = HI.chercher(db, ctx.src, { cerveau: Number(u.get('cerveau')), q: u.get('q') || '', agent,
+      monter: u.get('monter') !== '0', limit: Number(u.get('limit') || 20) });
+    if (r.erreur === 404) return send(res, 404, { error: 'cerveau introuvable' });
+    if (r.erreur === 403) return send(res, 403, { error: 'cerveau interdit' });
+    send(res, 200, { ...r, ms: Math.round(performance.now() - t0) });
+  },
+
+  'POST /v1/hierarchie/domaines': async (req, res, ctx) => {
+    exigerHumain(ctx.src);
+    const b = await readBody(req);
+    const compte = compteCible(ctx.src, b.compte);
+    HI.globalDe(db, compte);
+    const d = HI.domaineChemin(db, compte, b.chemin);
+    if (!d) return send(res, 400, { error: 'chemin de domaine invalide (« Connaissance/Réseau », 6 niveaux au plus)' });
+    journaliser(ctx.src, 'hierarchie.domaine', String(b.chemin).slice(0, 200), { compte });
+    send(res, 201, { domaine: d });
+  },
+
+  'PUT /v1/hierarchie/reglages': async (req, res, ctx) => {
+    exigerHumain(ctx.src);
+    const b = await readBody(req);
+    const c = cerveauRegle(ctx.src, b.cerveau);
+    let r;
+    try { r = HI.regler(db, c.id, b); } catch (err) { return send(res, 400, { error: err.message }); }
+    journaliser(ctx.src, 'hierarchie.reglages', 'cerveau:' + c.id, { champs: Object.keys(b).filter(k => k !== 'cerveau') });
+    send(res, 200, { cerveau: c.id, reglages: r });
+  },
+
+  'PUT /v1/hierarchie/rattacher': async (req, res, ctx) => {
+    exigerHumain(ctx.src);
+    const b = await readBody(req);
+    const c = cerveauRegle(ctx.src, b.cerveau);
+    const r = HI.rattacher(db, c.id, Number(b.domaine));
+    if (!r) return send(res, 400, { error: 'un cerveau membre se rattache à un domaine de son compte' });
+    journaliser(ctx.src, 'hierarchie.rattacher', 'cerveau:' + c.id, { domaine: Number(b.domaine) });
+    send(res, 200, { cerveau: r });
+  },
+
+  'GET /v1/hierarchie/remontees': async (req, res, ctx) => {
+    exigerHumain(ctx.src, { role: 'lecture' });
+    const u = ctx.url.searchParams;
+    if (!u.get('cerveau')) return send(res, 400, { error: 'paramètre cerveau requis' });
+    const c = cerveauRegle(ctx.src, u.get('cerveau'));
+    const statut = u.get('statut');
+    const lignes = db.prepare(`SELECT r.id, r.entry_id, r.de_cerveau, r.vers_cerveau, r.regle, r.statut, r.quand, e.title, e.kind
+      FROM h_remontees r JOIN entries e ON e.id = r.entry_id
+      WHERE (r.vers_cerveau = ? OR r.de_cerveau = ?) AND (? IS NULL OR r.statut = ?)
+      ORDER BY r.id DESC LIMIT ?`).all(c.id, c.id, statut, statut, Number(u.get('limit') || 50));
+    send(res, 200, { cerveau: c.id, remontees: lignes });
+  },
+
+  'POST /v1/hierarchie/valider': async (req, res, ctx) => {
+    exigerHumain(ctx.src);
+    const b = await readBody(req);
+    const r = db.prepare(`SELECT vers_cerveau FROM h_remontees WHERE id=?`).get(Number(b.id));
+    if (!r) return send(res, 404, { error: 'remontée introuvable' });
+    cerveauRegle(ctx.src, r.vers_cerveau);
+    const v = HI.valider(db, Number(b.id), b.accepter === true);
+    if (!v) return send(res, 409, { error: 'remontée déjà tranchée' });
+    journaliser(ctx.src, 'hierarchie.valider', 'remontee:' + v.id, { statut: v.statut });
+    send(res, 200, v);
+  },
+
+  'GET /v1/hierarchie/projets': async (req, res, ctx) => {
+    exigerHumain(ctx.src, { role: 'lecture' });
+    const compte = HI.compteDe(db, ctx.src);
+    const projets = db.prepare(`SELECT id, nom, ouvert, clos FROM h_projets WHERE compte=? ORDER BY id DESC`).all(compte)
+      .map(p => ({ ...p, etiquette: 'projet:' + HI.slug(p.nom),
+        membres: db.prepare(`SELECT cerveau_id FROM h_projet_membres WHERE projet_id=?`).all(p.id).map(m => m.cerveau_id) }));
+    send(res, 200, { projets });
+  },
+
+  'POST /v1/hierarchie/projets': async (req, res, ctx) => {
+    exigerHumain(ctx.src);
+    const b = await readBody(req);
+    const compte = HI.compteDe(db, ctx.src);
+    if (db.prepare(`SELECT 1 FROM h_projets WHERE compte=? AND nom=?`).get(compte, b.nom))
+      return send(res, 409, { error: 'un projet porte déjà ce nom' });
+    const p = HI.creerProjet(db, compte, b.nom, b.membres || []);
+    if (!p) return send(res, 400, { error: 'un projet réunit au moins deux cerveaux membres de ton compte' });
+    journaliser(ctx.src, 'hierarchie.projet', 'projet:' + p.id, { membres: p.membres.length });
+    send(res, 201, p);
+  },
+
+  'POST /v1/hierarchie/projets/clore': async (req, res, ctx) => {
+    exigerHumain(ctx.src);
+    const b = await readBody(req);
+    const r = db.prepare(`UPDATE h_projets SET clos=? WHERE id=? AND compte=? AND clos IS NULL`)
+      .run(new Date().toISOString(), Number(b.id), HI.compteDe(db, ctx.src));
+    if (!Number(r.changes)) return send(res, 404, { error: 'projet ouvert introuvable' });
+    journaliser(ctx.src, 'hierarchie.projet.clos', 'projet:' + Number(b.id));
+    send(res, 200, { id: Number(b.id), clos: true });
+  },
+
+  'PUT /v1/hierarchie/versements': async (req, res, ctx) => {
+    exigerHumain(ctx.src);
+    if (HI.mode(db) !== 'plusieurs') return send(res, 409, { error: 'le versement au commun demande le mode plusieurs comptes' });
+    const b = await readBody(req);
+    const compte = HI.compteDe(db, ctx.src);
+    const d = db.prepare(`SELECT id FROM h_domaines WHERE id=? AND compte=? AND parent_id IS NULL`).get(Number(b.domaine), compte);
+    if (!d || compte === HI.COMMUN) return send(res, 400, { error: 'on verse un domaine racine de son propre arbre' });
+    if (b.actif) db.prepare(`INSERT OR IGNORE INTO h_versements(compte,domaine_id) VALUES(?,?)`).run(compte, d.id);
+    else db.prepare(`DELETE FROM h_versements WHERE compte=? AND domaine_id=?`).run(compte, d.id);
+    journaliser(ctx.src, 'hierarchie.versement', 'domaine:' + d.id, { actif: !!b.actif });
+    send(res, 200, { domaine: d.id, actif: !!b.actif });
+  },
+
+  'PUT /v1/hierarchie/mode': async (req, res, ctx) => {
+    exigerHumain(ctx.src, { role: 'admin', renfort: true });
+    const b = await readBody(req);
+    const m = HI.changerMode(db, b.mode, ctx.src.humain ? ctx.src.compte : null);
+    journaliser(ctx.src, 'hierarchie.mode', m);
+    send(res, 200, { mode: m });
+  },
+
+  /* Un jeton de compte : une IA ou un outil d'une personne écrit dans
+     l'arbre de cette personne, et nulle part ailleurs. Montré une fois. */
+  'POST /v1/hierarchie/jetons': async (req, res, ctx) => {
+    exigerHumain(ctx.src, { renfort: true });
+    const b = await readBody(req);
+    if (!NOM_JETON.test(String(b.nom || ''))) return send(res, 400, { error: 'nom : minuscules, chiffres et tirets, 2 à 31 caractères' });
+    if (db.prepare(`SELECT 1 FROM sources WHERE name=?`).get(b.nom)) return send(res, 409, { error: 'ce nom est déjà pris' });
+    const jeton = 'cpt_' + crypto.randomBytes(32).toString('base64url');
+    const compte = HI.compteDe(db, ctx.src);
+    db.prepare(`INSERT INTO sources(name,token_hash,scope,channel,created_at,compte) VALUES (?,?,'read+write','K',?,?)`)
+      .run(b.nom, hashToken(jeton), new Date().toISOString(), compte);
+    journaliser(ctx.src, 'hierarchie.jeton', b.nom, { compte });
+    send(res, 201, { nom: b.nom, jeton, note: 'Montré une seule fois.' });
+  },
+
   'POST /mcp': async (req, res, ctx) => {
     const b = await readBody(req);
     const out = await repondreMcp(db, ctx.src, b, { embed: t => embedder.query(t) });
@@ -1183,6 +1337,12 @@ function nsAllowed(src, ns) {
   if (!src) return false;
   if (src.scope === 'admin') return true;
   if (ns === 'shared' || ns === 'savoir') return true;
+  /* h:<compte> : les fiches de la hiérarchie, lisibles dans leur compte, et
+     au compte commun pour une personne en mode plusieurs comptes. */
+  if (ns.startsWith('h:')) {
+    const c = ns.slice(2);
+    return c === HI.compteDe(db, src) || (!!src.humain && c === HI.COMMUN && HI.mode(db) === 'plusieurs');
+  }
   if (ns.startsWith('agent:') || ns.startsWith('prompts:')) {
     return ns.split(':')[1] === src.name;
   }
@@ -1343,6 +1503,8 @@ function liables(src, a, b) {
 const ESPACE = /^[a-z][a-z0-9_-]{0,31}(:[A-Za-z0-9._-]{1,64})?$/;
 function espaceEcrit(src, ns) {
   const n = ns === undefined || ns === null || ns === '' ? 'shared' : String(ns);
+  /* Les fiches ne s'écrivent que par le tamis. */
+  if (n.startsWith('h:')) return null;
   return ESPACE.test(n) && nsAllowed(src, n) ? n : null;
 }
 
@@ -1356,6 +1518,37 @@ function agentDe(src, demande) {
   return a;
 }
 const appelant = src => (src.humain ? 'compte:' + src.compte : 'source:' + src.name);
+
+/* hiérarchie
+   Une entrée écrite est rangée dans la même requête. Si le rangement
+   échoue, l'entrée reste écrite (la mémoire ne perd rien) et la raison va
+   au journal : la reprise du prochain démarrage la rangera. */
+function ranger(r, src, o = {}) {
+  if (!r || !r.ok || r.duplicate) return null;
+  try {
+    return HI.classer(db, r.id, { src, membre: o.membre, domaine: o.domaine, importance: o.importance, entites: o.entites });
+  } catch (err) {
+    console.error(`[synapse] hiérarchie : entrée #${r.id} écrite mais pas rangée (${err.message}) ; reprise au prochain démarrage.`);
+    return null;
+  }
+}
+const resume = h => ({ cerveau: h.cerveau, importance: h.importance, cles: h.cles, remontees: h.remontees.length });
+
+/* Le compte sur lequel porte un geste de configuration : le sien, ou le
+   commun pour un administrateur en mode plusieurs comptes. */
+function compteCible(src, demande) {
+  const mien = HI.compteDe(db, src);
+  if (demande === undefined || demande === null || demande === '' || demande === mien) return mien;
+  if (demande === HI.COMMUN && HI.mode(db) === 'plusieurs') { exigerHumain(src, { role: 'admin' }); return HI.COMMUN; }
+  throw new socle.S.ErreurHttp(403, 'Arbre d’un autre compte : chacun règle le sien.');
+}
+function cerveauRegle(src, id) {
+  const c = HI.cerveau(db, Number(id));
+  if (!c) throw new socle.S.ErreurHttp(404, 'Cerveau introuvable.');
+  compteCible(src, c.compte);
+  return c;
+}
+const NOM_JETON = /^[a-z0-9][a-z0-9-]{1,30}$/;
 const relaiHub = src => src.scope === 'admin' || (src.name === 'hub' && src.channel === 'A');
 
 const server = http.createServer((req, res) => {
