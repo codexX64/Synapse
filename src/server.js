@@ -18,7 +18,7 @@ const ingest = require('./ingest.js');
 const { search, parse: analyseRequete } = require('./search.js');
 const { Embedder, startWorker } = require('./embed.js');
 const { repondreMcp } = require('./mcp.js');
-const { buildGraph } = require('./graph.js');
+const { buildGraph, buildPoints } = require('./graph.js');
 const inc = require('./incidents.js');
 const neu = require('./neurons.js');
 const APP = require('./apprentissage.js');
@@ -1088,6 +1088,14 @@ const routes = {
       verifie, etat_muet: etat && etat.muettes && etat.muettes.length ? etat.muettes.map(x => x.source + ' (' + x.service + ')') : undefined,
       hits: vueHits(r)
     });
+  },
+
+  /* Tous les points de la scène, en colonnes : voir buildPoints. */
+  'GET /v1/graph/points': async (req, res, ctx) => {
+    if (!can(ctx.src, 'read')) return send(res, 403, { error: 'portée read requise' });
+    const ns = ctx.url.searchParams.get('ns') || 'shared';
+    if (!nsAllowed(ctx.src, ns)) return send(res, 403, { error: 'espace interdit' });
+    send(res, 200, buildPoints(db, { ns, fiches: ns === 'shared' ? 'h:' + HI.compteDe(db, ctx.src) : null }));
   },
 
   'GET /v1/graph': async (req, res, ctx) => {

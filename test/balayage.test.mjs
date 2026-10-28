@@ -28,7 +28,7 @@ const ECRITURE_SERVICE = ['POST /v1/ingest', 'POST /v1/ingest/batch', 'POST /v1/
 const LECTURE = ['GET /v1/stats', 'GET /v1/search', 'GET /v1/entry', 'POST /v1/click', 'GET /v1/prompts', 'GET /v1/rangement/etat',
   'GET /v1/rangement/analyse', 'POST /v1/brief', 'GET /v1/cerveaux', 'POST /v1/cerveaux/orienter', 'GET /v1/moi', 'GET /v1/profil',
   'POST /v1/recall', 'GET /v1/neurons', 'GET /v1/neuron', 'POST /v1/feedback', 'POST /v1/incidents/lookup', 'GET /v1/incidents/service',
-  'GET /v1/incidents/stats', 'GET /v1/answer', 'GET /v1/graph', 'POST /mcp', 'GET /v1/hierarchie', 'GET /v1/hierarchie/chercher'];
+  'GET /v1/incidents/stats', 'GET /v1/answer', 'GET /v1/graph', 'GET /v1/graph/points', 'POST /mcp', 'GET /v1/hierarchie', 'GET /v1/hierarchie/chercher'];
 const PUBLIQUES = ['GET /healthz'];
 
 const inst = await lancer();

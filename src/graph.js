@@ -164,4 +164,50 @@ function buildGraph(db, opts = {}) {
   };
 }
 
-module.exports = { buildGraph, typeOf, TYPE_RULES };
+/* Tous les points de la scène, sans carte : chaque entrée une fois dans
+   son cerveau (et dans le global), puis une fois de plus dans chaque
+   cerveau où elle est remontée. Format en colonnes, sans clé répétée :
+   145 000 entrées tiennent dans moins de 2 Mo. Les `g` premiers points
+   sont les entrées elles-mêmes, une par une. */
+const CACHE_POINTS = new Map();
+function buildPoints(db, opts = {}) {
+  const ns = opts.ns || 'shared';
+  /* Gardé tant que la mémoire n'a pas bougé : même nombre d'entrées vivantes,
+     même dernière entrée, même nombre de remontées. */
+  const hier = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'h_place'`).get();
+  const etat = db.prepare(`SELECT max(id) m, count(*) n FROM entries WHERE archived = 0`).get();
+  const cle = [ns, opts.fiches || '', etat.m, etat.n, hier ? db.prepare(`SELECT count(*) n FROM h_remontees WHERE statut = 'faite'`).get().n : 0].join('|');
+  const deja = CACHE_POINTS.get(ns + '|' + (opts.fiches || ''));
+  if (deja && deja.cle === cle) return deja.valeur;
+  const valeur = calculePoints(db, opts, ns);
+  CACHE_POINTS.set(ns + '|' + (opts.fiches || ''), { cle, valeur });
+  if (CACHE_POINTS.size > 32) CACHE_POINTS.delete(CACHE_POINTS.keys().next().value);
+  return valeur;
+}
+function calculePoints(db, opts, ns) {
+  const args = [ns];
+  let where = 'e.archived = 0 AND e.ns = ?';
+  if (opts.fiches) { where = `e.archived = 0 AND (e.ns = ? OR (e.ns = ? AND e.kind LIKE 'fiche.%'))`; args.push(opts.fiches); }
+  const hierarchie = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'h_place'`).get();
+  const types = [], idxType = new Map(), cerveaux = [], idxC = new Map();
+  const ti = t => { if (!idxType.has(t)) { idxType.set(t, types.length); types.push(t); } return idxType.get(t); };
+  /* le type ne dépend que du genre, du niveau et des étiquettes : calculé une fois par combinaison */
+  const memo = new Map();
+  const typeDe = (k, l, g) => { const m = k + '\u001f' + l + '\u001f' + (g || ''); let v = memo.get(m); if (v === undefined) { v = ti(typeOf(k, l, g)); memo.set(m, v); } return v; };
+  const ci = c => { if (c === null || c === undefined) return -1; if (!idxC.has(c)) { idxC.set(c, cerveaux.length); cerveaux.push(c); } return idxC.get(c); };
+  const e = [], c = [], t = [];
+  const lignes = db.prepare(hierarchie
+    ? `SELECT e.id, e.kind, e.level, e.tags, p.cerveau_id c FROM entries e LEFT JOIN h_place p ON p.entry_id = e.id WHERE ${where} ORDER BY e.id`
+    : `SELECT e.id, e.kind, e.level, e.tags, NULL c FROM entries e WHERE ${where} ORDER BY e.id`).iterate(...args);
+  for (const r of lignes) { e.push(r.id); c.push(ci(r.c)); t.push(typeDe(r.kind, r.level, r.tags)); }
+  const g = e.length;
+  if (hierarchie) {
+    for (const r of db.prepare(`SELECT r.entry_id id, r.vers_cerveau c, e.kind, e.level, e.tags FROM h_remontees r
+        JOIN entries e ON e.id = r.entry_id WHERE r.statut = 'faite' AND ${where} ORDER BY r.id`).iterate(...args)) {
+      e.push(r.id); c.push(ci(r.c)); t.push(typeDe(r.kind, r.level, r.tags));
+    }
+  }
+  return { ns, g, types, cerveaux, e, c, t, generated_at: new Date().toISOString() };
+}
+
+module.exports = { buildGraph, buildPoints, typeOf, TYPE_RULES };
