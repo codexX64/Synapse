@@ -153,6 +153,19 @@ nav button.locked{opacity:.45}
   75%{box-shadow:0 -10px #fff,-5px -5px #fff,5px -5px #fff,-10px 0 #fff,-5px 0 #fff,0 0 #fff,5px 0 #fff,10px 0 #fff,-5px 5px #fff,5px 5px #fff,0 10px #fff,0 15px #3fe8a8,0 20px #3fe8a8,0 25px #ffb45e,0 30px #ff5c7a,-20px -20px #3fe8a8,-15px -15px #3fe8a8,20px -20px #3fe8a8,15px -15px #3fe8a8,-25px 0 #3fe8a8,-20px 0 #3fe8a8,25px 0 #3fe8a8,20px 0 #3fe8a8}
 }
 body.cherche #console{z-index:50}
+#navC{position:fixed;top:calc(var(--haut) + 10px);left:282px;right:14px;z-index:18;display:none;align-items:center;gap:6px;
+  overflow-x:auto;scrollbar-width:none;padding:2px 0}
+#navC::-webkit-scrollbar{display:none}
+#navC.on{display:flex}
+#navC button{flex-shrink:0;background:var(--panel);border:1px solid var(--panel-line);color:var(--mut);font:inherit;font-size:9.5px;
+  letter-spacing:.12em;padding:6px 10px;border-radius:5px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
+#navC button:hover{color:#fff;border-color:rgba(255,255,255,.3)}
+#navC button.ici{color:#fff;border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.08)}
+#navC button i{width:6px;height:6px;border-radius:50%;display:inline-block}
+#navC button.dom{color:var(--txt);font-weight:600}
+#navC .sep{width:1px;height:18px;background:var(--panel-line);flex-shrink:0}
+#navAide{position:fixed;right:14px;bottom:calc(var(--bas) - 18px);z-index:18;font-size:8.5px;letter-spacing:.14em;color:var(--dim);text-align:right;display:none;pointer-events:none;line-height:1.7}
+#navAide.on{display:block}
 #insp{position:fixed;right:14px;top:calc(var(--haut) + 12px);z-index:22;width:330px;max-height:calc(100vh - var(--haut) - 12px - var(--bas));
   padding:16px;overflow-y:auto;scrollbar-width:thin;display:none}
 #insp.on{display:block}
@@ -284,6 +297,7 @@ body.cherche #console{z-index:50}
 }
 /* Téléphone : la barre passe sur deux lignes — la marque et les accès en
    haut, l'espace, les vues et STATS en dessous. */
+@media (max-width:860px){#navC{left:10px;right:10px}#navAide{display:none!important}}
 @media (max-width:640px){
   :root{--haut:100px}
   header{flex-wrap:wrap;align-content:space-evenly;column-gap:8px;row-gap:0}
@@ -344,6 +358,8 @@ body.cherche #console{z-index:50}
   <i class="saut" aria-hidden="true"></i>
   <button id="hudBtn">STATS</button>
 </header>
+<nav id="navC" aria-label="Aller à un cerveau"></nav>
+<div id="navAide">ZQSD/WASD · VOLER   R/F · MONTER/DESCENDRE<br>CLIC DROIT GLISSÉ · DÉPLACER   ←/→ · CERVEAU SUIVANT   ↑ · PARENT</div>
 
 <aside id="hud" class="glass">
   <div>
@@ -940,7 +956,7 @@ const SPRS=nodes.map(n=>n.spr); // cache raycast
    petite sphère porte les mêmes cartes que la grande, celles des entrées
    présentes dans ce cerveau ; un brin la relie au cerveau où elle remonte. */
 const BRAINS=new THREE.Group();BRAINS.visible=false;world.add(BRAINS);
-const BRAIN_SPRS=[],BRAIN_LBLS=[],BRAIN_INFO=new Map();
+const BRAIN_SPRS=[],BRAIN_LBLS=[],BRAIN_INFO=new Map(),ORDRE_C=[];
 const BR_COUL=['#3fe8a8','#b18cff','#ffb45e','#5cc8ff','#ff5c7a','#e6e070','#7aa2ff','#ff9ad5'];
 const nfr=v=>Number(v||0).toLocaleString('fr-FR');
 function texteSprite(t1,t2,coul,taille=1){
@@ -951,7 +967,8 @@ function texteSprite(t1,t2,coul,taille=1){
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,opacity:.95}));
   sp.scale.set(16*taille,4*taille,1);return sp;
 }
-function sphereCerveau(centre,rb,ids,coul,cid,nom,total,commun){
+function sphereCerveau(centre,rb,ids,coul,cid,nom,total,commun,parent){
+  ORDRE_C.push({cid,nom,coul,commun:!!commun,parent:parent??'global',total});
   const g=new THREE.Group();g.position.copy(centre);BRAINS.add(g);
   const or=Math.PI*(3-Math.sqrt(5));
   /* enveloppe : des points en spirale, à la couleur du domaine */
@@ -1002,11 +1019,11 @@ async function chargeCerveaux(){
   const racines=doms.filter(d=>!d.parent_id),tot=racines.reduce((x,d)=>x+poids(d),0)||1;
   const rayonDe=ids=>Math.max(2.6,Math.min(9,1.7+Math.sqrt(ids.length)*.55));
   const RC=52,PAS=21;
-  const pose=(d,a0,a1,niv,depuis,coul)=>{
+  const pose=(d,a0,a1,niv,depuis,coul,parentC)=>{
     const mid=(a0+a1)/2,R=RC+niv*PAS;
     const pos=new THREE.Vector3(Math.cos(mid)*R,niv%2?7:-2,Math.sin(mid)*R);
     const ids=dans.get(d.commun.id)||[];
-    sphereCerveau(pos,rayonDe(ids)+1.4,ids,coul,d.commun.id,d.nom,d.commun.n,true);
+    sphereCerveau(pos,rayonDe(ids)+1.4,ids,coul,d.commun.id,d.nom,d.commun.n,true,parentC);
     brin(depuis||pos.clone().normalize().multiplyScalar(LEAF_R+1.5),pos,coul,depuis?.45:.6);
     const sous=enfants(d.id),ms=d.membres;
     const Rm=RC+(niv+1+(sous.length?1:0))*PAS+6;
@@ -1014,18 +1031,51 @@ async function chargeCerveaux(){
       const t=ms.length===1?mid:a0+(a1-a0)*(i+.5)/ms.length;
       const mp=new THREE.Vector3(Math.cos(t)*Rm,(i%2?8:-8)*(ms.length>2?1:.4),Math.sin(t)*Rm);
       const mi=dans.get(m.id)||[];
-      sphereCerveau(mp,rayonDe(mi),mi,coul,m.id,m.nom,m.n);
+      sphereCerveau(mp,rayonDe(mi),mi,coul,m.id,m.nom,m.n,false,d.commun.id);
       brin(mp,pos,coul,.38);
     });
     const ps=sous.map(poids),pt=ps.reduce((x,p)=>x+p,0)||1;let b=a0;
-    sous.forEach((e,i)=>{const l=(a1-a0)*ps[i]/pt;pose(e,b,b+l,niv+1,pos,coul);b+=l;});
+    sous.forEach((e,i)=>{const l=(a1-a0)*ps[i]/pt;pose(e,b,b+l,niv+1,pos,coul,d.commun.id);b+=l;});
   };
   let ang=-Math.PI/2;
   racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.07,ang+l*.93,0,null,BR_COUL[i%BR_COUL.length]);ang+=l;});
   /* le centre dit qu'il est le global */
   const gl=texteSprite('GLOBAL',nfr(ETAT.total)+' entrées','#ffffff',1.7);gl.position.set(0,LEAF_R+7,0);BRAINS.add(gl);
   ETAT.cerveaux=true;
+  dessineNav();
   if(!state.selected)homeCam();
+}
+/* NAVIGATION ENTRE CERVEAUX
+   La barre sous l'en-tête : un bouton par cerveau, dans l'ordre de
+   l'arbre ; ◀ ▶ et les flèches du clavier les parcourent, ↑ remonte au
+   cerveau parent. « global » est la sphère du centre. */
+function ouSuisJe(){return state.cerveauSuivi||'global';}
+function dessineNav(){
+  const el=$('#navC');if(!ORDRE_C.length)return;
+  const esc2=t=>String(t).replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+  el.innerHTML='<button data-pas="-1" title="Cerveau précédent (←)">◀</button><button data-pas="1" title="Cerveau suivant (→)">▶</button><span class="sep"></span>'
+    +'<button data-c="global"><i style="background:#fff"></i>GLOBAL</button>'
+    +ORDRE_C.map(c=>(c.commun?'<span class="sep"></span>':'')+`<button data-c="${c.cid}" class="${c.commun?'dom':''}" title="${esc2(c.nom)} · ${nfr(c.total)} entrées"><i style="background:${c.coul}"></i>${esc2(c.commun?c.nom.toUpperCase():c.nom)}</button>`).join('');
+  el.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>allerA(b.dataset.c==='global'?'global':+b.dataset.c));
+  el.querySelectorAll('[data-pas]').forEach(b=>b.onclick=()=>pasCerveau(+b.dataset.pas));
+  el.classList.add('on');$('#navAide').classList.add('on');
+  majNav();
+}
+function majNav(){
+  const ici=String(ouSuisJe());
+  $('#navC').querySelectorAll('[data-c]').forEach(b=>{const on=b.dataset.c===ici;b.classList.toggle('ici',on);if(on&&b.scrollIntoView)b.scrollIntoView({block:'nearest',inline:'nearest'});});
+}
+function allerA(cid){
+  if(cid==='global'){state.libre=false;state.cerveauSuivi=null;tweenTo({tgx:0,tgy:0,tgz:0,r:72},850,easeIOC);toast('Cerveau global · '+nfr(ETAT.total)+' entrées');majNav();return;}
+  versCerveau(cid);
+}
+function pasCerveau(pas){
+  const liste=['global',...ORDRE_C.map(c=>c.cid)],i=liste.indexOf(ouSuisJe());
+  allerA(liste[(i+pas+liste.length)%liste.length]);
+}
+function versParent(){
+  const c=ORDRE_C.find(x=>x.cid===ouSuisJe());
+  allerA(c?c.parent:'global');
 }
 function pickCerveau(cx,cy){
   if(!BRAINS.visible)return null;
@@ -1040,8 +1090,8 @@ function pickCerveau(cx,cy){
    ne s'échappe pas pendant qu'on la regarde */
 function versCerveau(cid){
   const b=BRAIN_INFO.get(cid);if(!b)return;
-  state.cerveauSuivi=cid;
-  tweenTo({r:b.rb*4.5+12},850,easeIOC);
+  state.cerveauSuivi=cid;state.libre=false;
+  tweenTo({r:b.rb*5+22},850,easeIOC);majNav();
   toast(b.nom+' · '+nfr(b.total)+(b.total>1?' entrées':' entrée'));
 }
 
@@ -1258,12 +1308,24 @@ function focusCard(n){
      de la texture retombe sous 1.5x et le contexte reste visible. */
   tweenTo({th:thT,ph:phT,tgx:0,tgy:0,tgz:0,r:LEAF_R+20},760,easeIOC);
 }
-function homeCam(){state.cerveauSuivi=null;tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:ETAT.cerveaux?.64:1.12,r:ETAT.cerveaux?240:62},900,easeIOC);}
+function homeCam(){state.cerveauSuivi=null;state.libre=false;if(ORDRE_C.length)majNav();tweenTo({tgx:0,tgy:0,tgz:0,th:.9,ph:ETAT.cerveaux?.64:1.12,r:ETAT.cerveaux?240:62},900,easeIOC);}
 function frame(v,r){tweenTo({tgx:v.x,tgy:v.y,tgz:v.z,r},650,easeIOC);}
 function worldOf(id){byId[id].spr.getWorldPosition(_wp);return _wp;}
 
 let dragging=false,px=0,py=0,pinch=0,downX=0,downY=0,downT=0,panX=0,panY=0;
+/* déplacer le point regardé dans le plan de l'écran : on quitte le
+   cerveau suivi, la scène cesse de tourner, on va où on veut */
+function deplace(dx,dy){
+  const right=_v1.setFromMatrixColumn(camera.matrixWorld,0),up=_v2.setFromMatrixColumn(camera.matrixWorld,1);
+  const k=rig.r*.0016;
+  if(state.cerveauSuivi){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;majNav();}
+  state.libre=true;
+  rig.tgG.addScaledVector(right,-dx*k).addScaledVector(up,dy*k);
+  if(rig.tgG.length()>260)rig.tgG.setLength(260);
+}
+let glisseDeplace=false;
 canvas.addEventListener('pointerdown',e=>{
+  glisseDeplace=VIEW.mode==='sphere'&&(e.button===2||e.shiftKey);
   dragging=true;px=downX=e.clientX;py=downY=e.clientY;downT=performance.now();
   canvas.setPointerCapture(e.pointerId);
 });
@@ -1273,6 +1335,8 @@ canvas.addEventListener('pointermove',e=>{
     if(VIEW.mode==='card'){
       /* 2D : glisser = déplacer (pan), pas tourner */
       panX+=(e.clientX-px);panY+=(e.clientY-py);
+    }else if(glisseDeplace){
+      deplace(e.clientX-px,e.clientY-py);
     }else{
       rig.thG-=(e.clientX-px)*.0052;rig.phG-=(e.clientY-py)*.0052;
       rig.phG=Math.max(.15,Math.min(Math.PI-.15,rig.phG));
@@ -1304,12 +1368,49 @@ canvas.addEventListener('wheel',e=>{
 canvas.addEventListener('touchmove',e=>{
   if(e.touches.length===2){
     const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    if(pinch){cancelTween();rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:ETAT.cerveaux?280:115,rig.rG*pinch/d));}
-    pinch=d;dragging=false;
+    const mx=(e.touches[0].clientX+e.touches[1].clientX)/2,my=(e.touches[0].clientY+e.touches[1].clientY)/2;
+    if(pinch){cancelTween();rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:ETAT.cerveaux?280:115,rig.rG*pinch/d));
+      if(VIEW.mode==='sphere'&&milieu)deplace(mx-milieu[0],my-milieu[1]);}
+    pinch=d;milieu=[mx,my];dragging=false;
   }
 },{passive:true});
-canvas.addEventListener('touchend',()=>pinch=0);
-addEventListener('keydown',e=>{if(e.key==='Escape'){if(state.selected)clearSelection();else clearFiltre();}});
+let milieu=null;
+canvas.addEventListener('touchend',()=>{pinch=0;milieu=null;});
+addEventListener('keydown',e=>{if(e.key==='Escape'){if(state.selected)clearSelection();else if(state.filtre)clearFiltre();else if(ETAT.cerveaux)homeCam();}});
+/* clavier : voler (ZQSD ou WASD, R/F), passer de cerveau en cerveau (← → ↑) */
+const TOUCHES=new Set();
+const dansUnChamp=()=>{const a=document.activeElement;return a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'||a.isContentEditable);};
+addEventListener('keydown',e=>{
+  if(dansUnChamp()||e.metaKey||e.ctrlKey||e.altKey||VIEW.mode!=='sphere')return;
+  const k=e.key.toLowerCase();
+  if(ETAT.cerveaux&&e.key==='ArrowRight'){e.preventDefault();pasCerveau(1);return;}
+  if(ETAT.cerveaux&&e.key==='ArrowLeft'){e.preventDefault();pasCerveau(-1);return;}
+  if(ETAT.cerveaux&&e.key==='ArrowUp'){e.preventDefault();versParent();return;}
+  if('zqsdwarf'.includes(k)&&k.length===1){TOUCHES.add(k);e.preventDefault();}
+});
+addEventListener('keyup',e=>TOUCHES.delete(e.key.toLowerCase()));
+addEventListener('blur',()=>TOUCHES.clear());
+function vole(){
+  if(!TOUCHES.size||VIEW.mode!=='sphere')return;
+  const avant=_v1.copy(rig.tg).sub(camera.position);avant.y=0;
+  if(avant.lengthSq()<1e-6)return;
+  avant.normalize();
+  const cote=_v2.set(-avant.z,0,avant.x);
+  const v=Math.max(.35,rig.r*.012);
+  let x=0,z=0,y=0;
+  if(TOUCHES.has('z')||TOUCHES.has('w'))z+=1;
+  if(TOUCHES.has('s'))z-=1;
+  if(TOUCHES.has('q')||TOUCHES.has('a'))x-=1;
+  if(TOUCHES.has('d'))x+=1;
+  if(TOUCHES.has('r'))y+=1;
+  if(TOUCHES.has('f'))y-=1;
+  if(!x&&!y&&!z)return;
+  cancelTween();
+  if(state.cerveauSuivi){rig.tgG.copy(rig.tg);state.cerveauSuivi=null;majNav();}
+  state.libre=true;
+  rig.tgG.addScaledVector(avant,z*v).addScaledVector(cote,x*v);rig.tgG.y+=y*v;
+  if(rig.tgG.length()>260)rig.tgG.setLength(260);
+}
 $('#btnHome').onclick=()=>{clearSelection(true);};
 $('#btnReset').onclick=()=>{state.selected?focusCard(byId[state.selected]):homeCam();};
 
@@ -1726,7 +1827,8 @@ function loop(){
     rig.tgG.set(-panX*0.06, panY*0.06, 0);
   } else { panX*=.9;panY*=.9; }
   /* --- rotation auto : pause fluide quand une carte est ouverte --- */
-  const rotGoal=(state.selected||state.cerveauSuivi||dragging||reduced||VIEW.mode!=='sphere')?0:.0004;
+  vole();
+  const rotGoal=(state.selected||state.cerveauSuivi||state.libre||dragging||reduced||VIEW.mode!=='sphere')?0:.0004;
   state.rotCur+=(rotGoal-state.rotCur)*.05;
   world.rotation.y+=state.rotCur;
   world.updateMatrixWorld(true);
@@ -1768,6 +1870,7 @@ function loop(){
        200 unites, disparait entierement dans le gris. */
     const fogCible=gC>0.2?0.0012:gG>0.2?0.003:ETAT.cerveaux?0.0026:0.006;
     BRAINS.visible=!!ETAT.cerveaux&&gS>.55;
+    if(ETAT.cerveaux){const vis=BRAINS.visible&&!$('#moi').classList.contains('on');if(vis!==ETAT.navVis){ETAT.navVis=vis;$('#navC').classList.toggle('on',vis);$('#navAide').classList.toggle('on',vis);}}
     scene.fog.density+=(fogCible-scene.fog.density)*.08;
     cardLine.material.opacity+=((gC>0.15?0.62*gC:0)-cardLine.material.opacity)*.1;
     dust.material.opacity+=((gG>0.15?0.4*gG:0)-dust.material.opacity)*.1;
