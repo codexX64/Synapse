@@ -127,8 +127,28 @@ ACT.migrate(db);
 MOI.migrer(db);
 CER.migrate(db);
 amorcerSourceHub(db);
-/* Entrées d'avant la hiérarchie : rangées une fois, au premier démarrage. */
-{ const n = HI.reprendre(db); if (n) console.log(`[synapse] hiérarchie : ${n} entrée(s) d'avant la 3.0 rangée(s) dans leurs cerveaux.`); }
+/* Entrées d'avant la hiérarchie : rangées en tâche de fond, par lots de
+   200 entre deux requêtes, pour que le service réponde dès le démarrage.
+   Une écriture nouvelle est rangée tout de suite, sans attendre la reprise. */
+function repriseEnFond() {
+  const reste = HI.resteAReprendre(db);
+  if (!reste) return;
+  console.log(`[synapse] hiérarchie : ${reste} entrée(s) d'avant la 3.0 à ranger, en tâche de fond.`);
+  let total = 0;
+  const t0 = Date.now();
+  const lot = () => {
+    try {
+      const n = HI.reprendre(db, { lot: 200, max: 200 });
+      total += n;
+      if (HI.resteAReprendre(db)) return void setTimeout(lot, 20).unref?.();
+      console.log(`[synapse] hiérarchie : reprise finie, ${total} entrée(s) rangée(s) en ${Math.round((Date.now() - t0) / 1000)} s.`);
+    } catch (err) {
+      console.error(`[synapse] hiérarchie : reprise arrêtée (${err.message}) ; elle repartira au prochain démarrage.`);
+    }
+  };
+  setTimeout(lot, 2000).unref?.();
+}
+repriseEnFond();
 setInterval(() => ACT.purge(db), 600000).unref?.();
 PLANIF.demarre(db, reecritTitre);
 const embedder = new Embedder();
@@ -332,7 +352,9 @@ const routes = {
       ok: true,
       uptime: Math.round(process.uptime()),
       semantic: embedder.ok === true,
-      levels: { L0: true, L1: true, L2: embedder.ok === true, L3: true }
+      levels: { L0: true, L1: true, L2: embedder.ok === true, L3: true },
+      /* un état, jamais un compte : /healthz ne dit rien du volume */
+      hierarchie: HI.resteAReprendre(db) ? 'reprise' : 'prete'
     });
   },
 
