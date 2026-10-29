@@ -235,3 +235,8 @@ Vérifié dans Chromium contre la vitrine à 30 079 entrées (rayon 28,5) : plus
 En production, de grands « rideaux » lumineux traversaient vigie : sur une couche à moitié remplie, un écart d'indice de Fibonacci peut relier deux points opposés, et le filament traversait la sphère. Un filament plus long que deux fois l'espacement n'est plus dessiné. Les points de la forme sphère ont maintenant une taille fixe à l'écran (2,6 px, doublée sur écran Retina) : avec une taille fixée dans la scène, ils tombaient sous le pixel à distance et l'on ne voyait plus que les filaments.
 
 Vérifié dans Chromium contre la vitrine à 30 079 entrées : filament le plus long 3,0 (deux fois l'espacement), plus de rideaux, aucune erreur.
+
+## Suivi du 2026-10-29 (3.7.0) : la couleur dit le domaine
+En mode points, chaque point prend la couleur de son domaine (les mêmes que les brins, les noms et la barre des cerveaux : IA vert, HomeLab violet, Connaissance orange…), et chaque cerveau d'un domaine en a sa nuance (de -11 % à +11 % de luminosité), pour distinguer vigie de hub dans HomeLab. Dans la grande sphère, un point prend la couleur du cerveau d'où vient son entrée ; une entrée sans cerveau reste grise. La vue galaxie reprend les mêmes couleurs. Avant, la couleur suivait le type d'entrée, et presque tout était « service » : tout était cyan.
+
+Vérifié dans Chromium contre la vitrine à 6 079 entrées : couleurs relevées par cerveau (IA #3fe8a8 et ses nuances, HomeLab #b18cff), aucune erreur.
