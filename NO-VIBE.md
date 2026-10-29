@@ -218,3 +218,10 @@ En production, toute question faisait tomber SYNAPSE (502 de Cloudflare, puis re
 Correctif : on compte avant de charger (au-delà du plafond, rien n'est lu) ; le repli lit les vecteurs un par un (`.iterate()`). Même mesure : 167 Mo au maximum, mêmes résultats, 1,9 s par question sur la machine de test (environ 3,8 s avant, quand elle ne tombait pas). Plafond réglable par `VECTEURS_MAX`. Essai : `src/vecteurs-plafond.test.js` (plafond abaissé à 50, 200 vecteurs : aucun index chargé, la bonne entrée trouvée par le repli).
 
 Pas encore fait : un index compact (vecteurs ramenés à un octet par dimension, environ 115 Mo pour 150 000) qui rendrait aux grosses bases une recherche en quelques centaines de millisecondes.
+
+## Suivi du 2026-10-29 (3.6.0) : des sphères pleines qui grandissent sans limite
+En mode points, les entrées d'un cerveau ne sont plus collées sur une coquille : elles remplissent des couches concentriques à espacement constant (`ESPACE` = 0,8), la première juste au-dessus du noyau (rayon 6 pour le global, 1,2 pour un cerveau), chaque couche prenant autant de points que sa surface en porte avant de passer à la suivante. Dans l'ordre d'arrivée : les plus anciennes au centre, les nouvelles dehors. Le rayon suit le volume, `rayon = ∛(r0³ + n·ESPACE³·3/4π)` : 6 079 entrées font 10 unités, 149 000 environ 27 ; il grandit sans limite avec la mémoire. Chaque couche est tournée pour éviter les alignements radiaux ; les filaments relient les voisins dans chaque couche. La couronne des cerveaux se place autour du vrai rayon du global.
+
+En mode points, l'arbre des cartes (branches vers des cartes absentes, nœuds, étiquettes de types) et la coquille quadrillée de la grande sphère s'effacent : seuls restent le noyau et les entrées.
+
+Vérifié dans Chromium contre la vitrine à 6 079 entrées : rayons 10 (global) et 9,2 (vigie), couches visibles de près, plus de rayons blancs ni de quadrillage, aucune erreur.
