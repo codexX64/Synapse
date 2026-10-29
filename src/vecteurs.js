@@ -27,7 +27,7 @@ const { blobToVec } = require('./db.js');
 /* 120 000 morceaux à 768 dimensions ≈ 350 Mo. Au-delà, un index en
    mémoire n'est plus le bon outil et il vaut mieux le dire que gonfler
    en silence. */
-const MAX_MORCEAUX = 120000;
+const MAX_MORCEAUX = Number(process.env.VECTEURS_MAX || 120000);
 
 const caches = new Map();   /* ns → index */
 
@@ -49,12 +49,19 @@ function index(db, ns) {
   const cache = caches.get(ns);
   if (cache && cache.sig === sig) return cache.idx;
 
+  /* Compter AVANT de charger : au-delà du plafond, on ne lit rien. Lire
+     d'abord puis comparer chargeait 149 000 vecteurs (≈ 460 Mo) dans un
+     conteneur de 512 Mo : le noyau tuait le service à la première question. */
+  const total = Number(sig.split(':')[0]);
+  if (!total || total > MAX_MORCEAUX) {
+    caches.set(ns, { sig, idx: null });
+    return null;
+  }
   const rows = db.prepare(
     `SELECT c.entry_id AS id, c.vec AS v, e.archived AS arch FROM chunks c
      JOIN entries e ON e.id = c.entry_id
      WHERE c.embedded = 1 AND c.vec IS NOT NULL AND e.ns = ?`).all(ns);
-
-  if (!rows.length || rows.length > MAX_MORCEAUX) {
+  if (!rows.length) {
     caches.set(ns, { sig, idx: null });
     return null;
   }

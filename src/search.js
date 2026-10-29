@@ -159,12 +159,15 @@ function vector(db, qvec, p, ns, limit) {
   const rapide = VEC.proches(db, ns, qvec, limit, filtre);
   if (rapide) return rapide;
 
+  /* Repli en flux : un vecteur à la fois, la mémoire ne dépend pas de la
+     taille de la base. C'est le chemin des grosses bases, celles où
+     l'index en mémoire n'a pas sa place : il ne doit surtout pas, lui,
+     tout charger d'un coup. */
   const { sql, args } = whereClause(p, ns);
   const rows = db.prepare(`
     SELECT c.entry_id AS id, c.vec AS v
     FROM chunks c JOIN entries e ON e.id = c.entry_id
-    WHERE c.embedded = 1 AND c.vec IS NOT NULL AND ${sql}`).all(...args);
-  if (!rows.length) return [];
+    WHERE c.embedded = 1 AND c.vec IS NOT NULL AND ${sql}`).iterate(...args);
 
   const dim = qvec.length;
   const best = new Map();
