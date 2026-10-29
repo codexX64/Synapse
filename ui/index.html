@@ -1172,35 +1172,63 @@ async function chargeCerveaux(){
   const COUL_C=new Map(),GRIS=new THREE.Color('#9aa3b2');
   const nuance=(coul,k,n)=>{const c=new THREE.Color(coul);if(n>1)c.offsetHSL(0,0,((k/(n-1))-.5)*.22);return c;};
   const couleurPoint=i=>{const ci=P.c[i];return ci<0?GRIS:(COUL_C.get(P.cerveaux[ci])||GRIS);};
-  const pose=(d,a0,a1,base,depuis,coul,parentC,niv)=>{
+  /* UNE CONSTELLATION
+     Trois temps : on place, on écarte, on dessine. Les domaines partent
+     dans des directions réparties en 3D selon l'angle d'or (jamais face à
+     face, jamais alignés) ; les cerveaux d'un domaine gravitent autour de
+     leur commun, en grappe tournée vers l'extérieur ; puis quelques passes
+     écartent les sphères qui se touchent, le global restant fixe. */
+  const OR=Math.PI*(3-Math.sqrt(5));
+  const dirOr=(k,n,haut)=>{const y=n<2?.25:(1-(k+.5)/n*2)*haut,r=Math.sqrt(Math.max(0,1-y*y)),t=k*OR+.6;return new THREE.Vector3(Math.cos(t)*r,y,Math.sin(t)*r);};
+  const NOEUDS=[];   /* {cid,genre,d,m,pos,r,coul,parent} */
+  const place=(d,dir,depuis,rDepuis,coul,parentNoeud)=>{
     if(!plein(d))return;
-    const mid=(a0+a1)/2,rc=R(nb(d.commun.id)),dist=base+rc;
-    const pos=new THREE.Vector3(Math.cos(mid)*dist,niv%2?6:-2,Math.sin(mid)*dist);
-    let g;
+    const rc=R(nb(d.commun.id));
+    const pos=depuis.clone().addScaledVector(dir,rDepuis+ECART+rc);
     COUL_C.set(d.commun.id,new THREE.Color(coul));
-    if(nb(d.commun.id)){g=sphereCerveau(pos,rc,cartesDe(d.commun.id),coul,d.commun.id,d.nom,d.commun.n,true,parentC);nuageSi(g,pts.get(d.commun.id),rc,d.commun.id);}
-    else jonction(pos,coul,d.commun.id,d.nom,d.commun.n,parentC);
-    borne=Math.max(borne,dist+rc);
-    brin(depuis||pos.clone().normalize().multiplyScalar(RG+1.5),pos,coul,depuis?.45:.6);
-    /* membres et sous-domaines se partagent le secteur, au prorata de leur taille */
-    const items=[...membresPleins(d).map(m=>({m,w:1+R(nb(m.id))/8})),...enfants(d.id).filter(plein).map(e=>({e,w:poids(e)}))];
-    const W=items.reduce((x,i)=>x+i.w,0)||1;let b=a0;
+    const noeud={cid:d.commun.id,genre:'commun',d,pos,r:rc,coul,parent:parentNoeud};NOEUDS.push(noeud);
+    const items=[...membresPleins(d).map(m=>({m})),...enfants(d.id).filter(plein).map(e=>({e}))];
     const nbM=items.filter(x=>x.m).length;let km=0;
-    items.forEach((it,i)=>{
-      const l=(a1-a0)*it.w/W,t=b+l/2;
+    /* la grappe : directions autour du commun, tournées vers l'extérieur */
+    items.forEach((it,k)=>{
+      const f=dirOr(k,Math.max(items.length,3),.85);
+      const dd=dir.clone().multiplyScalar(1.15).add(f).normalize();
       if(it.m){
         COUL_C.set(it.m.id,nuance(coul,km++,nbM));
-        const rm=R(nb(it.m.id)),dm=dist+rc+ECART+rm;
-        const mp=new THREE.Vector3(Math.cos(t)*dm,(i%2?8:-8)*(items.length>2?1:.4),Math.sin(t)*dm);
-        const gm=sphereCerveau(mp,rm,cartesDe(it.m.id),coul,it.m.id,it.m.nom,it.m.n,false,d.commun.id);
-        nuageSi(gm,pts.get(it.m.id),rm,it.m.id);
-        brin(mp,pos,coul,.38);borne=Math.max(borne,dm+rm);
-      }else pose(it.e,b,b+l,dist+rc+ECART,pos,coul,d.commun.id,niv+1);
-      b+=l;
+        const rm=R(nb(it.m.id));
+        NOEUDS.push({cid:it.m.id,genre:'membre',m:it.m,d,pos:pos.clone().addScaledVector(dd,rc+ECART+rm),r:rm,coul,parent:noeud});
+      }else place(it.e,dd,pos,rc,coul,noeud);
     });
   };
-  let ang=-Math.PI/2;
-  racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.04,ang+l*.96,RG+ECART+4,null,BR_COUL[i%BR_COUL.length],null,0);ang+=l;});
+  racines.forEach((d,i)=>place(d,dirOr(i,Math.max(racines.length,2),.55),new THREE.Vector3(),RG,BR_COUL[i%BR_COUL.length],null));
+  /* écarter ce qui se touche : le global est fixe, chaque sphère garde au moins ECART de vide autour d'elle */
+  const GLOBAL={pos:new THREE.Vector3(),r:RG,fixe:true};
+  const tous=[GLOBAL,...NOEUDS];
+  for(let passe=0;passe<60;passe++){
+    let bouge=false;
+    for(let i=0;i<tous.length;i++)for(let j=i+1;j<tous.length;j++){
+      const A=tous[i],B=tous[j],v=_v1.copy(B.pos).sub(A.pos);let d=v.length();
+      const min=A.r+B.r+ECART;if(d>=min)continue;
+      if(d<1e-6){v.set(1,.3,0);d=1;}
+      v.multiplyScalar((min-d)/d);bouge=true;
+      if(A.fixe)B.pos.add(v);else if(B.fixe)A.pos.sub(v);else{B.pos.addScaledVector(v,.5);A.pos.addScaledVector(v,-.5);}
+    }
+    if(!bouge)break;
+  }
+  /* dessiner */
+  for(const n of NOEUDS){
+    borne=Math.max(borne,n.pos.length()+n.r);
+    const parentC=n.parent?n.parent.cid:null;
+    if(n.genre==='commun'){
+      if(nb(n.cid)){const g=sphereCerveau(n.pos,n.r,cartesDe(n.cid),n.coul,n.cid,n.d.nom,n.d.commun.n,true,parentC);nuageSi(g,pts.get(n.cid),n.r,n.cid);}
+      else jonction(n.pos,n.coul,n.cid,n.d.nom,n.d.commun.n,parentC);
+      brin(n.parent?n.parent.pos:n.pos.clone().normalize().multiplyScalar(RG+1.5),n.pos,n.coul,n.parent?.45:.6);
+    }else{
+      const g=sphereCerveau(n.pos,n.r,cartesDe(n.cid),n.coul,n.cid,n.m.nom,n.m.n,false,parentC);
+      nuageSi(g,pts.get(n.cid),n.r,n.cid);
+      brin(n.pos,n.parent.pos,n.coul,.38);
+    }
+  }
   /* la grande sphère porte toutes les entrées, une fois chacune */
   if(ETAT.points){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,RG,null,Math.max(48,RG*1.8),R0_GLOBAL,couleurPoint);}
   /* le centre dit qu'il est le global */
