@@ -197,3 +197,8 @@ Défaut de la 3.0 corrigé : `/healthz` restait sur `"hierarchie":"reprise"` pou
 Vérifié dans Chromium contre la vitrine à 30 079 entrées (`outils/vitrine.mjs <port> soma 30000`, file de vectorisation débridée pour la seule vitrine) : 60 167 points, un point de vigie ouvert dans l'inspecteur, cible de caméra exactement sur le point, 60 clics au hasard sur vigie (13 cartes, 33 points, 14 vides), aucune erreur. 192 essais verts.
 
 Pas encore vérifié : la fluidité sur une vraie carte graphique avec 145 000 entrées (environ 290 000 points) ; la machine de test dessine sans carte graphique, à moins d'une image par seconde. Le recalcul de la route des points après chaque écriture (environ 550 ms) sera à rendre incrémental si vigie écrit en continu.
+
+## Suivi du 2026-10-29 (3.4.1) : seuls les points des entrées
+Retirés de la vue sphère : l'enveloppe de points décoratifs autour de chaque sphère de cerveau, et la poussière lointaine (360 points gris entre 95 et 155 unités, là où sont maintenant les cerveaux). Une sphère se forme de ses seuls points, un par entrée : tout point visible en vue sphère est une entrée qu'on peut ouvrir. La poussière de la vue galaxie, invisible en vue sphère, est gardée.
+
+Vérifié dans Chromium : en vue sphère, les 17 nuages visibles sont tous des nuages d'entrées, aucun décor ; aucune erreur.
