@@ -1050,7 +1050,7 @@ function lignes(pos,col,n,ecarts,parent,op){
    autres (pas de fusion additive : trente couches s'additionnaient en
    blanc), de l'espace entre eux, et les filaments seulement sur les
    couches extérieures. */
-const ESPACE=1.5,OP_POINT=.92,OP_FIL=.16,COUCHES_FILS=2;
+const ESPACE=1.5,OP_POINT=.92,OP_FIL=.12,COUCHES_FILS=2,TAILLE_POINT_PX=2.6;
 function rayonVolume(n,r0){return Math.cbrt(r0*r0*r0+n*ESPACE*ESPACE*ESPACE*3/(4*Math.PI))+ESPACE*.5;}
 function enVolume(n,r0){
   const pos=new Float32Array(n*3),couches=[],or=Math.PI*(3-Math.sqrt(5));
@@ -1076,7 +1076,14 @@ function lignesCouches(pos,col,couches,parent,op){
   for(const c of couches.slice(-COUCHES_FILS)){
     if(c.nb<4)continue;
     const sous=pos.subarray(c.debut*3,(c.debut+c.nb)*3);
-    for(const f of ecartsVoisins(sous,c.nb))for(let i=0;i+f<c.nb;i++)paires.push(c.debut+i,c.debut+i+f);
+    /* seuls les vrais voisins : un écart d'indice peut relier deux points
+       opposés sur une couche à moitié remplie ; ce trait-là traverserait la
+       sphère, on ne le dessine pas */
+    const max2=(ESPACE*2)*(ESPACE*2);
+    for(const f of ecartsVoisins(sous,c.nb))for(let i=0;i+f<c.nb;i++){
+      const a=(c.debut+i)*3,b=(c.debut+i+f)*3,dx=pos[a]-pos[b],dy=pos[a+1]-pos[b+1],dz=pos[a+2]-pos[b+2];
+      if(dx*dx+dy*dy+dz*dz<=max2)paires.push(c.debut+i,c.debut+i+f);
+    }
   }
   if(!paires.length)return null;
   const lp=new Float32Array(paires.length*3),lc=new Float32Array(paires.length*3);
@@ -1104,14 +1111,16 @@ function nuage(parent,indices,P,rb,cid,rbG,r0){
   }
   const userData={ids,typ,cerveau:cid,rb:vol.R};
   const pasG=Math.sqrt(Math.PI*RG*RG/n);
-  const fait=(p,taille)=>{
+  const fait=(p,taille,ecran)=>{
     const geo=new THREE.BufferGeometry();
     geo.setAttribute('position',new THREE.BufferAttribute(p,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
-    const pts=new THREE.Points(geo,new THREE.PointsMaterial({map:DOT,size:Math.max(.14,Math.min(1.6,taille)),vertexColors:true,transparent:true,
-      opacity:OP_POINT,depthWrite:true,alphaTest:.35}));
+    /* sphère : une taille fixe à l'écran (pixels), lisible de loin comme de près ;
+       galaxie : une taille dans la scène, comme avant */
+    const pts=new THREE.Points(geo,new THREE.PointsMaterial({map:DOT,size:ecran?TAILLE_POINT_PX*Math.min(2,devicePixelRatio||1):Math.max(.14,Math.min(1.6,taille)),
+      sizeAttenuation:!ecran,vertexColors:true,transparent:true,opacity:OP_POINT,depthWrite:true,alphaTest:.35}));
     pts.userData=userData;parent.add(pts);NUAGES.push(pts);return pts;
   };
-  const sphere=fait(pos,ESPACE*.42),galaxie=fait(gal,pasG*1.25);
+  const sphere=fait(pos,0,true),galaxie=fait(gal,pasG*1.25);
   /* reliés : toile entre voisins sur la sphère, filaments le long des bras en galaxie */
   const lS=lignesCouches(pos,col,vol.couches,parent,OP_FIL),lG=lignes(gal,col,n,n>BRAS?[BRAS]:[],parent,.2);
   NUAGE_PAIRES.push({sphere,galaxie,lS,lG});
