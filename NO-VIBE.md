@@ -240,3 +240,8 @@ Vérifié dans Chromium contre la vitrine à 30 079 entrées : filament le plus 
 En mode points, chaque point prend la couleur de son domaine (les mêmes que les brins, les noms et la barre des cerveaux : IA vert, HomeLab violet, Connaissance orange…), et chaque cerveau d'un domaine en a sa nuance (de -11 % à +11 % de luminosité), pour distinguer vigie de hub dans HomeLab. Dans la grande sphère, un point prend la couleur du cerveau d'où vient son entrée ; une entrée sans cerveau reste grise. La vue galaxie reprend les mêmes couleurs. Avant, la couleur suivait le type d'entrée, et presque tout était « service » : tout était cyan.
 
 Vérifié dans Chromium contre la vitrine à 6 079 entrées : couleurs relevées par cerveau (IA #3fe8a8 et ses nuances, HomeLab #b18cff), aucune erreur.
+
+## Suivi du 2026-10-29 (3.7.1) : une constellation, pas un bonhomme
+En production, la disposition dessinait une silhouette : posés à plat sur un anneau, deux domaines tombaient face à face de part et d'autre du global, et chaque domaine alignait ses cerveaux en éventail (vigie en tête, HomeLab en cou, le global en corps, hub et vox en bras, les IA en jambes). Désormais, trois temps : on place, on écarte, on dessine. Les domaines partent dans des directions réparties en 3D selon l'angle d'or (jamais face à face, jamais alignés, à des hauteurs différentes) ; les cerveaux d'un domaine gravitent en grappe autour de leur commun, tournés vers l'extérieur ; puis jusqu'à 60 passes écartent les sphères qui se touchent (au moins un écart de vide entre deux sphères), le global restant fixe.
+
+Vérifié dans Chromium contre la vitrine à 30 079 entrées : aucun chevauchement entre sphères, aucune erreur.
