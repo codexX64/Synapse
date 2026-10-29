@@ -1046,7 +1046,11 @@ function lignes(pos,col,n,ecarts,parent,op){
    passe à la suivante. Dans l'ordre d'arrivée : les plus anciennes au
    centre, les nouvelles dehors ; plus il y a d'entrées, plus la sphère
    grandit, sans limite. */
-const ESPACE=.8,OP_POINT=.62,OP_FIL=.07;
+/* Lisible avant tout : des points opaques qui se cachent les uns les
+   autres (pas de fusion additive : trente couches s'additionnaient en
+   blanc), de l'espace entre eux, et les filaments seulement sur les
+   couches extérieures. */
+const ESPACE=1.5,OP_POINT=.92,OP_FIL=.16,COUCHES_FILS=2;
 function rayonVolume(n,r0){return Math.cbrt(r0*r0*r0+n*ESPACE*ESPACE*ESPACE*3/(4*Math.PI))+ESPACE*.5;}
 function enVolume(n,r0){
   const pos=new Float32Array(n*3),couches=[],or=Math.PI*(3-Math.sqrt(5));
@@ -1056,7 +1060,10 @@ function enVolume(n,r0){
     couches.push({debut:k,nb:m,cap});
     for(let j=0;j<m;j++){
       const y=1-((j+.5)/cap)*2,rr=Math.sqrt(Math.max(0,1-y*y)),t=j*or+r;   /* chaque couche tournée : pas d'alignement radial */
-      pos[(k+j)*3]=Math.cos(t)*rr*r;pos[(k+j)*3+1]=y*r;pos[(k+j)*3+2]=Math.sin(t)*rr*r;
+      /* un léger décalage propre à chaque point casse le moiré des couches régulières */
+      const q=k+j,dr=r+(hash01(q*3+1)-.5)*ESPACE*.5,dt=(hash01(q*3+2)-.5)*.5*ESPACE/Math.max(r,1),dy=(hash01(q*3+3)-.5)*.5*ESPACE/Math.max(r,1);
+      const yy=Math.max(-1,Math.min(1,y+dy)),r2=Math.sqrt(Math.max(0,1-yy*yy));
+      pos[q*3]=Math.cos(t+dt)*r2*dr;pos[q*3+1]=yy*dr;pos[q*3+2]=Math.sin(t+dt)*r2*dr;
     }
     k+=m;r+=ESPACE;
   }
@@ -1066,7 +1073,7 @@ function enVolume(n,r0){
    aux écarts d'indice de Fibonacci les plus courts. */
 function lignesCouches(pos,col,couches,parent,op){
   const paires=[];
-  for(const c of couches){
+  for(const c of couches.slice(-COUCHES_FILS)){
     if(c.nb<4)continue;
     const sous=pos.subarray(c.debut*3,(c.debut+c.nb)*3);
     for(const f of ecartsVoisins(sous,c.nb))for(let i=0;i+f<c.nb;i++)paires.push(c.debut+i,c.debut+i+f);
@@ -1101,10 +1108,10 @@ function nuage(parent,indices,P,rb,cid,rbG,r0){
     const geo=new THREE.BufferGeometry();
     geo.setAttribute('position',new THREE.BufferAttribute(p,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
     const pts=new THREE.Points(geo,new THREE.PointsMaterial({map:DOT,size:Math.max(.14,Math.min(1.6,taille)),vertexColors:true,transparent:true,
-      opacity:OP_POINT,depthWrite:false,blending:THREE.AdditiveBlending}));
+      opacity:OP_POINT,depthWrite:true,alphaTest:.35}));
     pts.userData=userData;parent.add(pts);NUAGES.push(pts);return pts;
   };
-  const sphere=fait(pos,ESPACE*.7),galaxie=fait(gal,pasG*1.25);
+  const sphere=fait(pos,ESPACE*.42),galaxie=fait(gal,pasG*1.25);
   /* reliés : toile entre voisins sur la sphère, filaments le long des bras en galaxie */
   const lS=lignesCouches(pos,col,vol.couches,parent,OP_FIL),lG=lignes(gal,col,n,n>BRAS?[BRAS]:[],parent,.2);
   NUAGE_PAIRES.push({sphere,galaxie,lS,lG});
