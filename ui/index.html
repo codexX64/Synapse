@@ -1011,25 +1011,63 @@ function brin(a,b,coul,op){
    de points se dessine en un seul appel, même à plusieurs centaines de
    milliers. Les cartes restent par-dessus pour les entrées les plus
    parlantes ; un point cliqué s'ouvre comme une carte. */
-const NUAGES=[];
-function nuage(parent,indices,P,rb,cid){
+const NUAGES=[],NUAGE_PAIRES=[];
+/* Au-delà de SEUIL_CARTES entrées, plus de cartes : chaque entrée est un
+   point lumineux, relié à ses voisins. En dessous, les cartes comme avant. */
+const SEUIL_CARTES=1400;
+const DOT=(()=>{const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');
+  const r=g.createRadialGradient(32,32,0,32,32,32);r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(.25,'rgba(255,255,255,.85)');
+  r.addColorStop(.6,'rgba(255,255,255,.18)');r.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=r;g.fillRect(0,0,64,64);
+  const t=new THREE.CanvasTexture(c);return t;})();
+const hash01=k=>{const x=Math.sin(k*12.9898+78.233)*43758.5453;return x-Math.floor(x);};
+/* Sur une spirale de Fibonacci, les voisins d'un point sont aux écarts
+   d'indice qui sont des nombres de Fibonacci : on garde les deux écarts
+   les plus courts, la toile se tisse sans calcul de proximité. */
+function ecartsVoisins(pos,n){
+  if(n<4)return [];
+  const fib=[1,2];while(fib[fib.length-1]<n/2)fib.push(fib[fib.length-1]+fib[fib.length-2]);
+  const d=(i,j)=>Math.hypot(pos[i*3]-pos[j*3],pos[i*3+1]-pos[j*3+1],pos[i*3+2]-pos[j*3+2]);
+  const lot=[];for(let k=0;k<24;k++)lot.push(Math.floor(n*(.3+.4*k/24)));
+  return fib.filter(f=>f<n).map(f=>({f,m:lot.reduce((x,i)=>x+(i+f<n?d(i,i+f):0),0)/lot.length})).sort((a,b)=>a.m-b.m).slice(0,2).map(x=>x.f);
+}
+function lignes(pos,col,n,ecarts,parent,op){
+  const paires=[];for(const f of ecarts)for(let i=0;i+f<n;i++)paires.push(i,i+f);
+  if(!paires.length)return null;
+  const lp=new Float32Array(paires.length*3),lc=new Float32Array(paires.length*3);
+  for(let k=0;k<paires.length;k++){const i=paires[k];lp[k*3]=pos[i*3];lp[k*3+1]=pos[i*3+1];lp[k*3+2]=pos[i*3+2];lc[k*3]=col[i*3];lc[k*3+1]=col[i*3+1];lc[k*3+2]=col[i*3+2];}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(lp,3));g.setAttribute('color',new THREE.BufferAttribute(lc,3));
+  const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending}));
+  parent.add(l);return l;
+}
+function nuage(parent,indices,P,rb,cid,rbG){
   const n=indices.length;if(!n)return null;
-  const pos=new Float32Array(n*3),col=new Float32Array(n*3),ids=new Int32Array(n),typ=new Uint8Array(n);
+  const pos=new Float32Array(n*3),gal=new Float32Array(n*3),col=new Float32Array(n*3),ids=new Int32Array(n),typ=new Uint8Array(n);
   const or=Math.PI*(3-Math.sqrt(5)),r=rb*.965,cc=new THREE.Color(),cache=new Map();
+  const BRAS=4,RG=rbG||rb*1.5;
   for(let k=0;k<n;k++){
     const i=indices[k],y=1-((k+.5)/n)*2,rr=Math.sqrt(Math.max(0,1-y*y)),t=k*or;
     pos[k*3]=Math.cos(t)*rr*r;pos[k*3+1]=y*r;pos[k*3+2]=Math.sin(t)*rr*r;
+    /* galaxie : bras spiralés, densité uniforme sur le disque */
+    const u=k/n,bras=k%BRAS,rad=RG*(.06+.94*Math.sqrt(u)),h=hash01(k);
+    const ang=bras/BRAS*Math.PI*2+rad/RG*5.4+(h-.5)*.32;
+    gal[k*3]=Math.cos(ang)*rad;gal[k*3+1]=(hash01(k+7)-.5)*RG*.06*(1-u*.6);gal[k*3+2]=Math.sin(ang)*rad;
     const ty=P.t[i];let c=cache.get(ty);if(!c){c=cc.set(typeDe(P.types[ty]).c).clone();cache.set(ty,c);}
     col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;ids[k]=P.e[i];typ[k]=ty;
   }
-  const geo=new THREE.BufferGeometry();
-  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
-  /* la taille d'un point suit l'espacement : il ne recouvre pas ses voisins */
-  const pas=Math.sqrt(4*Math.PI*r*r/n);
-  const pts=new THREE.Points(geo,new THREE.PointsMaterial({size:Math.max(.05,Math.min(.55,pas*.62)),vertexColors:true,transparent:true,opacity:.92,depthWrite:false}));
-  pts.userData={ids,typ,cerveau:cid,rb};
-  parent.add(pts);NUAGES.push(pts);
-  return pts;
+  const userData={ids,typ,cerveau:cid,rb};
+  const pas=Math.sqrt(4*Math.PI*r*r/n),pasG=Math.sqrt(Math.PI*RG*RG/n);
+  const fait=(p,taille)=>{
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.BufferAttribute(p,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+    const pts=new THREE.Points(geo,new THREE.PointsMaterial({map:DOT,size:Math.max(.14,Math.min(1.6,taille)),vertexColors:true,transparent:true,
+      opacity:.95,depthWrite:false,blending:THREE.AdditiveBlending}));
+    pts.userData=userData;parent.add(pts);NUAGES.push(pts);return pts;
+  };
+  const sphere=fait(pos,pas*1.25),galaxie=fait(gal,pasG*1.25);
+  /* reliés : toile entre voisins sur la sphère, filaments le long des bras en galaxie */
+  const lS=lignes(pos,col,n,ecartsVoisins(pos,n),parent,.16),lG=lignes(gal,col,n,n>BRAS?[BRAS]:[],parent,.2);
+  NUAGE_PAIRES.push({sphere,galaxie,lS,lG});
+  return sphere;
 }
 
 async function chargeCerveaux(){
@@ -1049,6 +1087,10 @@ async function chargeCerveaux(){
   const pts=new Map();
   if(P)for(let i=0;i<P.c.length;i++){const ci=P.c[i];if(ci<0)continue;const c=P.cerveaux[ci];if(!pts.has(c))pts.set(c,[]);pts.get(c).push(i);}
   const G=P?P.g:ETAT.total;
+  ETAT.points=!!P&&G>SEUIL_CARTES;
+  /* sous le seuil, les cartes comme avant : pas de nuage */
+  const nuageSi=(parent,ix,rb,cid,rbG)=>ETAT.points&&ix?nuage(parent,ix,P,rb,cid,rbG):null;
+  const cartesDe=cid=>ETAT.points?[]:(dans.get(cid)||[]);
   const nb=cid=>P?(pts.get(cid)||[]).length:(dans.get(cid)||[]).length;
   /* la surface d'une sphère suit son volume : même espacement partout ;
      le global, qui a tout, reste la plus grosse */
@@ -1067,7 +1109,7 @@ async function chargeCerveaux(){
     const mid=(a0+a1)/2,rc=R(nb(d.commun.id)),dist=base+rc;
     const pos=new THREE.Vector3(Math.cos(mid)*dist,niv%2?6:-2,Math.sin(mid)*dist);
     let g;
-    if(nb(d.commun.id)){g=sphereCerveau(pos,rc,dans.get(d.commun.id)||[],coul,d.commun.id,d.nom,d.commun.n,true,parentC);if(P)nuage(g,pts.get(d.commun.id),P,rc,d.commun.id);}
+    if(nb(d.commun.id)){g=sphereCerveau(pos,rc,cartesDe(d.commun.id),coul,d.commun.id,d.nom,d.commun.n,true,parentC);nuageSi(g,pts.get(d.commun.id),rc,d.commun.id);}
     else jonction(pos,coul,d.commun.id,d.nom,d.commun.n,parentC);
     borne=Math.max(borne,dist+rc);
     brin(depuis||pos.clone().normalize().multiplyScalar(LEAF_R+1.5),pos,coul,depuis?.45:.6);
@@ -1079,8 +1121,8 @@ async function chargeCerveaux(){
       if(it.m){
         const rm=R(nb(it.m.id)),dm=dist+rc+ECART+rm;
         const mp=new THREE.Vector3(Math.cos(t)*dm,(i%2?8:-8)*(items.length>2?1:.4),Math.sin(t)*dm);
-        const gm=sphereCerveau(mp,rm,dans.get(it.m.id)||[],coul,it.m.id,it.m.nom,it.m.n,false,d.commun.id);
-        if(P)nuage(gm,pts.get(it.m.id),P,rm,it.m.id);
+        const gm=sphereCerveau(mp,rm,cartesDe(it.m.id),coul,it.m.id,it.m.nom,it.m.n,false,d.commun.id);
+        nuageSi(gm,pts.get(it.m.id),rm,it.m.id);
         brin(mp,pos,coul,.38);borne=Math.max(borne,dm+rm);
       }else pose(it.e,b,b+l,dist+rc+ECART,pos,coul,d.commun.id,niv+1);
       b+=l;
@@ -1089,13 +1131,13 @@ async function chargeCerveaux(){
   let ang=-Math.PI/2;
   racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.04,ang+l*.96,LEAF_R+ECART+4,null,BR_COUL[i%BR_COUL.length],null,0);ang+=l;});
   /* la grande sphère porte toutes les entrées, une fois chacune */
-  if(P&&P.g){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,LEAF_R,null);}
+  if(ETAT.points){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,LEAF_R,null,48);}
   /* le centre dit qu'il est le global */
   const gl=texteSprite('GLOBAL',nfr(G)+' entrées','#ffffff',1.7);gl.position.set(0,LEAF_R+7,0);BRAINS.add(gl);
   ETAT.borne=borne;ETAT.cerveaux=true;if(P)P_TYPES=P.types;
   ETAT.msCerveaux=Math.round(performance.now()-t0);
   camera.far=Math.max(400,borne*7);camera.updateProjectionMatrix();
-  if(P){const tag=document.getElementById('demoTag');if(tag)tag.textContent='EN DIRECT · '+nfr(G)+' ENTRÉES · '+nfr(nodes.length)+' CARTES';}
+  if(P){const tag=document.getElementById('demoTag');if(tag)tag.textContent='EN DIRECT · '+nfr(G)+(ETAT.points?' ENTRÉES · POINTS':' ENTRÉES · '+nfr(nodes.length)+' CARTES');}
   dessineNav();
   /* ne pas reprendre la caméra à quelqu'un qui a déjà commencé à naviguer */
   if(!state.selected&&!state.cerveauSuivi&&!state.libre)homeCam();
@@ -1108,7 +1150,7 @@ function pickPoint(cx,cy){
   mouse.x=((cx-r.left)/r.width)*2-1;mouse.y=-((cy-r.top)/r.height)*2+1;
   ray.setFromCamera(mouse,camera);
   ray.params.Points.threshold=Math.max(.12,rig.r*.0035);
-  const hit=ray.intersectObjects(NUAGES,false)[0];
+  const hit=ray.intersectObjects(NUAGES.filter(o=>o.visible&&o.material.opacity>.3),false)[0];
   return hit?{obj:hit.object,index:hit.index}:null;
 }
 function lachePoint(){
@@ -1339,7 +1381,7 @@ function setViewMode(m){
     const tan=Math.tan(camera.fov*Math.PI/360);
     rig.rG=Math.min(400,Math.max(80,Math.max((dx*1.15)/(tan*Math.max(camera.aspect,1)),(dy*1.15)/tan)));
   }
-  else if(m==='galaxy'){ rig.tgG.set(0,0,0); rig.rG=64; }
+  else if(m==='galaxy'){ rig.tgG.set(0,0,0); rig.rG=ETAT.cerveaux&&ETAT.points?Math.max(64,ETAT.borne*2.3):64; if(ETAT.points)rig.phG=.7; }
   else { rig.tgG.set(0,0,0); }
 }
 addEventListener('DOMContentLoaded',()=>{});
@@ -1420,7 +1462,7 @@ function deplace(dx,dy){
 }
 let glisseDeplace=false;
 canvas.addEventListener('pointerdown',e=>{
-  glisseDeplace=VIEW.mode==='sphere'&&(e.button===2||e.shiftKey);
+  glisseDeplace=(VIEW.mode==='sphere'||(VIEW.mode==='galaxy'&&ETAT.points))&&(e.button===2||e.shiftKey);
   dragging=true;px=downX=e.clientX;py=downY=e.clientY;downT=performance.now();
   canvas.setPointerCapture(e.pointerId);
 });
@@ -1459,7 +1501,7 @@ canvas.addEventListener('dblclick',()=>recadre());
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();cancelTween();
-  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?Math.max(280,ETAT.borne*3.2):115,rig.rG*(1+e.deltaY*.0011)));
+  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?(ETAT.points?Math.max(180,(ETAT.borne||0)*3.2):180):ETAT.cerveaux?Math.max(280,ETAT.borne*3.2):115,rig.rG*(1+e.deltaY*.0011)));
 },{passive:false});
 canvas.addEventListener('touchmove',e=>{
   if(e.touches.length===2){
@@ -1477,7 +1519,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape'){if(state.selected)clearSelec
 const TOUCHES=new Set();
 const dansUnChamp=()=>{const a=document.activeElement;return a&&(a.tagName==='INPUT'||a.tagName==='TEXTAREA'||a.tagName==='SELECT'||a.isContentEditable);};
 addEventListener('keydown',e=>{
-  if(dansUnChamp()||e.metaKey||e.ctrlKey||e.altKey||VIEW.mode!=='sphere')return;
+  if(dansUnChamp()||e.metaKey||e.ctrlKey||e.altKey||!(VIEW.mode==='sphere'||(VIEW.mode==='galaxy'&&ETAT.points)))return;
   const k=e.key.toLowerCase();
   if(ETAT.cerveaux&&e.key==='ArrowRight'){e.preventDefault();pasCerveau(1);return;}
   if(ETAT.cerveaux&&e.key==='ArrowLeft'){e.preventDefault();pasCerveau(-1);return;}
@@ -1487,7 +1529,7 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>TOUCHES.delete(e.key.toLowerCase()));
 addEventListener('blur',()=>TOUCHES.clear());
 function vole(){
-  if(!TOUCHES.size||VIEW.mode!=='sphere')return;
+  if(!TOUCHES.size||!(VIEW.mode==='sphere'||(VIEW.mode==='galaxy'&&ETAT.points)))return;
   const avant=_v1.copy(rig.tg).sub(camera.position);avant.y=0;
   if(avant.lengthSq()<1e-6)return;
   avant.normalize();
@@ -1604,6 +1646,7 @@ const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();
 const hoverEvt={x:0,y:0,dirty:false};
 let hoverId=null,lastPick=0;
 function pick(cx,cy){
+  if(ETAT.points)return null;
   const r=canvas.getBoundingClientRect();
   mouse.x=((cx-r.left)/r.width)*2-1;mouse.y=-((cy-r.top)/r.height)*2+1;
   ray.setFromCamera(mouse,camera);
@@ -1933,7 +1976,7 @@ function loop(){
   /* Le plafond de 115 convenait a la sphere (rayon 25). La carte 2D
      s'etale sur 350 unites : la plafonner a 115 revenait a l'ouvrir
      deja hors champ. Le plafond suit donc la vue. */
-  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?180:ETAT.cerveaux?Math.max(280,ETAT.borne*3.2):115,rig.rG));
+  rig.rG=Math.max(9,Math.min(VIEW.mode==='card'?420:VIEW.mode==='galaxy'?(ETAT.points?Math.max(180,(ETAT.borne||0)*3.2):180):ETAT.cerveaux?Math.max(280,ETAT.borne*3.2):115,rig.rG));
   rig.th+=(rig.thG-rig.th)*.085;rig.ph+=(rig.phG-rig.ph)*.085;
   rig.r+=(rig.rG-rig.r)*.085;rig.tg.lerp(rig.tgG,.085);
   camera.position.set(
@@ -1998,7 +2041,14 @@ function loop(){
     /* La densite du brouillard suit la vue : sinon la carte 2D, vue de
        200 unites, disparait entierement dans le gris. */
     const fogCible=gC>0.2?0.0012:gG>0.2?0.003:ETAT.cerveaux?Math.min(.0026,.6/(ETAT.borne*2.3)):0.006;
-    BRAINS.visible=!!ETAT.cerveaux&&gS>.55;
+    BRAINS.visible=!!ETAT.cerveaux&&(ETAT.points?gS+gG>.55:gS>.55);
+    /* la sphère et la galaxie se relaient au fil de la transition */
+    for(const q of NUAGE_PAIRES){
+      q.sphere.material.opacity=.95*gS;q.sphere.visible=gS>.02;
+      q.galaxie.material.opacity=.95*gG;q.galaxie.visible=gG>.02;
+      if(q.lS){q.lS.material.opacity=.16*gS;q.lS.visible=gS>.02;}
+      if(q.lG){q.lG.material.opacity=.2*gG;q.lG.visible=gG>.02;}
+    }
     if(ETAT.cerveaux){const vis=BRAINS.visible&&!$('#moi').classList.contains('on');if(vis!==ETAT.navVis){ETAT.navVis=vis;$('#navC').classList.toggle('on',vis);$('#navAide').classList.toggle('on',vis);}}
     scene.fog.density+=(fogCible-scene.fog.density)*.08;
     cardLine.material.opacity+=((gC>0.15?0.62*gC:0)-cardLine.material.opacity)*.1;
@@ -2010,6 +2060,7 @@ function loop(){
   const sel=state.selected;
   for(let i=0;i<nodes.length;i++){
     const n=nodes[i];
+    if(ETAT.points){if(n.spr.visible){n.spr.visible=false;n.halo.visible=false;}continue;}
     if(!visible(n)){n.cardMat.opacity=0;continue;}
     let opT=n.baseOp,sT=1,hT=0;
     const horsFiltre=state.filtre&&!state.filtre.has(n.id);
