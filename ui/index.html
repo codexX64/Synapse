@@ -1092,7 +1092,7 @@ function lignesCouches(pos,col,couches,parent,op){
   const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending}));
   parent.add(l);return l;
 }
-function nuage(parent,indices,P,rb,cid,rbG,r0){
+function nuage(parent,indices,P,rb,cid,rbG,r0,couleurDe){
   const n=indices.length;if(!n)return null;
   /* ordre d'arrivée : les identifiants croissent avec le temps */
   indices=indices.slice().sort((a,b)=>P.e[a]-P.e[b]);
@@ -1106,7 +1106,9 @@ function nuage(parent,indices,P,rb,cid,rbG,r0){
     const u=k/n,bras=k%BRAS,rad=RG*(.06+.94*Math.sqrt(u)),h=hash01(k);
     const ang=bras/BRAS*Math.PI*2+rad/RG*5.4+(h-.5)*.32;
     gal[k*3]=Math.cos(ang)*rad;gal[k*3+1]=(hash01(k+7)-.5)*RG*.06*(1-u*.6);gal[k*3+2]=Math.sin(ang)*rad;
-    const ty=P.t[i];let c=cache.get(ty);if(!c){c=cc.set(typeDe(P.types[ty]).c).clone();cache.set(ty,c);}
+    const ty=P.t[i];let c;
+    if(couleurDe)c=couleurDe(i);
+    else{c=cache.get(ty);if(!c){c=cc.set(typeDe(P.types[ty]).c).clone();cache.set(ty,c);}}
     col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;ids[k]=P.e[i];typ[k]=ty;
   }
   const userData={ids,typ,cerveau:cid,rb:vol.R};
@@ -1146,7 +1148,7 @@ async function chargeCerveaux(){
   const G=P?P.g:ETAT.total;
   ETAT.points=!!P&&G>SEUIL_CARTES;
   /* sous le seuil, les cartes comme avant : pas de nuage */
-  const nuageSi=(parent,ix,rb,cid,rbG)=>ETAT.points&&ix?nuage(parent,ix,P,rb,cid,rbG,1.2):null;
+  const nuageSi=(parent,ix,rb,cid,rbG)=>ETAT.points&&ix?nuage(parent,ix,P,rb,cid,rbG,1.2,()=>COUL_C.get(cid)||GRIS):null;
   const cartesDe=cid=>ETAT.points?[]:(dans.get(cid)||[]);
   const nb=cid=>P?(pts.get(cid)||[]).length:(dans.get(cid)||[]).length;
   /* la surface d'une sphère suit son volume : même espacement partout ;
@@ -1165,11 +1167,17 @@ async function chargeCerveaux(){
   const racines=doms.filter(d=>!d.parent_id&&plein(d)),tot=racines.reduce((x,d)=>x+poids(d),0)||1;
   const ECART=10;
   let borne=RG;
+  /* chaque point prend la couleur de son domaine ; chaque cerveau a sa
+     nuance de cette couleur, pour distinguer vigie de hub dans HomeLab */
+  const COUL_C=new Map(),GRIS=new THREE.Color('#9aa3b2');
+  const nuance=(coul,k,n)=>{const c=new THREE.Color(coul);if(n>1)c.offsetHSL(0,0,((k/(n-1))-.5)*.22);return c;};
+  const couleurPoint=i=>{const ci=P.c[i];return ci<0?GRIS:(COUL_C.get(P.cerveaux[ci])||GRIS);};
   const pose=(d,a0,a1,base,depuis,coul,parentC,niv)=>{
     if(!plein(d))return;
     const mid=(a0+a1)/2,rc=R(nb(d.commun.id)),dist=base+rc;
     const pos=new THREE.Vector3(Math.cos(mid)*dist,niv%2?6:-2,Math.sin(mid)*dist);
     let g;
+    COUL_C.set(d.commun.id,new THREE.Color(coul));
     if(nb(d.commun.id)){g=sphereCerveau(pos,rc,cartesDe(d.commun.id),coul,d.commun.id,d.nom,d.commun.n,true,parentC);nuageSi(g,pts.get(d.commun.id),rc,d.commun.id);}
     else jonction(pos,coul,d.commun.id,d.nom,d.commun.n,parentC);
     borne=Math.max(borne,dist+rc);
@@ -1177,9 +1185,11 @@ async function chargeCerveaux(){
     /* membres et sous-domaines se partagent le secteur, au prorata de leur taille */
     const items=[...membresPleins(d).map(m=>({m,w:1+R(nb(m.id))/8})),...enfants(d.id).filter(plein).map(e=>({e,w:poids(e)}))];
     const W=items.reduce((x,i)=>x+i.w,0)||1;let b=a0;
+    const nbM=items.filter(x=>x.m).length;let km=0;
     items.forEach((it,i)=>{
       const l=(a1-a0)*it.w/W,t=b+l/2;
       if(it.m){
+        COUL_C.set(it.m.id,nuance(coul,km++,nbM));
         const rm=R(nb(it.m.id)),dm=dist+rc+ECART+rm;
         const mp=new THREE.Vector3(Math.cos(t)*dm,(i%2?8:-8)*(items.length>2?1:.4),Math.sin(t)*dm);
         const gm=sphereCerveau(mp,rm,cartesDe(it.m.id),coul,it.m.id,it.m.nom,it.m.n,false,d.commun.id);
@@ -1192,7 +1202,7 @@ async function chargeCerveaux(){
   let ang=-Math.PI/2;
   racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.04,ang+l*.96,RG+ECART+4,null,BR_COUL[i%BR_COUL.length],null,0);ang+=l;});
   /* la grande sphère porte toutes les entrées, une fois chacune */
-  if(ETAT.points){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,RG,null,Math.max(48,RG*1.8),R0_GLOBAL);}
+  if(ETAT.points){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,RG,null,Math.max(48,RG*1.8),R0_GLOBAL,couleurPoint);}
   /* le centre dit qu'il est le global */
   const gl=texteSprite('GLOBAL',nfr(G)+' entrées','#ffffff',1.7);gl.position.set(0,RG+7,0);BRAINS.add(gl);
   ETAT.borne=borne;ETAT.cerveaux=true;if(P)P_TYPES=P.types;
