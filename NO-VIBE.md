@@ -230,3 +230,8 @@ Vérifié dans Chromium contre la vitrine à 6 079 entrées : rayons 10 (global)
 En production (149 000 entrées), la sphère pleine était illisible : les points s'additionnaient en lumière (fusion additive) et une trentaine de couches saturaient en blanc ; les couches régulières empilées faisaient un moiré. Désormais : points opaques qui se cachent les uns les autres (profondeur écrite, seuil alpha), espacement porté à 1,5 et points plus petits, léger décalage propre à chaque point pour casser le moiré, filaments sur les deux couches extérieures seulement. Le rayon pour 149 000 entrées passe d'environ 27 à environ 48.
 
 Vérifié dans Chromium contre la vitrine à 30 079 entrées (rayon 28,5) : plus de saturation ni de moiré, le noyau visible à travers, la toile de surface lisible, aucune erreur.
+
+## Suivi du 2026-10-29 (3.6.2) : plus de rideaux, des points visibles de loin
+En production, de grands « rideaux » lumineux traversaient vigie : sur une couche à moitié remplie, un écart d'indice de Fibonacci peut relier deux points opposés, et le filament traversait la sphère. Un filament plus long que deux fois l'espacement n'est plus dessiné. Les points de la forme sphère ont maintenant une taille fixe à l'écran (2,6 px, doublée sur écran Retina) : avec une taille fixée dans la scène, ils tombaient sous le pixel à distance et l'on ne voyait plus que les filaments.
+
+Vérifié dans Chromium contre la vitrine à 30 079 entrées : filament le plus long 3,0 (deux fois l'espacement), plus de rideaux, aucune erreur.
