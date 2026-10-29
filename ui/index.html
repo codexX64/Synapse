@@ -1039,14 +1039,55 @@ function lignes(pos,col,n,ecarts,parent,op){
   const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending}));
   parent.add(l);return l;
 }
-function nuage(parent,indices,P,rb,cid,rbG){
+/* UNE SPHÈRE PLEINE
+   Les entrées remplissent des couches concentriques, à espacement
+   constant ESPACE : la première commence juste au-dessus du noyau (r0),
+   chaque couche prend autant de points que sa surface en porte, puis on
+   passe à la suivante. Dans l'ordre d'arrivée : les plus anciennes au
+   centre, les nouvelles dehors ; plus il y a d'entrées, plus la sphère
+   grandit, sans limite. */
+const ESPACE=.8,OP_POINT=.62,OP_FIL=.07;
+function rayonVolume(n,r0){return Math.cbrt(r0*r0*r0+n*ESPACE*ESPACE*ESPACE*3/(4*Math.PI))+ESPACE*.5;}
+function enVolume(n,r0){
+  const pos=new Float32Array(n*3),couches=[],or=Math.PI*(3-Math.sqrt(5));
+  let k=0,r=r0;
+  while(k<n){
+    const cap=Math.max(1,Math.floor(4*Math.PI*r*r/(ESPACE*ESPACE))),m=Math.min(cap,n-k);
+    couches.push({debut:k,nb:m,cap});
+    for(let j=0;j<m;j++){
+      const y=1-((j+.5)/cap)*2,rr=Math.sqrt(Math.max(0,1-y*y)),t=j*or+r;   /* chaque couche tournée : pas d'alignement radial */
+      pos[(k+j)*3]=Math.cos(t)*rr*r;pos[(k+j)*3+1]=y*r;pos[(k+j)*3+2]=Math.sin(t)*rr*r;
+    }
+    k+=m;r+=ESPACE;
+  }
+  return {pos,couches,R:r-ESPACE};
+}
+/* Les voisins d'un point dans sa couche : sur une couche de Fibonacci,
+   aux écarts d'indice de Fibonacci les plus courts. */
+function lignesCouches(pos,col,couches,parent,op){
+  const paires=[];
+  for(const c of couches){
+    if(c.nb<4)continue;
+    const sous=pos.subarray(c.debut*3,(c.debut+c.nb)*3);
+    for(const f of ecartsVoisins(sous,c.nb))for(let i=0;i+f<c.nb;i++)paires.push(c.debut+i,c.debut+i+f);
+  }
+  if(!paires.length)return null;
+  const lp=new Float32Array(paires.length*3),lc=new Float32Array(paires.length*3);
+  for(let k=0;k<paires.length;k++){const i=paires[k];lp[k*3]=pos[i*3];lp[k*3+1]=pos[i*3+1];lp[k*3+2]=pos[i*3+2];lc[k*3]=col[i*3];lc[k*3+1]=col[i*3+1];lc[k*3+2]=col[i*3+2];}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(lp,3));g.setAttribute('color',new THREE.BufferAttribute(lc,3));
+  const l=new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending}));
+  parent.add(l);return l;
+}
+function nuage(parent,indices,P,rb,cid,rbG,r0){
   const n=indices.length;if(!n)return null;
-  const pos=new Float32Array(n*3),gal=new Float32Array(n*3),col=new Float32Array(n*3),ids=new Int32Array(n),typ=new Uint8Array(n);
-  const or=Math.PI*(3-Math.sqrt(5)),r=rb*.965,cc=new THREE.Color(),cache=new Map();
+  /* ordre d'arrivée : les identifiants croissent avec le temps */
+  indices=indices.slice().sort((a,b)=>P.e[a]-P.e[b]);
+  const vol=enVolume(n,r0??1.2);
+  const pos=vol.pos,gal=new Float32Array(n*3),col=new Float32Array(n*3),ids=new Int32Array(n),typ=new Uint8Array(n);
+  const cc=new THREE.Color(),cache=new Map();
   const BRAS=4,RG=rbG||rb*1.5;
   for(let k=0;k<n;k++){
-    const i=indices[k],y=1-((k+.5)/n)*2,rr=Math.sqrt(Math.max(0,1-y*y)),t=k*or;
-    pos[k*3]=Math.cos(t)*rr*r;pos[k*3+1]=y*r;pos[k*3+2]=Math.sin(t)*rr*r;
+    const i=indices[k];
     /* galaxie : bras spiralés, densité uniforme sur le disque */
     const u=k/n,bras=k%BRAS,rad=RG*(.06+.94*Math.sqrt(u)),h=hash01(k);
     const ang=bras/BRAS*Math.PI*2+rad/RG*5.4+(h-.5)*.32;
@@ -1054,18 +1095,18 @@ function nuage(parent,indices,P,rb,cid,rbG){
     const ty=P.t[i];let c=cache.get(ty);if(!c){c=cc.set(typeDe(P.types[ty]).c).clone();cache.set(ty,c);}
     col[k*3]=c.r;col[k*3+1]=c.g;col[k*3+2]=c.b;ids[k]=P.e[i];typ[k]=ty;
   }
-  const userData={ids,typ,cerveau:cid,rb};
-  const pas=Math.sqrt(4*Math.PI*r*r/n),pasG=Math.sqrt(Math.PI*RG*RG/n);
+  const userData={ids,typ,cerveau:cid,rb:vol.R};
+  const pasG=Math.sqrt(Math.PI*RG*RG/n);
   const fait=(p,taille)=>{
     const geo=new THREE.BufferGeometry();
     geo.setAttribute('position',new THREE.BufferAttribute(p,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
     const pts=new THREE.Points(geo,new THREE.PointsMaterial({map:DOT,size:Math.max(.14,Math.min(1.6,taille)),vertexColors:true,transparent:true,
-      opacity:.95,depthWrite:false,blending:THREE.AdditiveBlending}));
+      opacity:OP_POINT,depthWrite:false,blending:THREE.AdditiveBlending}));
     pts.userData=userData;parent.add(pts);NUAGES.push(pts);return pts;
   };
-  const sphere=fait(pos,pas*1.25),galaxie=fait(gal,pasG*1.25);
+  const sphere=fait(pos,ESPACE*.7),galaxie=fait(gal,pasG*1.25);
   /* reliés : toile entre voisins sur la sphère, filaments le long des bras en galaxie */
-  const lS=lignes(pos,col,n,ecartsVoisins(pos,n),parent,.16),lG=lignes(gal,col,n,n>BRAS?[BRAS]:[],parent,.2);
+  const lS=lignesCouches(pos,col,vol.couches,parent,OP_FIL),lG=lignes(gal,col,n,n>BRAS?[BRAS]:[],parent,.2);
   NUAGE_PAIRES.push({sphere,galaxie,lS,lG});
   return sphere;
 }
@@ -1089,12 +1130,16 @@ async function chargeCerveaux(){
   const G=P?P.g:ETAT.total;
   ETAT.points=!!P&&G>SEUIL_CARTES;
   /* sous le seuil, les cartes comme avant : pas de nuage */
-  const nuageSi=(parent,ix,rb,cid,rbG)=>ETAT.points&&ix?nuage(parent,ix,P,rb,cid,rbG):null;
+  const nuageSi=(parent,ix,rb,cid,rbG)=>ETAT.points&&ix?nuage(parent,ix,P,rb,cid,rbG,1.2):null;
   const cartesDe=cid=>ETAT.points?[]:(dans.get(cid)||[]);
   const nb=cid=>P?(pts.get(cid)||[]).length:(dans.get(cid)||[]).length;
   /* la surface d'une sphère suit son volume : même espacement partout ;
      le global, qui a tout, reste la plus grosse */
-  const R=n=>Math.max(2.6,LEAF_R*.85*Math.sqrt(Math.min(1,n/Math.max(1,G))));
+  /* en mode points, une sphère a la taille de son volume, au même espacement
+     que toutes les autres ; en mode cartes, comme avant */
+  const R0_CERVEAU=1.2,R0_GLOBAL=6,PTS=G>SEUIL_CARTES;
+  const R=n=>PTS?Math.max(2.6,rayonVolume(n,R0_CERVEAU)):Math.max(2.6,LEAF_R*.85*Math.sqrt(Math.min(1,n/Math.max(1,G))));
+  const RG=PTS?Math.max(LEAF_R,rayonVolume(G,R0_GLOBAL)):LEAF_R;
   const doms=a.domaines,enfants=id=>doms.filter(d=>d.parent_id===id);
   /* un cerveau sans aucune entrée n'est pas dessiné ; un domaine vide
      partout en dessous non plus */
@@ -1103,7 +1148,7 @@ async function chargeCerveaux(){
   const poids=d=>1+membresPleins(d).reduce((x,m)=>x+1+R(nb(m.id))/8,0)+enfants(d.id).filter(plein).reduce((x,e)=>x+poids(e),0);
   const racines=doms.filter(d=>!d.parent_id&&plein(d)),tot=racines.reduce((x,d)=>x+poids(d),0)||1;
   const ECART=10;
-  let borne=LEAF_R;
+  let borne=RG;
   const pose=(d,a0,a1,base,depuis,coul,parentC,niv)=>{
     if(!plein(d))return;
     const mid=(a0+a1)/2,rc=R(nb(d.commun.id)),dist=base+rc;
@@ -1112,7 +1157,7 @@ async function chargeCerveaux(){
     if(nb(d.commun.id)){g=sphereCerveau(pos,rc,cartesDe(d.commun.id),coul,d.commun.id,d.nom,d.commun.n,true,parentC);nuageSi(g,pts.get(d.commun.id),rc,d.commun.id);}
     else jonction(pos,coul,d.commun.id,d.nom,d.commun.n,parentC);
     borne=Math.max(borne,dist+rc);
-    brin(depuis||pos.clone().normalize().multiplyScalar(LEAF_R+1.5),pos,coul,depuis?.45:.6);
+    brin(depuis||pos.clone().normalize().multiplyScalar(RG+1.5),pos,coul,depuis?.45:.6);
     /* membres et sous-domaines se partagent le secteur, au prorata de leur taille */
     const items=[...membresPleins(d).map(m=>({m,w:1+R(nb(m.id))/8})),...enfants(d.id).filter(plein).map(e=>({e,w:poids(e)}))];
     const W=items.reduce((x,i)=>x+i.w,0)||1;let b=a0;
@@ -1129,11 +1174,11 @@ async function chargeCerveaux(){
     });
   };
   let ang=-Math.PI/2;
-  racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.04,ang+l*.96,LEAF_R+ECART+4,null,BR_COUL[i%BR_COUL.length],null,0);ang+=l;});
+  racines.forEach((d,i)=>{const l=2*Math.PI*poids(d)/tot;pose(d,ang+l*.04,ang+l*.96,RG+ECART+4,null,BR_COUL[i%BR_COUL.length],null,0);ang+=l;});
   /* la grande sphère porte toutes les entrées, une fois chacune */
-  if(ETAT.points){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,LEAF_R,null,48);}
+  if(ETAT.points){const tout=new Array(P.g);for(let i=0;i<P.g;i++)tout[i]=i;nuage(BRAINS,tout,P,RG,null,Math.max(48,RG*1.8),R0_GLOBAL);}
   /* le centre dit qu'il est le global */
-  const gl=texteSprite('GLOBAL',nfr(G)+' entrées','#ffffff',1.7);gl.position.set(0,LEAF_R+7,0);BRAINS.add(gl);
+  const gl=texteSprite('GLOBAL',nfr(G)+' entrées','#ffffff',1.7);gl.position.set(0,RG+7,0);BRAINS.add(gl);
   ETAT.borne=borne;ETAT.cerveaux=true;if(P)P_TYPES=P.types;
   ETAT.msCerveaux=Math.round(performance.now()-t0);
   camera.far=Math.max(400,borne*7);camera.updateProjectionMatrix();
@@ -2037,16 +2082,17 @@ function loop(){
       if(n.pCard)_vx.addScaledVector(n.pCard,gC);
       n.spr.position.copy(_vx);n.halo.position.copy(_vx);
     }
-    VIEW._treeVis=Math.max(0,gS);
+    /* en mode points, l'arbre des cartes (branches vers des cartes absentes, nœuds, étiquettes de types) s'efface : le noyau reste */
+    VIEW._treeVis=ETAT.points?0:Math.max(0,gS);
     /* La densite du brouillard suit la vue : sinon la carte 2D, vue de
        200 unites, disparait entierement dans le gris. */
     const fogCible=gC>0.2?0.0012:gG>0.2?0.003:ETAT.cerveaux?Math.min(.0026,.6/(ETAT.borne*2.3)):0.006;
     BRAINS.visible=!!ETAT.cerveaux&&(ETAT.points?gS+gG>.55:gS>.55);
     /* la sphère et la galaxie se relaient au fil de la transition */
     for(const q of NUAGE_PAIRES){
-      q.sphere.material.opacity=.95*gS;q.sphere.visible=gS>.02;
+      q.sphere.material.opacity=OP_POINT*gS;q.sphere.visible=gS>.02;
       q.galaxie.material.opacity=.95*gG;q.galaxie.visible=gG>.02;
-      if(q.lS){q.lS.material.opacity=.16*gS;q.lS.visible=gS>.02;}
+      if(q.lS){q.lS.material.opacity=OP_FIL*gS;q.lS.visible=gS>.02;}
       if(q.lG){q.lG.material.opacity=.2*gG;q.lG.visible=gG>.02;}
     }
     if(ETAT.cerveaux){const vis=BRAINS.visible&&!$('#moi').classList.contains('on');if(vis!==ETAT.navVis){ETAT.navVis=vis;$('#navC').classList.toggle('on',vis);$('#navAide').classList.toggle('on',vis);}}
@@ -2054,7 +2100,7 @@ function loop(){
     cardLine.material.opacity+=((gC>0.15?0.62*gC:0)-cardLine.material.opacity)*.1;
     dust.material.opacity+=((gG>0.15?0.4*gG:0)-dust.material.opacity)*.1;
     coreHalo.material.opacity=0.9*Math.max(.15,gS+gG*.5);
-    if(typeof shell!=='undefined')shell.material.opacity=0.03*gS;
+    if(typeof shell!=='undefined')shell.material.opacity=ETAT.points?0:0.03*gS;   /* en mode points, pas de coquille : la sphère est faite de ses entrées */
   }
   /* --- cartes : sélection, pulsations, respiration (lissé) --- */
   const sel=state.selected;
