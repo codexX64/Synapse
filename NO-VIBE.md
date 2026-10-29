@@ -211,3 +211,10 @@ Vue galaxie : chaque cerveau a aussi sa forme galaxie (quatre bras spiralés, de
 Vérifié dans Chromium contre la vitrine à 6 079 entrées : mode points actif, aucune carte visible, 17 cerveaux avec leurs deux formes, la barre des cerveaux en galaxie, aucune erreur.
 
 Pas encore vérifié : le rendu sur une vraie carte graphique avec 149 000 entrées (environ 300 000 points sous chaque forme, 900 000 segments de filaments en tout) ; la mémoire graphique estimée est de l'ordre de 60 Mo.
+
+## Suivi du 2026-10-29 (3.5.1) : une question ne tue plus le service
+En production, toute question faisait tomber SYNAPSE (502 de Cloudflare, puis redémarrage). Cause : la recherche par vecteurs. L'index en mémoire chargeait les 149 461 vecteurs AVANT de les comparer au plafond (120 000), et le chemin de repli, prévu pour les grosses bases, chargeait lui aussi tout d'un bloc (`.all()`). Mesuré sur 150 000 vecteurs de 768 dimensions : 765 Mo au maximum pour une question, dans un conteneur de 512 Mo ; le noyau tuait le processus. Le défaut existait déjà en 2.0.2 et ne se déclenchait qu'au-delà de 120 000 vecteurs.
+
+Correctif : on compte avant de charger (au-delà du plafond, rien n'est lu) ; le repli lit les vecteurs un par un (`.iterate()`). Même mesure : 167 Mo au maximum, mêmes résultats, 1,9 s par question sur la machine de test (environ 3,8 s avant, quand elle ne tombait pas). Plafond réglable par `VECTEURS_MAX`. Essai : `src/vecteurs-plafond.test.js` (plafond abaissé à 50, 200 vecteurs : aucun index chargé, la bonne entrée trouvée par le repli).
+
+Pas encore fait : un index compact (vecteurs ramenés à un octet par dimension, environ 115 Mo pour 150 000) qui rendrait aux grosses bases une recherche en quelques centaines de millisecondes.
