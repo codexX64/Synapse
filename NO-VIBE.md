@@ -202,3 +202,12 @@ Pas encore vérifié : la fluidité sur une vraie carte graphique avec 145 000 e
 Retirés de la vue sphère : l'enveloppe de points décoratifs autour de chaque sphère de cerveau, et la poussière lointaine (360 points gris entre 95 et 155 unités, là où sont maintenant les cerveaux). Une sphère se forme de ses seuls points, un par entrée : tout point visible en vue sphère est une entrée qu'on peut ouvrir. La poussière de la vue galaxie, invisible en vue sphère, est gardée.
 
 Vérifié dans Chromium : en vue sphère, les 17 nuages visibles sont tous des nuages d'entrées, aucun décor ; aucune erreur.
+
+## Suivi du 2026-10-29 (3.5.0) : des points lumineux reliés, et la galaxie des cerveaux
+Au-delà de 1 400 entrées (`SEUIL_CARTES`), plus aucune carte : chaque entrée est un point lumineux (texture ronde et douce, couleur de son type, fusion additive), et les points d'une sphère sont reliés à leurs voisins. Sur une spirale de Fibonacci, les voisins d'un point sont aux écarts d'indice de Fibonacci : on garde les deux plus courts, la toile se tisse sans calcul de proximité. En dessous du seuil, les cartes comme avant, sans nuage.
+
+Vue galaxie : chaque cerveau a aussi sa forme galaxie (quatre bras spiralés, densité uniforme sur le disque, filaments le long des bras), le global au centre, les autres autour avec les mêmes brins ; la forme sphère et la forme galaxie se relaient en fondu au changement de vue. Barre des cerveaux, clic sur un point, déplacement et vol au clavier fonctionnent aussi en galaxie.
+
+Vérifié dans Chromium contre la vitrine à 6 079 entrées : mode points actif, aucune carte visible, 17 cerveaux avec leurs deux formes, la barre des cerveaux en galaxie, aucune erreur.
+
+Pas encore vérifié : le rendu sur une vraie carte graphique avec 149 000 entrées (environ 300 000 points sous chaque forme, 900 000 segments de filaments en tout) ; la mémoire graphique estimée est de l'ordre de 60 Mo.
