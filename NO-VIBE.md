@@ -225,3 +225,8 @@ En mode points, les entrées d'un cerveau ne sont plus collées sur une coquille
 En mode points, l'arbre des cartes (branches vers des cartes absentes, nœuds, étiquettes de types) et la coquille quadrillée de la grande sphère s'effacent : seuls restent le noyau et les entrées.
 
 Vérifié dans Chromium contre la vitrine à 6 079 entrées : rayons 10 (global) et 9,2 (vigie), couches visibles de près, plus de rayons blancs ni de quadrillage, aucune erreur.
+
+## Suivi du 2026-10-29 (3.6.1) : lisible
+En production (149 000 entrées), la sphère pleine était illisible : les points s'additionnaient en lumière (fusion additive) et une trentaine de couches saturaient en blanc ; les couches régulières empilées faisaient un moiré. Désormais : points opaques qui se cachent les uns les autres (profondeur écrite, seuil alpha), espacement porté à 1,5 et points plus petits, léger décalage propre à chaque point pour casser le moiré, filaments sur les deux couches extérieures seulement. Le rayon pour 149 000 entrées passe d'environ 27 à environ 48.
+
+Vérifié dans Chromium contre la vitrine à 30 079 entrées (rayon 28,5) : plus de saturation ni de moiré, le noyau visible à travers, la toile de surface lisible, aucune erreur.
