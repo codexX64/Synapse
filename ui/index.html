@@ -649,15 +649,7 @@ function cardTex(n){
   return tx;
 }
 
-{ /* poussière lointaine */
-  const g = new THREE.BufferGeometry(), p = new Float32Array(360*3);
-  for(let i=0;i<360;i++){
-    const u=Math.random()*2-1,a=Math.random()*Math.PI*2,s=Math.sqrt(1-u*u),d=95+Math.random()*60;
-    p.set([s*Math.cos(a)*d,u*d,s*Math.sin(a)*d],i*3);
-  }
-  g.setAttribute('position',new THREE.BufferAttribute(p,3));
-  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x3c4046,size:.5,transparent:true,opacity:.5})));
-}
+/* pas de poussière lointaine : les cerveaux occupent cet espace, et tout point de la vue sphère est une entrée */
 
 const R=26;
 const world=new THREE.Group();scene.add(world);
@@ -982,11 +974,8 @@ function sphereCerveau(centre,rb,ids,coul,cid,nom,total,commun,parent){
   ORDRE_C.push({cid,nom,coul,commun:!!commun,parent:parent??'global',total});
   const g=new THREE.Group();g.position.copy(centre);BRAINS.add(g);
   const or=Math.PI*(3-Math.sqrt(5));
-  /* enveloppe : des points en spirale, à la couleur du domaine */
-  const P=[],k=Math.max(140,Math.round(rb*rb*7));
-  for(let i=0;i<k;i++){const y=1-((i+.5)/k)*2,r=Math.sqrt(Math.max(0,1-y*y)),t=i*or;P.push(new THREE.Vector3(Math.cos(t)*r*rb*1.14,y*rb*1.14,Math.sin(t)*r*rb*1.14));}
-  g.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(P),
-    new THREE.PointsMaterial({color:coul,size:.34,transparent:true,opacity:.5,depthWrite:false,blending:THREE.AdditiveBlending})));
+  /* pas d'enveloppe décorative : la sphère se forme de ses seuls points,
+     un par entrée ; tout point visible est une entrée qu'on peut ouvrir */
   const h=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX,color:coul,transparent:true,opacity:.28,blending:THREE.AdditiveBlending,depthWrite:false}));
   h.scale.set(rb*4.2,rb*4.2,1);g.add(h);
   /* les cartes : mêmes textures que la grande sphère, à la taille que la
