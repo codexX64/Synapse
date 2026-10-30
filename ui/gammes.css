@@ -1,0 +1,30 @@
+/* Les quatre gammes du socle sur les pages propres de SYNAPSE (mémoire 3D,
+   paramètres). La vue reste sombre — la mémoire se lit sur fond noir — mais
+   prend les couleurs, les polices et les arrondis de la gamme choisie.
+   SOMA garde l'allure d'origine de SYNAPSE. */
+html[data-gamme="console"]{
+  --bg:#000000; --panel:rgba(13,13,13,.92); --panel-line:#222222; --line:#222222;
+  --txt:#EDEDED; --mut:#8A8A8A; --dim:#5B5B5B;
+  --mint:#7EE2A8; --cyan:#9FD8FF; --violet:#C9B6FF; --teal:#7EE2C8; --blue:#8AB8FF;
+  --mono:"Geist Mono",ui-monospace,Menlo,monospace; --disp:"Geist",ui-sans-serif,system-ui,sans-serif;
+}
+html[data-gamme="console"] body,html[data-gamme="console"]{background:#000}
+html[data-gamme="console"] #vignette{background:radial-gradient(ellipse at 50% 42%,transparent 58%,rgba(0,0,0,.9) 100%)}
+
+html[data-gamme="exploitation"]{
+  --bg:#141517; --panel:rgba(24,25,28,.94); --panel-line:#2A2C30; --line:#2A2C30;
+  --txt:#EDEDEE; --mut:#979AA2; --dim:#7E828A;
+  --mint:#94C7A9; --cyan:#8FB7C2; --violet:#B8A4AC; --amber:#D8B782; --coral:#E39595; --gold:#C3B595; --blue:#8997AA; --teal:#91AAA9; --pink:#BE9690;
+  --mono:"Geist Mono",ui-monospace,Menlo,monospace; --disp:"Geist",ui-sans-serif,system-ui,sans-serif;
+}
+html[data-gamme="exploitation"] body,html[data-gamme="exploitation"]{background:#141517}
+
+html[data-gamme="lavande"]{
+  --bg:#14121C; --panel:rgba(29,26,40,.84); --panel-line:rgba(255,255,255,.08); --line:rgba(255,255,255,.08);
+  --txt:#ECEAF7; --mut:#8F8AA3; --dim:#6E6984;
+  --mint:#5ED47A; --cyan:#8F8BFF; --violet:#B9A6FF; --amber:#E9B66B; --coral:#F07A8C; --blue:#8F8BFF; --teal:#86D9E0; --pink:#E7A8F0;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace; --disp:"Poppins",ui-sans-serif,system-ui,sans-serif;
+}
+html[data-gamme="lavande"] body,html[data-gamme="lavande"]{
+  background:radial-gradient(ellipse 70% 55% at 0% 45%,#2A2045 0%,transparent 70%),radial-gradient(ellipse 55% 40% at 100% 0%,#2B1E3A 0%,transparent 70%),linear-gradient(135deg,#17131F 0%,#120F1A 100%)}
+html[data-gamme="lavande"] .panel,html[data-gamme="lavande"] #insp,html[data-gamme="lavande"] .carte{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
