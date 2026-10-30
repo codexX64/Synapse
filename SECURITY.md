@@ -515,3 +515,5 @@ Sondage exploratoire du 2026-10-19, rejoué à chaque génération de ce fichier
 | P25 | injection SQL dans la recherche | `GET /v1/search?q=') OR 1=1 --` (vigie) | 200 rien d’un autre | 200 rien d’un autre |
 | P26 | MCP : lien vers l’espace d’un autre | `tools/call memory_link` (vigie) | refusé | refusé |
 | P27 | jetons inventés en rafale | douze `GET /v1/stats`, jetons faux | bloqué (429) | bloqué (429) |
+
+Suivi du 2026-10-30 (3.7.2) : logo. SYNAPSE prend son logo : icône d'onglet (`ui/icone.svg`, liée par chaque page), tracé en ligne dans l'en-tête, l'écran de chargement et les paramètres (balisage statique des pages, aucune donnée), et marque de la porte du socle (`ui/logo.js`, tracé posé par createElementNS). Fichier SVG nettoyé : ni métadonnées, ni commentaire. Aucun contrôle ne change de statut. Essais : 194 (service et socle). Parcours du navigateur : 112 écrans × largeurs, 0 erreur de console ; les 33 écrans signalés le sont déjà en 3.7.1, à l'identique (aucun ajouté par ce changement).
