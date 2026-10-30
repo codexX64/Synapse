@@ -177,6 +177,9 @@ export function chevauchements() {
   // Une carte sous le pointeur peut se soulever (:hover), ou finir de
   // redescendre (transition en cours) : elle n'est pas comparée.
   const survolee = el => el.matches(':hover') || el.getAnimations().some(a => a.playState === 'running');
+  // Une carte coupée par une zone qui défile (fil de discussion, liste) n'a pas
+  // de bord visible de ce côté : son écart avec ce qui suit ne se mesure pas.
+  const coupee = el => { const r = el.getBoundingClientRect(), v = decoupe(el); return !v || v.y1 > r.top + 1 || v.y2 < r.bottom - 1; };
   const cadreDe = el => { for (let e = el.parentElement; e; e = e.parentElement) if (cartes.includes(e)) return e; return null; };
   const groupes = new Map();
   for (const el of cartes) { const k = cadreDe(el); if (!groupes.has(k)) groupes.set(k, []); groupes.get(k).push(el); }
@@ -184,7 +187,7 @@ export function chevauchements() {
     for (let i = 0; i < liste.length; i++) {
       for (let j = i + 1; j < liste.length; j++) {
         const a = liste[i], b = liste[j];
-        if (couche(a) !== couche(b) || survolee(a) || survolee(b)) continue;
+        if (couche(a) !== couche(b) || survolee(a) || survolee(b) || coupee(a) || coupee(b)) continue;
         const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
         const largeurCommune = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
         const hauteurCommune = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
@@ -227,12 +230,13 @@ export function chevauchements() {
       if (hauteurCommune > 1 && rb.left >= ra.right - 1 && (!droite || rb.left < droite.r.left)) droite = { el: b, r: rb };
     }
     const attendu = ecartDe(a);
-    if (dessous) {
+    if (coupee(a)) continue;
+    if (dessous && !coupee(dessous.el)) {
       const rb = dessous.r, ecart = rb.top - ra.bottom;
       const zone = { left: Math.max(ra.left, rb.left), right: Math.min(ra.right, rb.right), top: ra.bottom + 0.5, bottom: rb.top - 0.5 };
       if (Math.abs(ecart - attendu) > 1 && !entreDeux(a, dessous.el, zone)) defauts.push({ type: ecart > attendu ? 'ecart-trop-grand' : 'ecart-trop-petit', detail: `${nom(a).slice(0, 40)} / ${nom(dessous.el).slice(0, 40)} : ${Math.round(ecart)} px au lieu de ${attendu}` });
     }
-    if (droite) {
+    if (droite && !coupee(droite.el)) {
       const rb = droite.r, ecart = rb.left - ra.right;
       const zone = { left: ra.right + 0.5, right: rb.left - 0.5, top: Math.max(ra.top, rb.top), bottom: Math.min(ra.bottom, rb.bottom) };
       if (Math.abs(ecart - attendu) > 1 && !entreDeux(a, droite.el, zone)) defauts.push({ type: ecart > attendu ? 'ecart-trop-grand' : 'ecart-trop-petit', detail: `${nom(a).slice(0, 40)} | ${nom(droite.el).slice(0, 40)} : ${Math.round(ecart)} px au lieu de ${attendu}` });
