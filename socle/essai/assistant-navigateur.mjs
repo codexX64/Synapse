@@ -20,10 +20,13 @@ export async function passerAssistant(page, { controle = null, valeurs = {}, pre
   if (controle) await controle(`${prefixe}-fin`);
   await pied.getByRole('button', { name: /Terminer la configuration|Enregistrer/ }).click();
   // Sans superviseur (vitrine), le service demande un redémarrage à la main.
+  // Fini quand l'écran de l'assistant a quitté la porte (le service peut en
+  // montrer une autre ensuite, comme le coffre de CODVAULT).
   const continuer = page.locator('.porte').getByRole('button', { name: 'Continuer' });
-  await Promise.race([continuer.waitFor({ timeout: 30000 }).then(async () => { if (controle) await controle(`${prefixe}-redemarrage`); await continuer.click(); }).catch(() => {}),
-    page.locator('.porte').waitFor({ state: 'detached', timeout: 30000 })]);
-  await page.locator('.porte').waitFor({ state: 'detached', timeout: 30000 });
+  const fini = page.waitForFunction(() => !document.querySelector('.porte .assistant-champs') && !/Terminer la configuration|Tout est prêt|Redémarrage|À redémarrer/.test(document.querySelector('.porte')?.textContent || ''), null, { timeout: 30000 });
+  const relance = continuer.waitFor({ timeout: 30000 }).then(async () => { if (controle) await controle(`${prefixe}-redemarrage`); await continuer.click(); }).catch(() => {});
+  await Promise.race([fini, relance]);
+  await fini;
 }
 
 // La fenêtre « Réglages du service » de la page Comptes, ouverte puis refermée.
