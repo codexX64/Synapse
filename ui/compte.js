@@ -2,11 +2,12 @@
 // « Sécurité » du socle) ; pour un administrateur, les comptes de SYNAPSE,
 // leur politique et le journal (page « Comptes » du socle).
 import { Api, porte, pageSecurite, pageComptes, h, icone, basculeTheme, appliquerTheme } from './socle/compte.js';
+import { logoMarque } from './logo.js';
 
 appliquerTheme();
 const SERVICE = 'SYNAPSE';
 const api = new Api({ surDeconnexion: () => location.reload() });
-const session = await porte({ api, service: SERVICE, sousTitre: 'mémoire et apprentissage' });
+const session = await porte({ api, service: SERVICE, marque: logoMarque(20), sousTitre: 'mémoire et apprentissage' });
 const admin = session.session.compte.role === 'admin';
 
 const vues = {

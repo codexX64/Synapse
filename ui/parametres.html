@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SYNAPSE — paramètres</title>
+<link rel="icon" href="/v/__VERSION__/icone.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/v/__VERSION__/vendor/polices.css">
 <style>
 :root{ --ecart:16px; --bg:#050505; --panel:rgba(13,13,14,.88); --line:rgba(255,255,255,.09);
@@ -16,6 +17,8 @@ body{min-height:100vh;background:radial-gradient(ellipse at 50% 0%,#0c0c0d 0%,#0
 header{position:sticky;top:0;z-index:10;display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;min-height:56px;padding:10px 0;
   background:linear-gradient(180deg,rgba(5,5,5,.96),rgba(5,5,5,.6) 80%,transparent);margin-bottom:8px}
 h1{font-family:var(--disp);font-weight:600;font-size:18px;letter-spacing:.26em}
+h1{display:flex;align-items:center;gap:10px}
+h1 .logo-marque{flex:none}
 header nav{margin-left:auto;display:flex;gap:16px}
 header a{color:var(--mut);text-decoration:none;font-size:10px;letter-spacing:.16em;white-space:nowrap}
 header a:hover{color:#fff}
@@ -85,7 +88,7 @@ button.s{padding:7px 12px;font-size:9.5px}
 </head>
 <body>
 <div class="wrap">
-  <header><h1>SYNAPSE</h1><nav><a href="/">← retour au cerveau</a><a href="/compte">mon compte</a></nav></header>
+  <header><h1><svg class="logo-marque" width="18" height="18" viewBox="2 2 252 252" aria-hidden="true"><path fill="currentColor" d="M113.9 128A81.2 56 0 1 1 198.32 44.85L152.76 62.99A52.2 36 0 1 0 113.9 128ZM142.1 128A81.2 56 0 1 1 57.68 211.15L103.24 193.01A52.2 36 0 1 0 142.1 128Z"/></svg>SYNAPSE</h1><nav><a href="/">← retour au cerveau</a><a href="/compte">mon compte</a></nav></header>
 
   <!-- ÉTAT ET PILOTAGE -->
   <section>

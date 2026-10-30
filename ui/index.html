@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SYNAPSE — Prévisuel</title>
+<link rel="icon" href="/v/__VERSION__/icone.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/v/__VERSION__/vendor/polices.css">
 <style>
 :root{
@@ -37,7 +38,9 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;height:var(--haut);display
   padding:0 16px;background:linear-gradient(180deg,rgba(5,5,5,.94),rgba(5,5,5,.55) 80%,transparent);}
 header>*{flex-shrink:0}
 .saut{display:none}
-#wordmark{font-family:var(--disp);font-weight:600;font-size:19px;letter-spacing:.26em;color:#fff}
+#wordmark{display:flex;align-items:center;gap:11px;font-family:var(--disp);font-weight:600;font-size:19px;letter-spacing:.26em;color:#fff}
+#wordmark .logo-marque{flex:none}
+#veil .logo-marque{color:#fff}
 #demoTag{font-size:9px;letter-spacing:.18em;color:var(--mut);border:1px solid var(--panel-line);padding:3px 7px;border-radius:4px}
 #demoTag b{color:#fff;font-weight:500}
 #demoTag.live{color:var(--mint);border-color:rgba(63,232,168,.35)}
@@ -333,14 +336,14 @@ body.cherche #console{z-index:50}
 </head>
 <body>
 
-<div id="veil"><span>SYNAPSE</span><i></i></div>
+<div id="veil"><svg class="logo-marque" width="40" height="40" viewBox="2 2 252 252" aria-hidden="true"><path fill="currentColor" d="M113.9 128A81.2 56 0 1 1 198.32 44.85L152.76 62.99A52.2 36 0 1 0 113.9 128ZM142.1 128A81.2 56 0 1 1 57.68 211.15L103.24 193.01A52.2 36 0 1 0 142.1 128Z"/></svg><span>SYNAPSE</span><i></i></div>
 <canvas id="stage"></canvas>
 <div id="vignette"></div>
 <div id="labels"></div>
 <div id="vide"><div><b id="videT">MÉMOIRE VIDE</b><span id="videP">Rien n'est encore enregistré dans cet espace. SYNAPSE se remplit au fil des échanges avec l'assistant du Hub et de ce que les services lui envoient.</span></div></div>
 
 <header>
-  <div id="wordmark">SYNAPSE</div>
+  <div id="wordmark"><svg class="logo-marque" width="20" height="20" viewBox="2 2 252 252" aria-hidden="true"><path fill="currentColor" d="M113.9 128A81.2 56 0 1 1 198.32 44.85L152.76 62.99A52.2 36 0 1 0 113.9 128ZM142.1 128A81.2 56 0 1 1 57.68 211.15L103.24 193.01A52.2 36 0 1 0 142.1 128Z"/></svg>SYNAPSE</div>
   <div id="demoTag">CHARGEMENT…</div>
   <select id="nsSel" title="Espace de mémoire affiché">
     <option value="shared">INFRASTRUCTURE</option>
