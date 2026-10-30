@@ -10,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { demarrerSocle, envelopper, repondreErreur, repondreJson } from '../src/index.js';
 
 // dossier : celui d'un banc précédent, pour redémarrer sur la même base.
-export async function monterBanc({ env = {}, log = { info() {}, warn() {}, error() {} }, contactSecurite = null, dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'socle-')) } = {}) {
+export async function monterBanc({ version = null, nouveautes = null, assistant = null, env = {}, log = { info() {}, warn() {}, error() {} }, contactSecurite = null, dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'socle-')) } = {}) {
   const db = new DatabaseSync(path.join(dossier, 'base.db'));
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   const horloge = { t: Date.now() };
@@ -18,7 +18,7 @@ export async function monterBanc({ env = {}, log = { info() {}, warn() {}, error
   const socle = await demarrerSocle({
     service: { id: 'essai', nom: 'Essai', contactSecurite }, db, dossier,
     env: { SOCLE_JETON_INSTALLATION: jeton, ...env },
-    log, maintenant: () => horloge.t,
+    log, maintenant: () => horloge.t, ...(assistant ? { assistant } : {}), ...(nouveautes ? { version, nouveautes } : {}),
   });
   const serveur = http.createServer(envelopper(async (req, res) => {
     try {

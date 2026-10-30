@@ -477,6 +477,36 @@ textarea.field{min-height:90px;resize:vertical;line-height:1.5}
 .separe{display:flex;align-items:center;gap:12px;color:var(--faint);font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:18px 0}
 .separe::before,.separe::after{content:"";flex:1;height:1px;background:var(--hair-soft)}
 
+/* assistant de configuration */
+.assistant-champs{margin-top:20px}
+.assistant-champs .champ.reglage+.champ.reglage,.assistant-champs .champ.reglage+details,.groupe-reglages+.groupe-reglages{margin-top:16px}
+.champ.reglage .lbl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.champ.reglage .lnk{margin-top:6px}
+.champ.reglage .erreur:empty{display:none}
+.champ .req{color:var(--alarm)}
+.chip.nouveau{font-size:10.5px;padding:2px 8px}
+.case{display:flex;align-items:center;gap:10px;cursor:pointer}
+.case input{width:18px;height:18px;accent-color:var(--accent);flex:none}
+.field.fige{color:var(--muted);background:transparent;border-style:dashed;overflow-wrap:anywhere}
+details.avances>summary,.porte details>summary{cursor:pointer;color:var(--muted);font-size:13px}
+details.avances[open]>summary{margin-bottom:12px}
+.groupe-reglages h4{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.assistant-champs.defile{max-height:min(62dvh,560px);overflow-y:auto;padding-right:6px;margin-top:8px}
+.attente{display:flex;justify-content:center;padding:18px 0}
+.spin{width:28px;height:28px;border-radius:50%;border:3px solid var(--hair);border-top-color:var(--accent);animation:tourne .8s linear infinite}
+@keyframes tourne{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+
+/* quoi de neuf */
+.nouveautes{margin-top:14px;max-height:min(56dvh,460px);overflow-y:auto}
+.nouveaute h4{display:flex;align-items:baseline;gap:10px;font-size:13px;font-weight:600;color:var(--accent);margin-bottom:6px}
+.nouveaute h4 small{font-size:11.5px;font-weight:400;color:var(--faint)}
+.nouveaute+.nouveaute{margin-top:16px;padding-top:14px;border-top:1px solid var(--hair-soft)}
+.nouveaute ul{margin:0;padding-left:18px;display:grid;gap:7px}
+.nouveaute li{font-size:13.5px;line-height:1.5;color:var(--ink-soft)}
+.nouveaute li::marker{color:var(--accent)}
+.nouveaute.ancienne li{color:var(--muted)}
+
 /* six cases de code */
 .codes{display:flex;gap:8px;margin-top:14px}
 .codes input{width:46px;height:54px;text-align:center;font-family:var(--mono);font-size:20px;background:var(--well);border:1px solid var(--hair);border-radius:var(--r-ctl);color:var(--ink);outline:none;min-width:0;flex:1 1 0;max-width:52px}

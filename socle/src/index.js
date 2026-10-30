@@ -12,6 +12,9 @@ import { GAMMES, listeConfiance } from './http.js';
 import { Postier, adresseValide } from './courriel.js';
 import { notificateur } from './notifications.js';
 import { Vigie } from './vigie.js';
+import { Assistant, REGLAGES_SOCLE } from './assistant.js';
+import { redemarreur } from './superviseur.js';
+import { Nouveautes } from './nouveautes.js';
 
 export * from './http.js';
 export * from './outils.js';
@@ -25,6 +28,10 @@ export { Coffre } from './chiffre.js';
 export { Postier } from './courriel.js';
 export { envelopper, requeteCourante } from './requete.js';
 export { sauvegarder, dechiffrer } from './sauvegarde.js';
+export { Frappes, FRAPPE_MAX } from './frappe.js';
+export { appliquerReglages, etendreEnv, Assistant, REGLAGES_SOCLE } from './assistant.js';
+export { superviser, redemarreur } from './superviseur.js';
+export { Nouveautes, comparerVersions, lireNouveautes } from './nouveautes.js';
 
 const NIVEAU = { type: 'choix', parmi: ['desactive', 'facultatif', 'requis', 'requis_admin'] };
 
@@ -86,7 +93,12 @@ function controlerEnsemble(cfg) {
 // est absente).
 // migrer : reprise des comptes d'une version antérieure du service, appelée
 // avant que le socle ne décide s'il attend une installation.
-export async function demarrerSocle({ service, db, dossier, env = process.env, log = console, notifier = null, maintenant, migrer = null }) {
+// assistant : { reglages, spec, version, controler } — les réglages que le
+// service fait poser par son assistant de configuration (env passé d'abord par
+// appliquerReglages), la configuration qui les valide, sa version.
+// version, nouveautes : la version du service et son nouveautes.json, pour la
+// fenêtre « Quoi de neuf » après une mise à jour.
+export async function demarrerSocle({ service, db, dossier, env = process.env, log = console, notifier = null, maintenant, migrer = null, assistant = null, version = null, nouveautes = null }) {
   const cfg = lireConfig(SPEC_SOCLE, env);
   controlerEnsemble(cfg);
   reglerArgon({ m: cfg.argonM, t: cfg.argonT, p: cfg.argonP, poivre: cfg.poivre, poivreAncien: cfg.poivreAncien });
@@ -116,6 +128,18 @@ export async function demarrerSocle({ service, db, dossier, env = process.env, l
     courriel: postier ? { postier } : null, urlPublique: cfg.urlPublique, contactSecurite: cfg.contactSecurite || service.contactSecurite || null,
     jetonAdminHub: cfg.jetonAdminHub || null,
   });
+  if (nouveautes) portail.nouveautes = new Nouveautes({ db, version: version || assistant?.version, liste: nouveautes });
+  if (assistant) {
+    portail.assistant = new Assistant({
+      dossier, env, version: assistant.version || null, journal,
+      liste: [...REGLAGES_SOCLE, ...(assistant.reglages || [])],
+      specs: [SPEC_SOCLE, ...(assistant.spec ? [assistant.spec] : [])],
+      controler: candidat => { controlerEnsemble(lireConfig(SPEC_SOCLE, candidat)); assistant.controler?.(candidat); },
+      redemarrer: assistant.redemarrer === undefined ? redemarreur() : assistant.redemarrer,
+    });
+    const a = portail.assistant.aFaire();
+    if (a.doit) log.info?.(a.premiere ? '[assistant] Première configuration à faire dans l’interface, après la création du compte administrateur.' : `[assistant] ${a.nouveaux} nouveau(x) réglage(s) à confirmer dans l’interface.`);
+  }
   const vigie = new Vigie({ journal, comptes, ...(maintenant ? { maintenant } : {}) });
   migrer?.({ comptes, coffre, journal });
   await prechauffer();

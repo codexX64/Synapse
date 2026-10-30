@@ -306,6 +306,92 @@ export function appliquerTheme() {
   }
 }
 
+// --- Assistant de configuration -------------------------------------------
+// Un champ par réglage, selon son type. valeurs() ne rend que ce qui a changé
+// (un texte vide efface, un secret laissé vide est gardé).
+const VRAI = ['1', 'true', 'oui'];
+export function formulaireReglages(reglages) {
+  const lignes = new Map();
+  const noeuds = reglages.map(r => {
+    const id = `reglage-${++champs}`;
+    const err = h('p', { class: 'erreur', role: 'alert' });
+    let input, lire, initial;
+    if (r.source === 'environnement') {
+      const v = r.type === 'secret' ? 'posé' : (r.valeur || '—');
+      return h('div', { class: 'champ reglage fixe' }, h('span', { class: 'lbl', text: r.libelle }),
+        h('div', { class: 'field mono fige', text: v }), h('p', { class: 'hint', text: 'Fixé dans l’environnement du service : à changer là-bas.' }));
+    }
+    if (r.type === 'choix') {
+      input = h('select', { class: 'field', id }, r.parmi.map(o => h('option', { value: o.valeur, text: o.nom, selected: o.valeur === r.valeur })));
+      initial = r.valeur; lire = () => input.value;
+    } else if (r.type === 'booleen') {
+      input = h('input', { type: 'checkbox', id, checked: VRAI.includes(String(r.valeur)) });
+      initial = VRAI.includes(String(r.valeur)) ? '1' : '0'; lire = () => (input.checked ? '1' : '0');
+    } else if (r.type === 'secret') {
+      input = h('input', { class: 'field', id, type: 'password', autocomplete: 'new-password', placeholder: r.pose ? 'Déjà posé — vide pour le garder' : (r.exemple ? `ex. ${r.exemple}` : '') });
+      initial = ''; lire = () => input.value;
+    } else {
+      input = h('input', { class: 'field' + (['url', 'liste', 'chaine'].includes(r.type) ? ' mono' : ''), id, type: r.type === 'entier' ? 'number' : 'text', value: r.valeur ?? '',
+        placeholder: r.exemple ? `ex. ${r.exemple}` : '', spellcheck: false, autocapitalize: 'none', ...(r.min !== null && r.min !== undefined ? { min: r.min } : {}), ...(r.max !== null && r.max !== undefined ? { max: r.max } : {}) });
+      initial = r.valeur ?? ''; lire = () => input.value.trim();
+    }
+    let effacer = false;
+    const retirer = r.type === 'secret' && r.pose && !r.requis
+      ? h('button', { class: 'lnk', type: 'button', text: 'Retirer', onclick: ev => { effacer = !effacer; input.value = ''; input.disabled = effacer; ev.target.textContent = effacer ? 'Garder' : 'Retirer'; } }) : null;
+    lignes.set(r.env, { lire, initial, err, input, secret: r.type === 'secret', effacer: () => effacer });
+    const tete = h('span', { class: 'lbl' }, r.libelle, r.requis ? h('span', { class: 'req', text: ' *', 'aria-label': 'obligatoire' }) : null,
+      r.nouveau && r.depuis ? h('span', { class: 'chip a nouveau', text: `nouveau · ${r.depuis}` }) : null);
+    return r.type === 'booleen'
+      ? h('div', { class: 'champ reglage' }, h('label', { class: 'case', for: id }, input, tete), r.aide ? h('p', { class: 'hint', text: r.aide }) : null, err)
+      : h('label', { class: 'champ reglage', for: id }, tete, input, retirer, r.aide ? h('p', { class: 'hint', text: r.aide }) : null, err);
+  });
+  return {
+    noeuds,
+    valeurs() {
+      const out = {};
+      for (const [env, l] of lignes) {
+        if (l.secret) { if (l.effacer()) out[env] = ''; else if (l.lire()) out[env] = l.lire(); continue; }
+        const v = l.lire();
+        if (v !== l.initial) out[env] = v;
+      }
+      return out;
+    },
+    erreurs(champsErr = {}) {
+      for (const [env, l] of lignes) { l.err.textContent = champsErr[env] || ''; l.input.setAttribute('aria-invalid', champsErr[env] ? 'true' : 'false'); }
+      return Object.keys(champsErr).filter(k => lignes.has(k));
+    },
+  };
+}
+
+// « Quoi de neuf » : une fois par version, fermée d'un geste (lue ou non).
+const dateCourte = d => { try { return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(d)); } catch { return ''; } };
+export async function montrerNouveautes(api, n, service) {
+  const blocs = n.versions.map((v, i) => h('section', { class: 'nouveaute' + (i ? ' ancienne' : '') },
+    n.versions.length > 1 || v.date ? h('h4', {}, h('span', { text: v.version }), v.date ? h('small', { text: dateCourte(v.date) }) : null) : null,
+    h('ul', {}, v.points.map(p => h('li', { text: p })))));
+  await dialogue({ titre: `Quoi de neuf dans ${service} ${n.version}`, texte: n.versions.length > 1 ? `Depuis ta dernière visite (${n.depuis}).` : null,
+    contenu: [h('div', { class: 'nouveautes' }, blocs)],
+    boutons: [{ texte: 'Passer', classe: 'flat', valeur: false }, { texte: 'Compris', classe: 'solid', valeur: true }] });
+  await api.post('/api/compte/nouveautes/vues').catch(() => { /* reviendra à la prochaine connexion */ });
+}
+
+// Attend que le service relancé réponde de nouveau (sessions conservées).
+async function attendreRelance(api) {
+  await new Promise(r => setTimeout(r, 1200));
+  for (let i = 0; i < 60; i++) {
+    try { const e = await api.etat(); if (!e.assistant?.redemarrage) return e; } catch { /* encore arrêté */ }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return null;
+}
+
+// Les réglages groupés comme l'écran les montre : un groupe par étape.
+function grouper(reglages) {
+  const g = new Map();
+  for (const r of reglages) { if (!g.has(r.groupe)) g.set(r.groupe, []); g.get(r.groupe).push(r); }
+  return [...g.entries()];
+}
+
 // Promesse résolue quand la session est complète : le service peut alors
 // monter son interface. marque : nœud du logo (optionnel).
 export function porte({ api, service, marque = null, sousTitre = '' }) {
@@ -345,8 +431,81 @@ export function porte({ api, service, marque = null, sousTitre = '' }) {
       if (e.session.niveau === 'partiel') return second(e);
       if (e.session.niveau === 'inscription') return inscription(e);
       if (e.session.compte.facteurs.secours === 0) return codesSecours(e);
+      if (e.assistant?.doit) return e.session.compte.role === 'admin' ? assistant(e) : attenteAssistant(e);
       racine.remove();
       resolve(e);
+      // Après une mise à jour : ce qu'elle apporte, par-dessus l'interface montée.
+      if (e.nouveautes) setTimeout(() => montrerNouveautes(api, e.nouveautes, service), 700);
+    }
+
+    // Assistant de configuration, obligatoire : à la première installation
+    // tous les réglages, groupe par groupe ; après une mise à jour, seulement
+    // ceux qui sont nouveaux.
+    async function assistant(e) {
+      let d;
+      try { d = await api.get('/api/compte/reglages'); } catch (x) { return ecran({ titre: 'Configuration', sous: x.message, pied: [piedDeconnexion(), h('button', { class: 'next', type: 'button', onclick: () => suite() }, 'Réessayer')] }); }
+      const premiere = d.premiere;
+      // Première fois : tout est nouveau, aucune pastille.
+      const montres = premiere ? d.reglages.filter(r => r.source !== 'environnement').map(r => ({ ...r, nouveau: false })) : d.reglages.filter(r => r.nouveau);
+      const fixes = premiere ? d.reglages.filter(r => r.source === 'environnement') : [];
+      const groupes = premiere ? grouper(montres) : [['Nouveaux réglages', montres]];
+      const etapes = groupes.length + 1;
+      const forms = groupes.map(([, rs]) => {
+        const simples = rs.filter(r => !r.avance), avances = rs.filter(r => r.avance);
+        const f = formulaireReglages([...simples, ...avances]);
+        const corps = f.noeuds.slice(0, simples.length);
+        if (avances.length) corps.push(h('details', { class: 'avances grpf' }, h('summary', { text: 'Réglages avancés' }), f.noeuds.slice(simples.length)));
+        return { f, corps };
+      });
+      const tout = () => Object.assign({}, ...forms.map(x => x.f.valeurs()));
+      const err = h('p', { class: 'erreur', role: 'alert' });
+
+      const montrer = i => {
+        const precedent = i > 0 ? h('button', { class: 'retour', type: 'button', onclick: () => montrer(i - 1) }, icone('retour'), 'Précédent') : piedDeconnexion();
+        if (i < groupes.length) {
+          const [nom] = groupes[i];
+          const suivant = h('button', { class: 'next', type: 'button', onclick: () => montrer(i + 1) }, 'Suivant', icone('fleche'));
+          return ecran({ etapes, courante: i, large: true,
+            titre: premiere ? nom : 'Nouveaux réglages',
+            sous: premiere ? (i === 0 ? `Première configuration de ${service}. Chaque valeur proposée convient pour commencer ; tout reste modifiable ensuite dans Comptes.` : null)
+              : `La mise à jour${d.version ? ` vers ${d.version}` : ''} apporte ${montres.length > 1 ? 'des réglages' : 'un réglage'} à confirmer. Le reste ne change pas.`,
+            corps: [h('div', { class: 'assistant-champs' }, forms[i].corps)], pied: [precedent, suivant] });
+        }
+        const go = h('button', { class: 'next', type: 'button' }, premiere ? 'Terminer la configuration' : 'Enregistrer', icone('verifie'));
+        go.addEventListener('click', () => occupe(go, err, async () => {
+          forms.forEach(x => x.f.erreurs({}));
+          let r;
+          try { r = await api.post('/api/compte/reglages', { valeurs: tout() }); } catch (x) {
+            const fautifs = x.details?.champs || {};
+            const k = forms.findIndex(fx => fx.f.erreurs(fautifs).length);
+            if (k >= 0) { montrer(k); forms[k].f.erreurs(fautifs); }
+            throw x;
+          }
+          if (r.redemarrage && r.automatique) {
+            ecran({ titre: 'Redémarrage', sous: `${service} redémarre pour appliquer les réglages. Quelques secondes.`, corps: [h('div', { class: 'grpf attente' }, h('span', { class: 'spin', 'aria-hidden': 'true' }))] });
+            await attendreRelance(api);
+            toast('Configuration enregistrée.');
+            return suite();
+          }
+          if (r.redemarrage) {
+            return ecran({ titre: 'À redémarrer', sous: `Réglages enregistrés. Redémarre ${service} pour qu’ils s’appliquent (docker compose restart).`,
+              pied: [h('button', { class: 'next', type: 'button', onclick: () => suite() }, 'Continuer', icone('fleche'))] });
+          }
+          toast('Configuration enregistrée.');
+          suite();
+        }));
+        const recap = Object.keys(tout());
+        ecran({ etapes, courante: groupes.length, large: true, titre: premiere ? 'Tout est prêt' : 'Confirmer',
+          sous: recap.length ? `${recap.length} réglage${recap.length > 1 ? 's' : ''} modifié${recap.length > 1 ? 's' : ''} par rapport aux valeurs proposées.` : 'Les valeurs proposées sont gardées.',
+          corps: [fixes.length ? h('details', { class: 'grpf' }, h('summary', { text: `${fixes.length} réglage${fixes.length > 1 ? 's' : ''} fixé${fixes.length > 1 ? 's' : ''} par l’environnement` }), formulaireReglages(fixes).noeuds) : null, err],
+          pied: [precedent, go] });
+      };
+      montrer(0);
+    }
+
+    function attenteAssistant(e) {
+      const relire = h('button', { class: 'next', type: 'button', onclick: () => suite() }, 'Vérifier', icone('fleche'));
+      ecran({ titre: 'Configuration en cours', sous: `Un administrateur doit d’abord ${e.assistant.premiere ? 'terminer la configuration' : 'confirmer les nouveaux réglages'} de ${service}. Reviens dans un instant.`, pied: [piedDeconnexion(), relire] });
     }
 
     function installation(e) {
@@ -830,9 +989,10 @@ const NIVEAUX = [['desactive', 'Désactivé'], ['facultatif', 'Facultatif'], ['r
 export function pageComptes(api, { service }) {
   const page = h('div', { class: 'page' });
   async function peindre() {
-    let liste, pol, journal;
+    let liste, pol, journal, etatReglages;
     try {
-      [liste, pol, journal] = await Promise.all([api.get('/api/compte/admin/comptes'), api.get('/api/compte/admin/politique'), api.get('/api/compte/admin/journal')]);
+      [liste, pol, journal, etatReglages] = await Promise.all([api.get('/api/compte/admin/comptes'), api.get('/api/compte/admin/politique'), api.get('/api/compte/admin/journal'),
+        api.get('/api/compte/reglages').catch(() => null)]);
     } catch (x) { page.replaceChildren(h('p', { class: 'erreur', text: x.message })); return; }
     const action = (texte, classe, fn) => h('button', { class: 'btn sm ' + classe, type: 'button', onclick: async () => { try { await fn(); } catch (x) { toast(x.message, true); } finally { peindre(); } } }, texte);
     const facteursTxt = c => [c.facteurs.motdepasse ? 'mot de passe' : null, c.facteurs.totp ? 'application' : null, c.facteurs.cles ? `${c.facteurs.cles} clé${c.facteurs.cles > 1 ? 's' : ''}` : null].filter(Boolean).join(' · ') || 'aucun facteur';
@@ -866,14 +1026,38 @@ export function pageComptes(api, { service }) {
         if (await confirmer('Fermer toutes les sessions ?', 'Tous les comptes seront déconnectés, sauf cette session. À faire en cas de fuite ou de doute.', { danger: true, oui: 'Tout fermer' })) { await api.post('/api/compte/admin/sessions/fermer-tout'); toast('Sessions fermées.'); }
       })));
 
+    const reglages = h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Réglages du service' }), h('p', { text: 'Les réglages posés par l’assistant de configuration. Ceux de l’environnement du service restent prioritaires.' })),
+      h('div', { class: 'pad' }, h('div', { class: 'actions' }, action('Modifier les réglages', 'solid', () => modifierReglages(api, service)))));
+
     page.replaceChildren(
       h('div', { class: 'headrow' }, h('div', {}, h('h1', { class: 'title', text: 'Comptes' }), h('p', { class: 'lede', text: `Qui accède à ${service}, avec quels facteurs. Un administrateur invite ; chacun pose lui-même son mot de passe et ses facteurs.` })),
         h('div', { class: 'actions' }, h('button', { class: 'btn solid', type: 'button', onclick: () => inviter(api).then(peindre) }, icone('plus'), 'Inviter'))),
       // L'une sous l'autre : côte à côte, la politique (courte) s'étirait jusqu'au bas du journal.
-      table, politique, trace);
+      table, politique, ...(etatReglages ? [reglages] : []), trace);
   }
   peindre();
   return page;
+}
+
+// Tous les réglages de l'assistant, dans une fenêtre.
+async function modifierReglages(api, service) {
+  const d = await api.get('/api/compte/reglages');
+  const f = formulaireReglages(d.reglages);
+  const err = h('p', { class: 'erreur', role: 'alert' });
+  const corps = grouper(d.reglages).map(([nom]) => {
+    const rs = new Set(d.reglages.filter(r => r.groupe === nom).map(r => r.env));
+    return h('section', { class: 'groupe-reglages' }, h('h4', { text: nom }), f.noeuds.filter((_, i) => rs.has(d.reglages[i].env)));
+  });
+  const r = await dialogue({ titre: 'Réglages du service', large: true, contenu: [h('div', { class: 'assistant-champs defile' }, corps), err], boutons: [
+    { texte: 'Annuler', classe: 'flat', valeur: null },
+    { texte: 'Enregistrer', classe: 'solid', agir: async () => {
+      f.erreurs({}); err.textContent = '';
+      try { return await api.post('/api/compte/reglages', { valeurs: f.valeurs() }); } catch (x) { f.erreurs(x.details?.champs || {}); err.textContent = x.message; return false; }
+    } }] });
+  if (!r) return;
+  if (r.redemarrage && r.automatique) { toast(`${service} redémarre pour appliquer les réglages.`); await attendreRelance(api); toast('Réglages appliqués.'); }
+  else if (r.redemarrage) toast(`Réglages enregistrés : redémarre ${service} pour les appliquer.`);
+  else toast('Réglages enregistrés.');
 }
 
 async function inviter(api) {

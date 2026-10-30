@@ -11,7 +11,15 @@ async function exiger(r, quoi) {
   return r;
 }
 
-export async function adminComplet(client, { jeton, identifiant = 'ana', motDePasse = MDP_ESSAI, maintenant = Date.now } = {}) {
+// Première configuration passée avec les valeurs proposées (si le service a un
+// assistant) : sans elle, le service reste fermé (428).
+export async function terminerAssistant(client, valeurs = {}) {
+  const e = await client.get('/api/compte/etat');
+  if (!e.json?.assistant?.doit) return null;
+  return exiger(await client.post('/api/compte/reglages', { valeurs }), 'assistant de configuration');
+}
+
+export async function adminComplet(client, { jeton, identifiant = 'ana', motDePasse = MDP_ESSAI, maintenant = Date.now, terminer = true } = {}) {
   await exiger(await client.post('/api/compte/installation', { jeton, identifiant, motDePasse }), 'installation');
   const auth = new Authentificateur();
   const o = await exiger(await client.post('/api/compte/cles/options'), 'options de clé');
@@ -19,6 +27,7 @@ export async function adminComplet(client, { jeton, identifiant = 'ana', motDePa
   const t = await exiger(await client.post('/api/compte/totp'), 'totp');
   await exiger(await client.post('/api/compte/totp/confirmer', { code: codeTotp(t.json.secret, maintenant()) }), 'confirmation totp');
   await exiger(await client.post('/api/compte/secours'), 'codes de secours');
+  if (terminer) await terminerAssistant(client);
   return { auth, secret: t.json.secret };
 }
 

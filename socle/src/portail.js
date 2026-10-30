@@ -117,12 +117,27 @@ export class Portail {
     if (!s || s.niveau === 'partiel') throw new ErreurHttp(401, 'Connexion requise.');
     if (s.niveau !== 'complet') throw new ErreurHttp(403, 'Termine d’abord l’inscription de tes facteurs.', { inscription: s.compteLigne ? this.comptes.manquants(s.compteLigne, ctx.cleIci) : [] });
     this.controlerCsrf(ctx);
+    // Configuration à terminer (première installation, ou réglages arrivés
+    // avec une mise à jour) : le service reste fermé jusque-là.
+    if (this.assistant?.aFaire().doit && !ctx.req.url.startsWith('/api/compte/')) throw new ErreurHttp(428, 'Un administrateur doit d’abord terminer la configuration du service.', { assistant: true });
     if ((RANG[s.compteLigne.role] ?? -1) < RANG[role]) {
       this.comptes.journal.rare(`refus:${s.compte}:${role}`, { acteur: s.compte, action: 'acces.refuse', objet: new URL(ctx.req.url, 'http://x').pathname, ip: ctx.ip, resultat: 'refus', details: { role } });
       throw new ErreurHttp(403, 'Droits insuffisants.');
     }
     if (renfort) this.comptes.exigerRenfort(s);
     if (devoiler) this.comptes.exigerDevoilement(s);
+    return s;
+  }
+
+  // Session complète d'un administrateur, hors verrou de l'assistant (c'est
+  // par lui qu'on en sort).
+  sessionAdmin(ctx) {
+    const s = ctx.session;
+    if (!s || s.niveau === 'partiel') throw new ErreurHttp(401, 'Connexion requise.');
+    if (s.niveau !== 'complet') throw new ErreurHttp(403, 'Termine d’abord l’inscription de tes facteurs.');
+    this.controlerOrigine(ctx);
+    this.controlerCsrf(ctx);
+    if (s.compteLigne.role !== 'admin') throw new ErreurHttp(403, 'Droits insuffisants.');
     return s;
   }
 
@@ -136,6 +151,8 @@ export class Portail {
       modeHttp: c.modeHttp, sansCle: c.sansCle(ctx.cleIci), politique,
       // Installé par le Hub : le premier compte se crée depuis le Hub.
       ...(this.jetonAdminHub && !c.estInstalle() ? { parHub: true } : {}),
+      ...(this.assistant && s?.niveau === 'complet' && this.assistant.resume() ? { assistant: this.assistant.resume() } : {}),
+      ...(this.nouveautes && s?.niveau === 'complet' ? (n => n ? { nouveautes: n } : {})(this.nouveautes.pour(s.compte, { cree: s.compteLigne.cree, maintenant: c.maintenant() })) : {}),
       session: s ? {
         niveau: s.niveau, csrf: s.csrf, facteursUtilises: s.facteurs,
         compte: s.niveau === 'partiel' ? { identifiant: s.compteLigne.identifiant } : c.publicDe(s.compteLigne, ctx.cleIci),
@@ -184,6 +201,30 @@ export class Portail {
 
     // --- publiques ---
     if (m === 'GET' && p === '/api/compte/etat') return this.etat(ctx);
+
+    // Nouveautés lues (ou passées) : la fenêtre ne revient plus pour cette version.
+    if (m === 'POST' && p === '/api/compte/nouveautes/vues' && this.nouveautes) {
+      const s = ctx.session;
+      if (!s || s.niveau !== 'complet') throw new ErreurHttp(401, 'Connexion requise.');
+      this.controlerOrigine(ctx);
+      this.controlerCsrf(ctx);
+      this.nouveautes.marquer(s.compte);
+      return { ok: true };
+    }
+
+    // --- assistant de configuration : administrateurs seulement ---
+    if (p === '/api/compte/reglages' && this.assistant) {
+      const s = this.sessionAdmin(ctx);
+      if (m === 'GET') return this.assistant.public();
+      if (m === 'POST') {
+        const b = await this.corps(ctx, { valeurs: { type: 'objet', requis: true, profondeur: 1 } });
+        // Après la première configuration, changer un réglage touche au service entier.
+        if (!this.assistant.aFaire().premiere) c.exigerRenfort(s);
+        const r = this.assistant.poser(b.valeurs, { acteur: s.compte, ip });
+        if (!r.ok) throw new ErreurHttp(400, r.erreurs._ || 'Certains réglages sont à revoir.', { champs: r.erreurs });
+        return { ok: true, redemarrage: r.redemarrage, automatique: r.automatique };
+      }
+    }
 
     if (m === 'POST' && p === '/api/compte/installation') {
       this.controlerOrigine(ctx);
