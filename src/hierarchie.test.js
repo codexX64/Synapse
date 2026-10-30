@@ -63,16 +63,16 @@ test('une même source qui répète ne converge pas avec elle-même', () => {
 
 test('corrélation : une fiche IA et une fiche HomeLab sur la même clé font une fiche dans le global', () => {
   const db = base();
-  ecrire(db, 'claude-code', { title: 'IP 10.30.10.11 = VM hub', body: '' });
-  ecrire(db, 'kimi', { title: 'Le hub répond sur 10.30.10.11', body: '' });
-  ecrire(db, 'proxmox', { title: 'Bail DHCP 10.30.10.11', body: '' });
+  ecrire(db, 'claude-code', { title: 'IP 192.0.2.11 = VM hub', body: '' });
+  ecrire(db, 'kimi', { title: 'Le hub répond sur 192.0.2.11', body: '' });
+  ecrire(db, 'proxmox', { title: 'Bail DHCP 192.0.2.11', body: '' });
   assert.equal(fiches(db, 'fiche.correlation').length, 0, 'une seule fiche commune : rien à corréler');
-  ecrire(db, 'mapmylan', { title: 'Appareil vu en 10.30.10.11', body: '' });
+  ecrire(db, 'mapmylan', { title: 'Appareil vu en 192.0.2.11', body: '' });
   const communes = fiches(db, 'fiche.commune');
   assert.equal(communes.length, 2);
   const cor = fiches(db, 'fiche.correlation');
   assert.equal(cor.length, 1);
-  assert.equal(cor[0].title, 'Corrélation · ip:10.30.10.11');
+  assert.equal(cor[0].title, 'Corrélation · ip:192.0.2.11');
   assert.deepEqual(liens(db, cor[0].id, 'correle'), communes.map(f => f.id).sort((x, y) => x - y));
   const g = H.globalDe(db, H.PRINCIPAL);
   assert.equal(db.prepare(`SELECT cerveau_id FROM h_place WHERE entry_id=?`).get(cor[0].id).cerveau_id, g.id);
