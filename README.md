@@ -1,3 +1,12 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="medias/logo-sombre.svg">
+    <img src="medias/logo-clair.svg" alt="SYNAPSE" height="56">
+  </picture>
+</p>
+
+<p align="center"><img src="medias/affiche.png" alt="Affiche de SYNAPSE" width="100%"></p>
+
 # SYNAPSE
 
 Mémoire consultable pour agents et humains. Un service Node.js sans
@@ -5,6 +14,22 @@ dépendance, une base SQLite, une recherche en cascade, et une interface
 3D pour voir ce que la mémoire contient.
 
 ---
+
+## Aperçu
+
+| <img src="medias/capture-1.png" alt="La mémoire en 3D"> |
+|:--:|
+| La mémoire en 3D |
+
+| <img src="medias/capture-2.png" alt="Une réponse de la mémoire"> |
+|:--:|
+| Une réponse de la mémoire |
+
+| <img src="medias/capture-3.png" alt="Les paramètres"> |
+|:--:|
+| Les paramètres |
+
+Quatre gammes d’interface au choix — SOMA, Console, Exploitation, Lavande — en clair ou en sombre, de 360 à 1920 px de large.
 
 ## Ce que c'est
 
@@ -79,6 +104,33 @@ Premier démarrage : aucun compte par défaut. Installé par le Hub, le
 premier compte se crée depuis le Hub (Comptes des services) ; seul, SYNAPSE
 écrit un jeton d'installation dans ses journaux, à coller sur `/connexion`
 (ou `SOCLE_JETON_INSTALLATION` dans `.env`).
+
+## Première configuration et mises à jour
+
+Au premier démarrage, ouvre l’interface : tu crées le compte administrateur avec
+le jeton d’installation (affiché dans les journaux du conteneur, ou transmis par
+le Hub), tu inscris tes facteurs de connexion, puis l’**assistant de
+configuration** passe les réglages de SYNAPSE groupe par groupe. Il est
+obligatoire : SYNAPSE reste fermé tant qu’il n’est pas terminé. Chaque valeur
+proposée convient pour commencer.
+
+<p align="center"><img src="medias/assistant.png" alt="Assistant de configuration" width="70%"></p>
+
+Réglages demandés : adresse d’Ollama, modèle des vecteurs, modèle des réponses (Ollama), fournisseur des réponses, adresse de l’API, modèle distant, clé d’API, appels par jour au plus, morceaux vectorisés au plus ; plus ceux de
+tous les services (adresse publique, relais de confiance, gamme de
+l’interface, contact de sécurité, courriels d’alerte).
+
+Après une mise à jour qui apporte un réglage nouveau, l’assistant revient au
+passage suivant d’un administrateur et ne demande **que ce réglage-là**. Une
+mise à jour sans réglage nouveau ne demande rien : une fenêtre « Quoi de neuf »
+résume ce qu’elle apporte, une fois par compte, et se ferme d’un clic
+(`nouveautes.json`).
+
+Tout reste modifiable dans **Comptes → Réglages du service**. Une variable
+posée dans l’environnement l’emporte toujours et n’est pas demandée. SYNAPSE
+redémarre seul pour appliquer un changement (le processus du conteneur le
+supervise). Les valeurs vivent dans `reglages.json`, dans le volume de
+données ; les secrets y sont scellés par la clé maîtresse.
 
 ## Interfaces
 
