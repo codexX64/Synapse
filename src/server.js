@@ -28,6 +28,7 @@ const SRC = require('./sources.js');
 const LLM = require('./llm.js');
 const { migrerComptes } = require('./migration-socle.js');
 const { SCHEMAS } = require('./schemas.js');
+const { SPEC_SYNAPSE, REGLAGES_SYNAPSE } = require('./reglages-assistant.js');
 const ACT = require('./activite.js');
 const { blobToVec } = require('./db.js');
 const fsp = require('node:fs');
@@ -1597,6 +1598,8 @@ async function demarrer(env = process.env) {
   const s = await S.demarrerSocle({
     service: { id: 'synapse', nom: 'SYNAPSE', contactSecurite: CONTACT_SECURITE },
     db, dossier: pathm.dirname(DB_FILE), env, log: CONSOLE,
+    assistant: { reglages: REGLAGES_SYNAPSE, spec: SPEC_SYNAPSE, version: VERSION },
+    version: VERSION, nouveautes: S.lireNouveautes(pathm.join(RACINE, 'nouveautes.json')),
     migrer: ({ comptes, coffre }) => migrerComptes({ db, comptes, coffre, log: CONSOLE }),
   });
   socle = { ...s, S, envelopper: S.envelopper };

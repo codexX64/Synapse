@@ -1,0 +1,26 @@
+[
+  {
+    "version": "3.8.0",
+    "date": "2026-10-30",
+    "points": [
+      "Assistant de configuration : la première installation se règle dans l’interface, et une mise à jour ne demande plus que ses nouveaux réglages.",
+      "Réglages de SYNAPSE modifiables à tout moment dans Comptes → Réglages du service, sans toucher au conteneur.",
+      "Les quatre gammes d’interface (SOMA, Console, Exploitation, Lavande) sur toutes les pages, au choix dans les réglages.",
+      "Cette fenêtre : ce qu’apporte chaque mise à jour, en quelques lignes, une seule fois."
+    ]
+  },
+  {
+    "version": "3.7.3",
+    "date": "2026-10-30",
+    "points": [
+      "Nouveau logo complet dans l’en-tête, le chargement et les paramètres."
+    ]
+  },
+  {
+    "version": "3.7.2",
+    "date": "2026-10-30",
+    "points": [
+      "Nouveau logo dans l’onglet, l’en-tête et l’écran de connexion."
+    ]
+  }
+]

@@ -332,6 +332,15 @@ body.cherche #console{z-index:50}
 @keyframes gen-o{0%,100%{opacity:0}15%{opacity:1}65%{opacity:0}}
 @keyframes gen-l{0%{opacity:0}5%{opacity:1;text-shadow:0 0 4px #fff;transform:scale(1.1) translateY(-2px)}20%{opacity:.2}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){.gen .gen-l{animation:none;opacity:.8}.gen .gen-f::after{animation:none;opacity:.35}}
+#nouveautes{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px}
+#nouveautes .nv-boite{background:var(--panel);border:1px solid var(--panel-line);border-radius:12px;max-width:460px;width:100%;max-height:80vh;overflow:auto;padding:20px 22px;backdrop-filter:blur(14px)}
+#nouveautes h2{font-family:var(--disp);font-weight:600;font-size:14px;letter-spacing:.2em;margin-bottom:12px}
+#nouveautes h3{font-size:10px;letter-spacing:.16em;color:var(--mint);margin:12px 0 6px}
+#nouveautes ul{padding-left:16px;display:grid;gap:6px}
+#nouveautes li{color:var(--txt);font-size:12px;line-height:1.55}
+#nouveautes .nv-pied{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+#nouveautes button{background:none;border:1px solid var(--panel-line);color:var(--mut);font-size:10px;letter-spacing:.14em;padding:8px 14px;border-radius:6px;cursor:pointer}
+#nouveautes button.nv-ok{color:var(--bg);background:var(--mint);border-color:var(--mint)}
 </style>
 </head>
 <body>
@@ -439,13 +448,26 @@ if(typeof THREE==='undefined'){
   voileErreur('THREE.JS NON CHARGÉ',12);
   throw new Error('THREE absent');
 }
+/* « Quoi de neuf » après une mise à jour : une fois par version, fermée
+   d'un geste (lue ou non), à la manière des panneaux de la mémoire. */
+function quoiDeNeuf(n,csrf){
+  const e=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const v=document.createElement('div');v.id='nouveautes';v.setAttribute('role','dialog');v.setAttribute('aria-modal','true');v.setAttribute('aria-label','Quoi de neuf');
+  v.innerHTML='<div class="nv-boite"><h2>QUOI DE NEUF · '+e(n.version)+'</h2>'+n.versions.map(x=>'<section><h3>'+e(x.version)+'</h3><ul>'+x.points.map(p=>'<li>'+e(p)+'</li>').join('')+'</ul></section>').join('')+'<div class="nv-pied"><button type="button" data-v="0">PASSER</button><button type="button" data-v="1" class="nv-ok">COMPRIS</button></div></div>';
+  const fermer=()=>{v.remove();document.removeEventListener('keydown',echap);fetch('/api/compte/nouveautes/vues',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF':csrf},body:'{}'}).catch(()=>{});};
+  const echap=ev=>{if(ev.key==='Escape')fermer();};
+  v.addEventListener('click',ev=>{if(ev.target===v||ev.target.closest('button'))fermer();});
+  document.addEventListener('keydown',echap);
+  document.body.appendChild(v);v.querySelector('.nv-ok').focus();
+}
 /* La session vient du socle : la page n'est servie qu'à une session
    complète, et toute écriture porte son jeton anti-CSRF. */
 const CSRF=(()=>{
   try{
     const x=new XMLHttpRequest();x.open('GET','/api/compte/etat',false);x.send(null);
     const j=JSON.parse(x.responseText);
-    if(!j.session||j.session.niveau!=='complet'){location.replace('/connexion');return '';}
+    if(!j.session||j.session.niveau!=='complet'||j.assistant?.doit){location.replace('/connexion');return '';}
+    if(j.nouveautes) setTimeout(()=>quoiDeNeuf(j.nouveautes,j.session.csrf),900);
     return j.session.csrf||'';
   }catch{return '';}
 })();

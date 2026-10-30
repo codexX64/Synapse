@@ -12,7 +12,7 @@ RUN apk add --no-cache tini \
  # Aucun programme setuid ou setgid : personne ne redevient root.
  && find / -xdev -perm /6000 -type f -exec chmod a-s {} +
 WORKDIR /app
-COPY package.json ./
+COPY package.json nouveautes.json ./
 COPY socle ./socle
 COPY src ./src
 COPY ui ./ui
@@ -24,4 +24,4 @@ VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:8140/healthz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "--disable-warning=ExperimentalWarning", "src/server.js"]
+CMD ["node", "--disable-warning=ExperimentalWarning", "src/entree.mjs"]
